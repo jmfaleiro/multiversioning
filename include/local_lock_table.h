@@ -8,6 +8,11 @@ enum lock_type {
         WRITE_LOCK,
 };
 
+struct action_queue {
+        split_action *head;
+        split_action *tail;
+};
+
 struct lock_struct {
         struct big_key key;
         lock_type type;
