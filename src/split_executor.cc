@@ -1,5 +1,7 @@
 #include <split_executor.h>
 
+void add_action(action_queue *queue, split_action *action);
+
 /*
  * XXX If we find that an action is immediately ready to run, it seems wasteful 
  * to acquire locks, run, and then release. Why acquire locks in the first 
@@ -58,10 +60,39 @@ void split_executor::run_action(split_action *action)
         }
 }
 
+/*
+ * 
+ */
+void split_executor::check_pending()
+{
+        uint32_t num_partitions, i;
+        split_action *action;
+        action_queue queue;
+        
+        /* Collect actions whose remote dependencies are satisfied. */
+        queue.head = NULL;
+        queue.tail = NULL;
+        for (i = 0; i < num_partitions; ++i) {
+                while (ready_queue[i]->Dequeue(&action)) 
+                        if (action->ready())
+                                add_action(&queue, action);
+        }
+        
+        /* Run actions that are ready to execute. */
+        action = queue.head;
+        while (action != NULL) {
+                run_action(action);
+                action = action->exec_list;
+        }
+}
+
 void split_executor::Init()
 {
 }
 
+/*
+ * Executor threads's "main" function.
+ */
 void split_executor::StartWorking()
 {
         split_action_batch batch;
@@ -72,15 +103,7 @@ void split_executor::StartWorking()
                 batch = input_queue->DequeueBlocking();
                 for (i = 0; i < batch.num_actions; ++i) {
                         process_action(batch.actions[i]);
-                        for (j = 0; j < num_partitions; ++j) 
-                                while (ready_queue[j]->Dequeue(&action))
-                                        if (ac
-                        
+                        check_pending();
                 }
-                for (i = 0; i < num_partitions; ++i) {
-
-                }
-                
-                
         }
 }

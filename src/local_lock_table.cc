@@ -2,7 +2,7 @@
 #include <cassert>
 #include <cpuinfo.h>
 
-static void add_action(action_queue *queue, split_action *action)
+void add_action(action_queue *queue, split_action *action)
 {
         bool ready;
         
