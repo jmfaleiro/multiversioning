@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <algorithm>
 #include <small_bank.h>
+#include <setup_workload.h>
 
 /* Total space available for free lists */
 #define TOTAL_SIZE (((uint64_t)1) << 35)
@@ -241,7 +242,7 @@ static hek_worker** setup_workers(hek_config config, hek_table **tables,
  * Generate a single hek_key with "default" values. Used to reduce clutter in 
  * functions which need to create a hek_key.
  */
-static hek_key create_blank_key()
+hek_key create_blank_key()
 {
         hek_key ret = {
                 0,		/* key */
@@ -255,6 +256,7 @@ static hek_key create_blank_key()
                 false,		/* written */
                 false,		/* is_rmw */
                 0,		/* txn_ts */
+                false,
         };
         return ret;
 }
@@ -262,6 +264,7 @@ static hek_key create_blank_key()
 /*
  * Generate a single read-only transaction.
  */
+/*
 static hek_action* generate_readonly(hek_config config, RecordGenerator *gen)
 {
         assert(config.experiment < 3 && config.read_pct > 0);
@@ -292,11 +295,12 @@ static hek_action* generate_readonly(hek_config config, RecordGenerator *gen)
         }
         return ret;
 }
-
+*/
 
 /*
  * Generate an RMW YCSB txn. 
  */
+/*
 static hek_action* generate_rmw(hek_config config, RecordGenerator *gen)
 {
         assert(config.experiment == 0 || config.experiment == 1);
@@ -325,20 +329,15 @@ static hek_action* generate_rmw(hek_config config, RecordGenerator *gen)
                         ret->readset[i].is_rmw = true;
                 }
         }
-
-        /* 
-         * Sort keys so records are inserted in a deterministic order. 
-         * Reduces the chance of an abort.  
-         * std::sort(ret->writeset.begin(), ret->writeset.end(), key_cmp);
-         * std::sort(ret->readset.begin(), ret->readset.end(), key_cmp);
-         */
         return ret;
 }
+*/
 
 /*
  * Create a single YCSB txn. This function figures out _which_ YCSB txn to 
  * create (read-only, rmw, write-only, etc.).
  */
+/*
 static hek_action* create_ycsb_single(hek_config config, RecordGenerator *gen)
 {
         int flip;
@@ -349,7 +348,7 @@ static hek_action* create_ycsb_single(hek_config config, RecordGenerator *gen)
         } else if (config.experiment == 0 || config.experiment == 1) {
                 return generate_rmw(config, gen);
         } else if (config.experiment == 2) {                
-                /* XXX this is incomplete!!! */
+  
                 assert(false);
         } else {
                 std::cerr << "Invalid experiment!\n";
@@ -416,11 +415,14 @@ static hek_action* create_small_bank_single(RecordGenerator *gen)
         }
         return ret;
 }
+*/
+
 
 /*
  * Create a batch of ycsb txns. Responsible for creating a batch struct and 
  * initializing an array of ptrs to track the txns.
  */
+/*
 static hek_batch create_ycsb_batch(uint32_t batch_size, hek_config config)
 {
         uint32_t i;
@@ -462,25 +464,74 @@ static hek_batch create_small_bank_batch(uint32_t batch_size, hek_config config)
         delete(gen);
         return batch;
 }
+*/
+
+static hek_action* create_hek_action(txn *txn)
+{
+        uint32_t num_reads, num_writes, num_rmws, max, i;
+        struct big_key *array;        
+        hek_action *ret;
+        void *mem;
+
+        if (posix_memalign(&mem, 256, sizeof(hek_action)) != 0) {
+                std::cerr << "Txn initialization failed!\n";
+                assert(false);
+        }
+        ret = new (mem) hek_action(txn);
+
+        num_reads = txn->num_reads();
+        num_writes = txn->num_writes();
+        num_rmws = txn->num_rmws();
+        
+        if (num_reads >= num_writes && num_reads >= num_rmws) 
+                max = num_reads;
+        else if (num_writes >= num_rmws)
+                max = num_writes;
+        else
+                max = num_rmws;
+        array = (struct big_key*)malloc(sizeof(struct big_key)*max);
+        
+        txn->get_reads(array);
+        for (i = 0; i < num_reads; ++i) 
+                ret->add_read_key(array[i].table_id, array[i].key);
+        
+        txn->get_writes(array);
+        for (i = 0; i < num_writes; ++i) 
+                ret->add_write_key(array[i].table_id, array[i].key, false);
+
+        txn->get_rmws(array);
+        for (i = 0; i < num_rmws; ++i) 
+                ret->add_write_key(array[i].table_id, array[i].key, true);
+        return ret;
+}
 
 /*
  * Create a batch of txns. Responsible for creating either YCSB or SmallBank 
  * txns.
  */
-static hek_batch create_single_batch(uint32_t batch_size, hek_config config)
+static hek_batch create_single_batch(uint32_t batch_size, 
+                                     workload_config w_conf)
 {
-        assert(config.experiment <= 4);
-        if (config.experiment < 3)
-                return create_ycsb_batch(batch_size, config);
-        else
-                return create_small_bank_batch(batch_size, config);
+        uint32_t i;
+        hek_batch batch;
+        txn *txn;
+
+        batch.num_txns = batch_size;
+        batch.txns = (hek_action**)alloc_mem(batch_size*sizeof(hek_action*),
+                                             MAX_CPU);
+        for (i = 0; i < batch_size; ++i) {
+                txn = generate_transaction(w_conf);
+                batch.txns[i] = create_hek_action(txn);
+        }
+        return batch;
 }
 
 /*
  * Given "total_txns" for the system to run, divide them among the set of worker
  * threads and return a batch of txns for each worker. 
  */
-static hek_batch* create_single_round(hek_config config, uint32_t total_txns)
+static hek_batch* create_single_round(hek_config config, workload_config w_conf,
+                                      uint32_t total_txns)
 {
         uint32_t batch_size, remainder, i;
         hek_batch *ret;
@@ -491,7 +542,7 @@ static hek_batch* create_single_round(hek_config config, uint32_t total_txns)
         for (i = 0; i < config.num_threads; ++i) {
                 if (i == config.num_threads - 1)
                         batch_size += remainder;
-                ret[i] = create_single_batch(batch_size, config);
+                ret[i] = create_single_batch(batch_size, w_conf);
         }
         return ret;
 }
@@ -500,14 +551,14 @@ static hek_batch* create_single_round(hek_config config, uint32_t total_txns)
  * Creates two rounds of batches. One for warm up. One for the actual 
  * experiment.
  */
-static vector<hek_batch*> setup_txns(hek_config config)
+static vector<hek_batch*> setup_txns(hek_config config, workload_config w_conf)
 {
         uint32_t warmup_batch_sz;
         vector<hek_batch*> ret;
         warmup_batch_sz = 1000;
-        ret.push_back(create_single_round(config, warmup_batch_sz));
-        ret.push_back(create_single_round(config, config.num_txns));
-        ret.push_back(create_single_round(config, config.num_txns));
+        ret.push_back(create_single_round(config, w_conf, warmup_batch_sz));
+        ret.push_back(create_single_round(config, w_conf, config.num_txns));
+        ret.push_back(create_single_round(config, w_conf, config.num_txns));
         return ret;
 }
 
@@ -616,7 +667,7 @@ static void write_results(struct hek_result result, hek_config config)
 
 
 /* "main" function for hekaton */
-void do_hekaton_experiment(hek_config config)
+void do_hekaton_experiment(hek_config config, workload_config w_conf)
 {
         hek_table **tables;
         hek_worker **workers;
@@ -632,7 +683,7 @@ void do_hekaton_experiment(hek_config config)
         std::cerr << "Done initializing tables!\n";
         workers = setup_workers(config, tables, &input_queues, &output_queues);
         std::cerr << "Done setting up workers!\n";
-        inputs = setup_txns(config);
+        inputs = setup_txns(config, w_conf);
         std::cerr << "Done setting up transactions!\n";
         pin_memory();        
         result = run_experiment(config, inputs, workers, input_queues,

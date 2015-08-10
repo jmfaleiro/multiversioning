@@ -532,7 +532,7 @@ int main(int argc, char **argv) {
           recordSize = cfg.hek_conf.record_size;
           assert(cfg.hek_conf.distribution < 2);
           assert(recordSize == 8 || recordSize == 1000);
-          do_hekaton_experiment(cfg.hek_conf);
+          do_hekaton_experiment(cfg.hek_conf, cfg.get_workload_config());
           exit(0);
   }
 }

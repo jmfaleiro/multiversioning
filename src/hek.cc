@@ -429,7 +429,7 @@ bool hek_worker::validate_reads(hek_action *txn)
 {
         assert(!IS_TIMESTAMP(txn->end));
         assert(HEK_STATE(txn->end) == PREPARING);
-        uint32_t num_reads, i;
+        uint32_t num_reads, num_writes, i;
         
         barrier();
         txn->must_wait = false;
@@ -438,6 +438,7 @@ bool hek_worker::validate_reads(hek_action *txn)
         barrier();
         fetch_and_increment(&txn->dep_count);
         num_reads = txn->readset.size();
+        num_writes = txn->writeset.size();
         for (i = 0; i < num_reads; ++i) {
                 if (!validate_single(txn, &txn->readset[i])) {
                         if (cmp_and_swap((volatile uint64_t*)&txn->dep_flag,
@@ -449,6 +450,21 @@ bool hek_worker::validate_reads(hek_action *txn)
                                        txn->dep_flag == ABORT);
                                 return true;
                         }                        
+                }
+        }
+        for (i = 0; i < num_writes; ++i) {
+                if (txn->writeset[i].is_rmw) {
+                        if (!validate_single(txn, &txn->writeset[i])) {
+                                if (cmp_and_swap((volatile uint64_t*)&txn->dep_flag,
+                                                 PREPARING,
+                                                 ABORT)) {
+                                        return false;
+                                } else {
+                                        assert(txn->must_wait == true &&
+                                               txn->dep_flag == ABORT);
+                                        return true;
+                                }                        
+                        }
                 }
         }
         if (fetch_and_decrement(&txn->dep_count) == 0) {

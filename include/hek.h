@@ -59,7 +59,7 @@ class hek_worker : public Runnable {
         struct hek_record **records;
 
         virtual void init_allocator();
-        virtual struct hek_record* get_new_record(uint32_t table_id);
+        //        virtual struct hek_record* get_new_record(uint32_t table_id);
         //        virtual void return_record(uint32_t table_id,
         //                                   struct hek_record *record);
 
@@ -109,7 +109,7 @@ class hek_worker : public Runnable {
         }
         
         hek_worker(hek_worker_config conf);
-
+        virtual struct hek_record* get_new_record(uint32_t table_id);
 
 };
 

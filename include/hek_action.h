@@ -3,6 +3,8 @@
 
 #include <action.h>
 #include <vector>
+#include <db.h>
+#include <hek_table.h>
 
 #define HEK_INF		0xFFFFFFFFFFFFFFF0
 #define HEK_MASK	0x000000000000000F
@@ -51,11 +53,16 @@ struct hek_key {
         bool written;			//
         bool is_rmw;
         uint64_t txn_ts;
+        bool init;
 };
 
 // Align to 256 bytes because we use the least significant byte
 // corresponding to the pointer.
-class hek_action {
+class hek_action : public translator {
+ private:        
+        hek_table **tables;
+        uint32_t num_tables;
+
  public:
         std::vector<hek_key> readset;
         std::vector<hek_key> writeset;
@@ -70,14 +77,20 @@ class hek_action {
         bool must_wait;
         bool readonly;
 
-        hek_action() {
+        hek_action(txn *t);
+        /*{
                 readonly = false;
         };
-        
-        virtual hek_status Run() = 0;
+        */
+        virtual hek_status Run();
 
-        virtual void* Read(uint32_t index);
-        virtual void* GetWriteRef(uint32_t index);
+        virtual void* write_ref(uint64_t key, uint32_t table);
+        virtual void* read(uint64_t key, uint32_t table);
+
+        virtual void reset();
+        virtual void add_read_key(uint32_t table_id, uint64_t key);
+        virtual void add_write_key(uint32_t table_id, uint64_t key, 
+                                   bool is_rmw);
 };
 
 class hek_rmw_action : public hek_action {
