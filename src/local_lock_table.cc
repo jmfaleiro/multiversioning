@@ -2,6 +2,12 @@
 #include <cassert>
 #include <cpuinfo.h>
 
+static bool queue_invariant(lock_struct_queue *queue)
+{
+        return (queue->head == NULL && queue->tail == NULL) ||
+                (queue->head != NULL && queue->tail != NULL);
+}
+
 void add_action(action_queue *queue, split_action *action)
 {
         bool ready;
@@ -18,6 +24,9 @@ void add_action(action_queue *queue, split_action *action)
         queue->tail = action;
 }
 
+/*
+ * Get a single lock struct.
+ */
 lock_struct* lock_struct_manager::get_lock()
 {
         lock_struct *ret;
@@ -28,17 +37,20 @@ lock_struct* lock_struct_manager::get_lock()
         return ret;
 }
 
+/*
+ * Return a single lock struct.
+ */
 void lock_struct_manager::return_lock(lock_struct *lock)
 {
         lock->left = NULL;
-        lock->right = NULL;
-        lock->up = NULL;
-        lock->down = NULL;
         lock->action = NULL;
         lock->right = this->lock_list;
         this->lock_list = lock;
 }
 
+/* 
+ * Acquire the locks associated with a particular split action.
+ */
 void lock_table::acquire_locks(split_action *action)
 {
         uint32_t num_reads, num_writes, i;
@@ -69,7 +81,10 @@ void lock_table::acquire_locks(split_action *action)
         action->set_lock_list(lock_list);
 }
 
-
+/* 
+ * Called after action has finished executing. Use this to schedule the 
+ * execution of succeeding actions.
+ */
 split_action* lock_table::release_locks(split_action *action)
 {
         action_queue unblocked;
@@ -89,6 +104,9 @@ split_action* lock_table::release_locks(split_action *action)
         return ret;
 }
 
+/*
+ * 
+ */
 void lock_table::init_tables(lock_table_config config)
 {
         uint32_t i;
@@ -107,6 +125,9 @@ void lock_table::init_tables(lock_table_config config)
         }        
 }
 
+/*
+ * Two logical locks conflict if any one is a write-lock.
+ */
 bool lock_table::conflicting(lock_struct *lock1, lock_struct *lock2)
 {
         assert(lock1->key == lock2->key);
@@ -196,21 +217,24 @@ bool lock_table::can_wakeup(lock_struct *lock)
                         assert(prev->type == READ_LOCK && 
                                prev->is_held == true);
                         return false;
-                } 
+                }
         }
         return true;
 }
 
+/*
+ * Pass a logical lock to the given argument.
+ */
 bool lock_table::pass_lock(lock_struct *lock)
 {
         split_action *action;
 
         action = lock->action;
         assert(lock != NULL);
-        assert(lock->is_head == false);
+        assert(lock->is_held == false);
         assert(action != NULL);
         lock->is_held = true;
-        action->num_partition_dependencies -= 1;
+        action->remove_partition_dependency();
         return action->ready();
 }
 
@@ -222,7 +246,7 @@ lock_struct* lock_table::find_descendant(lock_struct *lock)
                 desc = lock->right;
                 while (desc != NULL) {
                         if (desc->key == lock->key && 
-                            check_ready(lock) == true) 
+                            desc->action->ready() == true)
                                 break;
                         desc = desc->right;
                 }
@@ -247,14 +271,14 @@ action_queue lock_table::get_runnables(lock_struct *lock)
         if (descendant != NULL) {
                 if (descendant->type == WRITE_LOCK) {
                         if (pass_lock(descendant)) 
-                                add_action(&ret, descendant);
+                                add_action(&ret, descendant->action);
                 } else {	
                         /* Descendant is a reader. Unblock a chain of readers.*/
                         assert(descendant->type == READ_LOCK);
                         while (descendant != NULL && 
                                descendant->type == READ_LOCK) {
                                 if (pass_lock(descendant)) 
-                                        add_action(&ret, descendant);
+                                        add_action(&ret, descendant->action);
                                 descendant = find_descendant(descendant);
                         }
                 }
@@ -266,8 +290,7 @@ void lock_struct_queue::add_lock(lock_struct *lock)
 {
         /* Queue invariant. */
         assert(lock->table_queue == NULL);
-        assert((this->head == NULL && this->tail == NULL) ||
-               (this->head != NULL && this->tail != NULL));        
+        assert(queue_invariant(this) == true);
 
         if (this->head == NULL) /* Queue is empty. */
                 this->head = lock;
@@ -276,34 +299,34 @@ void lock_struct_queue::add_lock(lock_struct *lock)
         lock->left = this->tail;
         lock->right = NULL;
         this->tail = lock;        
+
+        assert(queue_invariant(this) == true);
 }
 
 void lock_struct_queue::remove_lock(lock_struct *lock)
 {
         /* Queue invariant. */
         assert(lock->table_queue == this);
-        assert((this->head == NULL && this->tail == NULL) ||
-               (this->head != NULL && this->tail != NULL));
+        assert(queue_invariant(this) == true);
         
         /* Lock is at the head of the queue. */
         if (lock->left == NULL) {
-                assert(queue->head == lock);
-                queue->head = lock->right;
+                assert(this->head == lock);
+                this->head = lock->right;
         } else {
                 lock->left->right = lock->right;
         }
 
         /* Lock is at the tail of the queue. */
         if (lock->right == NULL) {
-                assert(queue->tail == lock);
-                queue->tail = lock->left;
+                assert(this->tail == lock);
+                this->tail = lock->left;
         } else {
                 lock->right->left = lock->left;
         }
         
         /* Queue invariant. */
-        assert((queue->head == NULL && queue->tail == NULL) ||
-               (queue->head != NULL && queue->tail != NULL));
+        assert(queue_invariant(this) == true);
 }
 
 /*
@@ -313,13 +336,10 @@ void lock_struct_queue::remove_lock(lock_struct *lock)
 action_queue lock_table::release_single(lock_struct *lock)
 {
         action_queue ret;
-        lock_struct_queue *queue;
-        uint64_t index, num_slots;
-        uint32_t table_id;
-        
+
         assert(lock->is_held == true);
         ret = get_runnables(lock);
         lock->action->release_multi_partition();
-        lock->queue(remove_lock(lock));
+        lock->table_queue->remove_lock(lock);
         return ret;
 }

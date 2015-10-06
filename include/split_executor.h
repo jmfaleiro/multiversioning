@@ -4,6 +4,7 @@
 #include <concurrent_queue.h>
 #include <split_action.h>
 #include <local_lock_table.h>
+#include <runnable.hh>
 
 struct split_action_batch {
         split_action **actions;
@@ -22,7 +23,8 @@ struct split_executor_config {
 class split_executor : public Runnable {
  private:
         struct split_executor_config config;
-
+        lock_table *lck_table;
+        
         SimpleQueue<split_action_batch> *input_queue;
         SimpleQueue<split_action*> **ready_queues;
         
@@ -30,6 +32,7 @@ class split_executor : public Runnable {
         void process_action(split_action *action);
         void schedule_intra_deps(split_action *action);
         void schedule_action(split_action *action);
+        void check_pending();
         
  protected:
         virtual void StartWorking();

@@ -3,6 +3,8 @@
 
 #include <split_action.h>
 
+struct lock_struct_queue;
+
 enum lock_type {
         READ_LOCK,
         WRITE_LOCK,
@@ -15,14 +17,14 @@ struct action_queue {
 
 
 struct lock_struct {
-        struct big_key key;
-        lock_type type;
-        bool is_held;
-        split_action *action;
-        lock_struct *left;
-        lock_struct *right;
-        lock_struct *list_ptr;
-        lock_struct_queue *table_queue;
+        struct big_key key;	/* The record corresponding to the lock. */
+        lock_type type;		/* READ_LOCK or WRITE_LOCK */
+        bool is_held;		/* true if the lock is currently held. */
+        split_action *action;	/* action that the lock corresponds to. */
+        lock_struct *left;	/* left link of doubly-linked list. */
+        lock_struct *right;	/* right link of doubule-linked list. */
+        lock_struct *list_ptr;	/* linked-list of locks held by an action. */
+        lock_struct_queue *table_queue;		/* XXX fill this in.*/
 };
 
 struct lock_struct_queue {
@@ -63,6 +65,11 @@ class lock_table {
         bool acquire_single(lock_struct *lock);
         action_queue release_single(lock_struct *lock);
         void release_multi_partition(lock_struct *lock);
+        bool can_wakeup(lock_struct *lock);
+        action_queue get_runnables(lock_struct *lock);
+        bool pass_lock(lock_struct *lock);
+        lock_struct* find_descendant(lock_struct *lock);
+
 
  public:
         void acquire_locks(split_action *action);

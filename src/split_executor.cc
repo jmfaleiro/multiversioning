@@ -11,17 +11,17 @@ void add_action(action_queue *queue, split_action *action);
  */
 void split_executor::process_action(split_action *action)
 {
-        this->lock_table->acquire_locks(action);
+        this->lck_table->acquire_locks(action);
         if (action->ready()) {
                 action->run();
-                this->lock_table->release_locks(action);
+                this->lck_table->release_locks(action);
         }
 }
 
 void split_executor::schedule_action(split_action *action)
 {
         uint32_t pid;
-        pid = action->partition_id;
+        pid = action->get_partition_id();
         ready_queues[pid]->EnqueueBlocking(action);
 }
 
@@ -35,7 +35,7 @@ void split_executor::schedule_intra_deps(split_action *action)
 
         for (i = 0; i < action->num_dependents; ++i) {
                 dep = action->dependents[i];
-                if (fetch_and_decrement(dep->num_intra_dependencies) == 0)
+                if (fetch_and_decrement(&dep->num_intra_dependencies) == 0)
                         schedule_action(dep);
         }
 }
@@ -53,10 +53,10 @@ void split_executor::run_action(split_action *action)
         assert(is_ready == true);
         action->run();
         schedule_intra_deps(action);
-        descendants = this->lock_table->release_locks(action);
+        descendants = this->lck_table->release_locks(action);
         while (descendants != NULL) {
                 run_action(descendants);
-                descendants = descendants->next;
+                descendants = descendants->exec_list;
         }
 }
 
@@ -65,15 +65,15 @@ void split_executor::run_action(split_action *action)
  */
 void split_executor::check_pending()
 {
-        uint32_t num_partitions, i;
+        uint32_t i;
         split_action *action;
         action_queue queue;
         
         /* Collect actions whose remote dependencies are satisfied. */
         queue.head = NULL;
         queue.tail = NULL;
-        for (i = 0; i < num_partitions; ++i) {
-                while (ready_queue[i]->Dequeue(&action)) 
+        for (i = 0; i < config.num_partitions; ++i) {
+                while (ready_queues[i]->Dequeue(&action)) 
                         if (action->ready())
                                 add_action(&queue, action);
         }
@@ -96,8 +96,7 @@ void split_executor::Init()
 void split_executor::StartWorking()
 {
         split_action_batch batch;
-        split_action *action;
-        uint32_t num_partitions, i, j;
+        uint32_t i;
 
         while (true) {
                 batch = input_queue->DequeueBlocking();
