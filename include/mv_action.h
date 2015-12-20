@@ -33,6 +33,7 @@ enum ActionState {
 
 struct Record {
         Record *next;
+        uint32_t thread_id;
         char value[0];
 };
 

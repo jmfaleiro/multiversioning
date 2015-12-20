@@ -11,6 +11,11 @@ struct cpuinfo {
 
 static struct cpuinfo cpu_info;
 
+void alloc_interleave_all()
+{
+        numa_set_interleave_mask(numa_all_nodes_ptr);
+}
+
 void*
 alloc_huge(size_t size) {
   numa_set_strict(1);
@@ -29,8 +34,7 @@ alloc_huge(size_t size) {
   }
 }
 
-void
-init_cpuinfo() {
+void init_cpuinfo() {
   int i;
   int num_cpus = numa_num_thread_cpus();
   int num_numa_nodes = numa_num_thread_nodes();
@@ -68,15 +72,15 @@ init_cpuinfo() {
   }
 }
 
-int
-get_num_cpus() {
+int get_num_cpus() 
+{
   return cpu_info.num_cpus;
 }
 
 // Assumes that it's never called on an index greater than a valid
 // cpu number. 
-int
-get_cpu(int index, int striped) {
+int get_cpu(int index, int striped) 
+{
   int node, cpu_index;
   if (striped) {
     node = index % cpu_info.num_nodes;
@@ -89,119 +93,48 @@ get_cpu(int index, int striped) {
   return cpu_info.node_map[node][1+cpu_index];
 }
 
-int
-pin_thread(int cpu) {
-  numa_set_strict(1);
-  cpu_set_t binding;
-  CPU_ZERO(&binding);
-  CPU_SET(cpu, &binding);
+int pin_thread(int cpu) {
+        numa_set_strict(1);
+        cpu_set_t binding;
+        CPU_ZERO(&binding);
+        CPU_SET(cpu, &binding);
 
-  // Kill the program if we can't bind. 
-  pthread_t self = pthread_self();
-  if (pthread_setaffinity_np(self, sizeof(cpu_set_t), &binding) < 0) {
-    std::cout << "Couldn't bind to my cpu!\n";
-    exit(-1);
-  }
-  return 0;
+        // Kill the program if we can't bind. 
+        pthread_t self = pthread_self();
+        if (pthread_setaffinity_np(self, sizeof(cpu_set_t), &binding) < 0) {
+                std::cout << "Couldn't bind to my cpu!\n";
+                exit(-1);
+        }
+        return 0;
 }
 
-void*
-lock_malloc(size_t size) {
-  void *buf = malloc(size);
-  /*
-  if (mlock(buf, size) != 0) {
-    free(buf);
-    std::cout << "mlock couldn't pin memory to RAM!\n";
-    return NULL;
-  } 
-  else {
-    return buf;
-  }
-  */
-  return buf;
-}
-
-void*
-alloc_mem(size_t size, int cpu) {
-  if (TESTING) {
-    return malloc(size);
-  }
-  else {
-          //          return malloc(size);
-
+void* alloc_mem(size_t size, int cpu) 
+{
           int numa_node = numa_node_of_cpu(cpu);
-          numa_set_strict(1);
           void *buf = numa_alloc_onnode(size, numa_node);
-          //          void *buf = numa_alloc_interleaved(size);
-          
-          /*
-  if (buf != NULL) {
-    if (mlock(buf, size) != 0) {
-      numa_free(buf, size);
-      std::cout << "mlock couldn't pin memory to RAM!\n";
-      buf = NULL;
-    }
-  }  
-          */
-          
-//           if (errno != 0) {
-//                   perror("Error: ");
-//           }
-// 
           return buf;
-  }
 }
 
-void* alloc_interleaved(size_t size, int startCpu, int endCpu) {
-        //        return alloc_interleaved_all(size);
-        //        return alloc_mem(size, startCpu);
-        //        return malloc(size);
-  struct bitmask *mask = numa_bitmask_alloc(80);
-  numa_set_strict(1);
-  for (int i = startCpu; i < endCpu; ++i) {
-    mask = numa_bitmask_setbit(mask, i);
-  }
-  void *buf = numa_alloc_interleaved_subset(size, mask);
-  assert(buf != NULL);
-  
-//   if (errno != 0) {
-//           perror("Error: ");
-//   }
-//  return buf;
-  
-  /*
-  if (buf != NULL) {
-    if (mlock(buf, size) != 0) {
-      numa_free(buf, size);
-      std::cout << "mlock couldn't pin memory to RAM!\n";
-      buf = NULL;
-    }
-  } 
-  */
-  numa_bitmask_free(mask);
-  return buf;
-  
+void* alloc_interleaved(size_t size, int startCpu, int endCpu) 
+{
+        int i;
+        struct bitmask *mask;
+        void *buf;
+
+        mask = numa_bitmask_alloc(80);
+        for (i = startCpu; i < endCpu; ++i) 
+                mask = numa_bitmask_setbit(mask, i);
+        
+        buf = numa_alloc_interleaved_subset(size, mask);
+        assert(buf != NULL);
+        numa_bitmask_free(mask);
+        return buf;  
 }
 
-void* alloc_interleaved_all(size_t size) {
-        //        return malloc(size);
-        //        return alloc_mem(size, 0);
-  void *buf = numa_alloc_interleaved(size);
-  assert(buf != NULL);
-
-  /*
-  if (buf != NULL) {
-    if (mlock(buf, size) != 0) {
-      numa_free(buf, size);
-      std::cout << "mlock couldn't pin memory to RAM!\n";
-      buf = NULL;
-    }
-  } 
-  */
-
-//   if (errno != 0) {
-//           perror("Error: ");
-//   }
-
-  return buf;
+void* alloc_interleaved_all(size_t size) 
+{
+        void *buf;
+        buf = numa_alloc_interleaved(size);
+        assert(buf != NULL);
+        return buf;
 }

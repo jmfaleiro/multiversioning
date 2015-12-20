@@ -673,10 +673,10 @@ static void init_database(MVConfig config,
                 exec_threads[i]->Run();
                 exec_threads[i]->WaitInit();                
         }
-
         input_queue->EnqueueBlocking(init_batch);
         for (i = 0; i < config.numWorkerThreads; ++i) 
                 (&output_queue[i])->DequeueBlocking();
+
         barrier();
         std::cerr << "Done loading the database!\n";
         return;
@@ -736,6 +736,11 @@ static Executor** setup_executors(MVConfig config,
         return execs;
 }
 
+static void setup_allocation_policy()
+{
+        alloc_interleave_all();
+}
+
 void do_mv_experiment(MVConfig mv_config, workload_config w_config)
 {
         MVScheduler **schedThreads;
@@ -746,7 +751,9 @@ void do_mv_experiment(MVConfig mv_config, workload_config w_config)
         SimpleQueue<ActionBatch> *outputQueue;
         std::vector<ActionBatch> input_placeholder;
         timespec elapsed_time;
-
+        
+        setup_allocation_policy();
+        
         /* 
          * XXX Need this for copying old versions of records if a txn performs 
          * an RMW. Ideally, we need to separate record allocation from version 
@@ -772,9 +779,9 @@ void do_mv_experiment(MVConfig mv_config, workload_config w_config)
         init_database(mv_config, w_config, schedInputQueue, outputQueue,
                       schedThreads, execThreads);
         pin_memory();
-        elapsed_time = run_experiment(schedInputQueue,  //&schedOutputQueues[config.numWorkerThreads],
+        elapsed_time = run_experiment(schedInputQueue,  //&schedOutputQueues[mv_config.numWorkerThreads],
                                       outputQueue,
-                                      input_placeholder,// 1);
+                                      input_placeholder, //1);
                                       mv_config.numWorkerThreads);
         write_results(mv_config, elapsed_time);
 }

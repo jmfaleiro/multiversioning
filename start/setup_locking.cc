@@ -269,6 +269,11 @@ static struct locking_result do_measurement(locking_config conf,
         return result;
 }
 
+static void setup_allocation_policy()
+{
+        alloc_interleave_all();
+}
+
 void locking_experiment(locking_config conf, workload_config w_conf)
 {
         locking_queue **inputs, **outputs;
@@ -280,6 +285,8 @@ void locking_experiment(locking_config conf, workload_config w_conf)
         LockManager *lock_manager;
         locking_worker **workers;
         
+        setup_allocation_policy();
+
         inputs = setup_queues<locking_action_batch>(conf.num_threads, 1024);
         outputs = setup_queues<locking_action_batch>(conf.num_threads, 1024);
         setup_txns = setup_db(w_conf);

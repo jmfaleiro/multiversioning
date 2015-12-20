@@ -1,6 +1,3 @@
-// Author: Jose M. Faleiro (faleiro.jose.manuel@gmail.com)
-// 
-
 #ifndef _CPUINFO_H
 #define _CPUINFO_H
 
@@ -16,31 +13,22 @@
 #define MMAP_PROT (PROT_READ | PROT_WRITE)
 #define MMAP_ADDR (void *)(0x0UL)
 
-void
-init_cpuinfo();
+void alloc_interleave_all();
 
-int
-get_num_cpus();
+void init_cpuinfo();
 
-int
-get_cpu(int index, int striped);
+int get_num_cpus();
 
-int
-pin_thread(int cpu);
+int get_cpu(int index, int striped);
 
-void*
-alloc_mem(size_t size, int cpu);
+int pin_thread(int cpu);
 
-void*
-alloc_huge(size_t size);
+void* alloc_mem(size_t size, int cpu);
 
-void*
-lock_malloc(size_t size);
+void* alloc_huge(size_t size);
 
-void*
-alloc_interleaved(size_t size, int startCpu, int endCpu);
+void* alloc_interleaved(size_t size, int startCpu, int endCpu);
 
-void*
-alloc_interleaved_all(size_t size);
+void* alloc_interleaved_all(size_t size);
 
 #endif

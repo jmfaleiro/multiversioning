@@ -1,6 +1,11 @@
 #include <executor.h>
 #include <algorithm>
 
+/*
+ * Each executor will use about 512+256M of memory.
+ */
+#define 	ALLOCATOR_SIZE 		((1<<29) + (1<<28))
+
 extern uint32_t GLOBAL_RECORD_SIZE;
 
 PendingActionList::PendingActionList(uint32_t freeListSize) {
@@ -147,7 +152,10 @@ Executor::Executor(ExecutorConfig cfg) : Runnable (cfg.cpu) {
 
 }
 
-void Executor::Init() {
+void Executor::Init() 
+{
+        this->allocator = new (config.cpu) RecordAllocator(config.threadId, 
+                                                           config.cpu);
 }
 
 uint64_t Executor::next_ptr()
@@ -196,55 +204,55 @@ static void wait()
                 ;
 }
 */
-void Executor::StartWorking() {
-  uint32_t epoch = 1;
+void Executor::StartWorking() 
+{
+        uint32_t epoch = 1;
 
-  //  ActionBatch dummy;
-  while (true) {
-    // Process the new batch of transactions
+        //  ActionBatch dummy;
+        while (true) {
+                // Process the new batch of transactions
     
-    if (config.threadId == 0) {
-      ActionBatch batch;
-      while (!config.inputQueue->Dequeue(&batch)) {
-        LeaderFunction();
-      }
-      ProcessBatch(batch);
-    }
-    else {
-      ActionBatch batch = config.inputQueue->DequeueBlocking();    
-      ProcessBatch(batch);    
-    }
+                if (config.threadId == 0) {
+                        ActionBatch batch;
+                        while (!config.inputQueue->Dequeue(&batch)) {
+                                LeaderFunction();
+                        }
+                        ProcessBatch(batch);
+                }
+                else {
+                        ActionBatch batch = config.inputQueue->DequeueBlocking();    
+                        ProcessBatch(batch);    
+                }
 
-    barrier();
-    *config.epochPtr = epoch;
-    barrier();
+                barrier();
+                *config.epochPtr = epoch;
+                barrier();
     
-    /*
-    if (DoPendingGC()) {
-      // Tell other threads that this epoch is finished
-      barrier();
-      *config.epochPtr = epoch;
-      barrier();
-    }
-    */
+                /*
+                  if (DoPendingGC()) {
+                  // Tell other threads that this epoch is finished
+                  barrier();
+                  *config.epochPtr = epoch;
+                  barrier();
+                  }
+                */
     
-    // If this is the leader thread, try to advance the low-water mark to 
-    // trigger garbage collection
-    if (config.threadId == 0) {
-      LeaderFunction();
-    }
+                // If this is the leader thread, try to advance the low-water mark to 
+                // trigger garbage collection
+                if (config.threadId == 0) {
+                        LeaderFunction();
+                }
 
 
-    // Try to return records that are no longer visible to their owners
-    garbageBin->FinishEpoch(epoch);
+                // Try to return records that are no longer visible to their owners
+                garbageBin->FinishEpoch(epoch);
     
-    // Check if there's any garbage we can recycle. Insert into our record 
-    // allocators.
-    //    RecycleData();
+                // Check if there's any garbage we can recycle. Insert into our record 
+                // allocators.
+                //    RecycleData();
 
-    epoch += 1;
-  }
-
+                epoch += 1;
+        }
 }
 /*
 uint64_t GetEpoch()
@@ -253,20 +261,15 @@ uint64_t GetEpoch()
 }
 */
 // Check if other worker threads have returned data to be recycled.
-void Executor::RecycleData() {
-  uint32_t numTables = config.numTables;
-  uint32_t numQueues = config.numQueuesPerTable;
-  for (uint32_t i = 0; i < numTables; ++i) {
-    for (uint32_t j = 0; j < numQueues; ++j) {
-      RecordList recycled;
-      
-      // Use non-blocking dequeue
-      while (config.recycleQueues[i*numQueues+j].Dequeue(&recycled)) {
-        //        std::cout << "Received " << recycled.count << " records\n";
-        allocators[i]->Recycle(recycled);
-      }
-    }
-  }
+void Executor::RecycleData() 
+{
+        uint32_t num_workers, i;
+        RecordList recycled;
+
+        num_workers = config.numExecutors;
+        for (i = 0; i < num_workers; ++i) 
+                while (config.recycleQueues[i].Dequeue(&recycled)) 
+                        allocator->Recycle(recycled);
 }
 
 void Executor::ExecPending() {
@@ -366,9 +369,7 @@ bool Executor::ProcessSingleGC(mv_action *action) {
         // Since the previous txn has been substantiated, the record's value 
         // shouldn't be NULL.
         assert(previous->value != NULL);
-        garbageBin->AddRecord(previous->writingThread, 
-                              action->__writeset[i].tableId,
-                              previous->value);
+        garbageBin->AddRecord(previous->value);
         //        garbageBin->AddMVRecord(action->__writeset[i].threadId, previous);
       }
     }
@@ -401,13 +402,30 @@ bool Executor::ProcessSingle(mv_action *action) {
         }
 }
 
+void Executor::init_txn(mv_action *action)
+{
+        uint32_t i, num_writes;
+        MVRecord *prev;
+        void *new_data, *old_data;
+        
+        num_writes = action->__writeset.size();
+        for (i = 0; i < num_writes; ++i) {
+                if (action->__writeset[i].is_rmw == true) {
+                        prev = action->__writeset[i].value->recordLink;
+                        new_data = action->__writeset[i].value->value;
+                        old_data = prev->value;
+                        memcpy(new_data, old_data, GLOBAL_RECORD_SIZE);
+                        action->__writeset[i].initialized = true;  
+                }              
+        }
+}
+
 bool Executor::check_ready(mv_action *action)
 {
         uint32_t num_reads, num_writes, i;
         bool ready;
         mv_action *depend_action;
         MVRecord *prev;
-        void *new_data, *old_data;
         uint32_t *read_index, *write_index;
 
         ready = true;
@@ -439,17 +457,7 @@ bool Executor::check_ready(mv_action *action)
                             !ProcessSingle(depend_action)) {
                                 ready = false;
                                 break;
-                        } else if (action->__writeset[i].initialized == false) {
-                                /* 
-                                 * XXX This is super hacky. Need to separate 
-                                 * record allocation from version allocation to 
-                                 * make it work -- "engineering work". 
-                                 */
-                                new_data = action->__writeset[i].value->value;
-                                old_data = prev->value;
-                                memcpy(new_data, old_data, GLOBAL_RECORD_SIZE);
-                                action->__writeset[i].initialized = true;
-                        }
+                        } 
                 }
         }
         return ready;
@@ -485,81 +493,22 @@ bool Executor::ProcessTxn(mv_action *action) {
         if (ready == false) {
                 return false;
         }
-        /*else {
-                for (uint32_t i = 0; i < numWrites; ++i) {
-                        uint64_t index = next_ptr();
-                        void *buf = this->bufs[index];
-                        action->__writeset[i].value->value = (Record*)buf;
-                }
-        }
-        */
-
-        
-        /*
-        bool ready = check_ready(action);
-        if (!ready) {
-                return false;
-        }
-        */
-        
-        /*
-          for (uint32_t i = 0; i < numWrites; ++i) {
-          uint32_t tbl = action->__writeset[i].tableId;
-          Record **valuePtr = &action->__writeset[i].value->value;
-          action->__writeset[i].value->writingThread = config.threadId;
-          bool success = allocators[tbl]->GetRecord(valuePtr);
-          assert(success);
-          }
-        */
-  
-  // Transaction aborted
         action->exec = this;
+        init_txn(action);
         action->Run();
-        /*
-  if (!action->Run()) {
-    assert(false);
-    for (uint32_t i = 0; i < numWrites; ++i) {
-      uint32_t tbl = action->__writeset[i].tableId;
-      uint32_t recSize = config.recordSizes[tbl];
-      Record *curValuePtr = action->__writeset[i].value->value;
-      Record *prevValuePtr = NULL;
-      MVRecord *predecessor = action->__writeset[i].value->recordLink;
-      if (predecessor != NULL) {
-        prevValuePtr = predecessor->value;
-      }
-      
-      if (prevValuePtr != NULL) {
-        memcpy(curValuePtr, prevValuePtr, sizeof(uint64_t)+recSize);
-      }
-    }    
-  }
-        */
-
-        barrier();
+        
         xchgq(&action->__state, SUBSTANTIATED);
-        barrier();
 
-  for (uint32_t i = 0; i < numWrites; ++i) {
-          //          xchgq((volatile uint64_t*)&action->__writeset[i].value->writer,
-          //                (uint64_t)NULL);
-          //          action->__writeset[i].value->writer = NULL;
-  
-    MVRecord *previous = action->__writeset[i].value->recordLink;
-    if (previous != NULL) {
-      garbageBin->AddMVRecord(action->__writeset[i].threadId, previous);
-    }
-
-  }
-
-  //  bool gcSuccess = ProcessSingleGC(action);
-  //  assert(gcSuccess);
-  /*
-  for (uint32_t i = 0; i < numWrites; ++i) {
-    action->__writeset[i].value->writer = NULL;        
-  }
-  */
-  assert(ready);
-  return ready;
+        for (uint32_t i = 0; i < numWrites; ++i) {
+                MVRecord *previous = action->__writeset[i].value->recordLink;
+                Record *prev_record;
+                if (previous != NULL) {
+                        garbageBin->AddMVRecord(action->__writeset[i].threadId, previous);
+                        prev_record = previous->value;
+                        garbageBin->AddRecord(prev_record);
+                }
+        }        
+        return ready;
 }
 
 GarbageBin::GarbageBin(GarbageBinConfig config) {
@@ -568,11 +517,10 @@ GarbageBin::GarbageBin(GarbageBinConfig config) {
   this->snapshotEpoch = 0;
 
   // total number of structs
-  uint32_t numStructs = 
-    (config.numCCThreads + config.numWorkers*config.numTables);
+  uint32_t numStructs = (config.numCCThreads + config.numWorkers);
   uint32_t ccOffset = config.numCCThreads*sizeof(MVRecordList);
   uint32_t workerOffset = 
-    config.numWorkers*config.numTables*sizeof(MVRecordList);
+    config.numWorkers*sizeof(MVRecordList);
 
   // twice #structs: one for live, one for snapshot
   void *data = alloc_mem(2*numStructs*sizeof(MVRecordList), config.cpu);
@@ -597,19 +545,22 @@ GarbageBin::GarbageBin(GarbageBinConfig config) {
 
 void GarbageBin::AddMVRecord(uint32_t ccThread, MVRecord *rec) {
   rec->allocLink = NULL;
-  // rec->allocLink = NULL;
   *(curStickies[ccThread].tail) = rec;
   curStickies[ccThread].tail = &rec->allocLink;
   curStickies[ccThread].count += 1;
   assert(curStickies[ccThread].head != NULL);
 }
 
-void GarbageBin::AddRecord(uint32_t workerThread, uint32_t tableId, 
-                           Record *rec) {
-  //  rec->next = NULL;
-  *(curRecords[workerThread*config.numTables+tableId].tail) = rec;
-  curRecords[workerThread*config.numTables+tableId].tail = &rec->next;  
-  curRecords[workerThread*config.numTables+tableId].count += 1;
+void GarbageBin::AddRecord(Record *rec) 
+{
+        uint32_t workerThread;
+        
+        workerThread = rec->thread_id;
+        rec->next = NULL;
+        *(curRecords[workerThread].tail) = rec;
+        curRecords[workerThread].tail = &rec->next;  
+        curRecords[workerThread].count += 1;
+        assert(curRecords[workerThread].head != NULL);
 }
 
 void GarbageBin::ReturnGarbage() {
@@ -633,76 +584,80 @@ void GarbageBin::ReturnGarbage() {
     curStickies[i].tail = &curStickies[i].head;
     curStickies[i].count = 0;
   }
-  /*
-  uint32_t tblCount = config.numTables;
+
   for (uint32_t i = 0; i < config.numWorkers; ++i) {
-    for (uint32_t j = 0; j < tblCount; ++j) {      
-      uint32_t index = i*tblCount + j;
 
       // Same logic as "stickies"
-      if (snapshotRecords[index].head != NULL) {
-        if (!config.workerChannels[index]->Enqueue(snapshotRecords[index])) {
-          *(curRecords[index].tail) = snapshotRecords[index].head;
-          curRecords[index].tail = snapshotRecords[index].tail;
-          curRecords[index].count += snapshotRecords[index].count;
+      if (snapshotRecords[i].head != NULL) {
+        if (!config.workerChannels[i]->Enqueue(snapshotRecords[i])) {
+          *(curRecords[i].tail) = snapshotRecords[i].head;
+          curRecords[i].tail = snapshotRecords[i].tail;
+          curRecords[i].count += snapshotRecords[i].count;
         }
       }
-      snapshotRecords[index] = curRecords[index];
-      curRecords[index].head = NULL;
-      curRecords[index].tail = &curRecords[index].head;
-      curRecords[index].count = 0;
-    }
+      snapshotRecords[i] = curRecords[i];
+      curRecords[i].head = NULL;
+      curRecords[i].tail = &curRecords[i].head;
+      curRecords[i].count = 0;
   }
-  */
-  //  std::cout << "Success!\n";
 }
 
-void GarbageBin::FinishEpoch(uint32_t epoch) {
-  barrier();
-  uint32_t lowWatermark = *config.lowWaterMarkPtr;
-  barrier();
+void GarbageBin::FinishEpoch(uint32_t epoch) 
+{
+        barrier();
+        uint32_t lowWatermark = *config.lowWaterMarkPtr;
+        barrier();
   
-  if (lowWatermark >= snapshotEpoch) {
-    ReturnGarbage();
-    snapshotEpoch = epoch;
-    //    std::cout << "Success: " << epoch << "\n";
-  }
+        if (lowWatermark >= snapshotEpoch) {
+                ReturnGarbage();
+                snapshotEpoch = epoch;
+        }
 }
 
-RecordAllocator::RecordAllocator(size_t recordSize, uint32_t numRecords, 
-                                 int cpu) {
-  char *data = 
-    (char*)alloc_mem(numRecords*(sizeof(Record)+recordSize), cpu);
-  memset(data, 0x00, numRecords*(sizeof(Record)+recordSize));
-  for (uint32_t i = 0; i < numRecords; ++i) {
-    ((Record*)(data + i*(sizeof(Record)+recordSize)))->next = 
-      (Record*)(data + (i+1)*(sizeof(Record)+recordSize));
-  }
-  ((Record*)(data + (numRecords-1)*(sizeof(Record)+recordSize)))->next = NULL;
-  //  data[numRecords-1].next = NULL;
-  freeList = (Record*)data;
+RecordAllocator::RecordAllocator(uint32_t thread_id, int cpu)
+{
+        Record *cur, *next;
+        char *data;
+        uint64_t num_records;
+        uint64_t i;
+        uint32_t record_sz;
+
+        record_sz = sizeof(Record) + recordSize;
+        data = (char*)alloc_mem(ALLOCATOR_SIZE, cpu);
+        memset(data, 0x0, ALLOCATOR_SIZE);
+        num_records = ALLOCATOR_SIZE / record_sz;
+        for (i = 0; i < num_records; ++i) {
+                cur = (Record*)&data[i*record_sz];
+                next = (Record*)&data[(i+1)*record_sz];
+                cur->next = next;
+                cur->thread_id = thread_id;
+        }
+        ((Record*)&data[(num_records-1)*record_sz])->next = NULL;
+        freeList = (Record*)data;
 }
 
-bool RecordAllocator::GetRecord(Record **OUT_REC) {
-  if (freeList != NULL) {
-    Record *temp = freeList;
-    freeList = freeList->next;
-    temp->next = NULL;
-    *OUT_REC = temp;    
-    return true;
-  }
-  else {
-    *OUT_REC = NULL;
-    return false;
-  }
+bool RecordAllocator::GetRecord(Record **OUT_REC) 
+{
+        if (freeList != NULL) {
+                Record *temp = freeList;
+                freeList = freeList->next;
+                temp->next = NULL;
+                *OUT_REC = temp;    
+                return true;
+        } else {
+                *OUT_REC = NULL;
+                return false;
+        }
 }
 
-void RecordAllocator::FreeSingle(Record *rec) {
-  rec->next = freeList;
-  freeList = rec;
+void RecordAllocator::FreeSingle(Record *rec) 
+{
+        rec->next = freeList;
+        freeList = rec;
 }
 
-void RecordAllocator::Recycle(RecordList recList) {
-  *(recList.tail) = freeList;
-  freeList = recList.head;
+void RecordAllocator::Recycle(RecordList recList) 
+{
+        *(recList.tail) = freeList;
+        freeList = recList.head;
 }

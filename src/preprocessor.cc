@@ -34,7 +34,8 @@ MVActionHasher:: MVActionHasher(int cpuNumber,
 }
 
 
-void MVActionHasher::StartWorking() {
+void MVActionHasher::StartWorking() 
+{
   uint32_t epoch = 0;
   while (true) {
     
@@ -75,7 +76,7 @@ void MVScheduler::Init() {
 }
 
 MVScheduler::MVScheduler(MVSchedulerConfig config) : 
-  Runnable(config.cpuNumber) {
+        Runnable(config.cpuNumber) {
 
   this->config = config;
   this->epoch = 0;
@@ -125,7 +126,7 @@ void MVScheduler::StartWorking() {
       config.subQueues[i]->DequeueBlocking();
     for (uint32_t i = 0; i < config.numOutputs; ++i) 
       config.outputQueues[i].EnqueueBlocking(curBatch);
-    Recycle();
+    //    Recycle();
   }
 }
 
@@ -162,7 +163,7 @@ void MVScheduler::ProcessWriteset(mv_action *action)
 {
 
         while (alloc->Warning()) {
-                //          std::cerr << "[WARNING] CC thread low on versions\n";
+                // std::cerr << "[WARNING] CC thread low on versions\n";
                 Recycle();
         }
 
@@ -184,7 +185,6 @@ void MVScheduler::ProcessWriteset(mv_action *action)
                 w_index = action->__writeset[i].next;
         }
 }
-
 
 inline void MVScheduler::ScheduleTransaction(mv_action *action) {
   if ((action->__combinedHash & txnMask) != 0) {
