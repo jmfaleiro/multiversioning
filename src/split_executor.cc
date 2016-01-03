@@ -18,25 +18,21 @@ void split_executor::process_action(split_action *action)
         }
 }
 
-void split_executor::schedule_action(split_action *action)
-{
-        uint32_t pid;
-        pid = action->get_partition_id();
-        ready_queues[pid]->EnqueueBlocking(action);
-}
-
 /*
- * Schedule dependent actions that need to run.
+ * After executing a piece, alert other partitions that the piece has finished 
+ * executing. 
  */
 void split_executor::schedule_intra_deps(split_action *action)
 {
-        uint32_t i;
+        uint32_t i, partition_id;
         split_action *dep;
 
         for (i = 0; i < action->num_dependents; ++i) {
                 dep = action->dependents[i];
-                if (fetch_and_decrement(&dep->num_intra_dependencies) == 0)
-                        schedule_action(dep);
+                if (fetch_and_decrement(&dep->num_intra_dependencies) == 0) {
+                        partition_id = dep->get_partition_id();
+                        ready_queues[partition_id]->EnqueueBlocking(dep);
+                }
         }
 }
 

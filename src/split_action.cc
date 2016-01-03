@@ -29,3 +29,8 @@ void split_action::remove_partition_dependency()
 {
         this->num_partition_dependencies -= 1;
 }
+
+uint32_t split_action::get_partition_id()
+{
+        return this->partition_id;
+}

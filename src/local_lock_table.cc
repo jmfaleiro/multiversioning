@@ -2,12 +2,15 @@
 #include <cassert>
 #include <cpuinfo.h>
 
-static bool queue_invariant(lock_struct_queue *queue)
+inline static bool queue_invariant(lock_struct_queue *queue)
 {
         return (queue->head == NULL && queue->tail == NULL) ||
                 (queue->head != NULL && queue->tail != NULL);
 }
 
+/*
+ * Add a single piece to a lock table queue.
+ */
 void add_action(action_queue *queue, split_action *action)
 {
         bool ready;

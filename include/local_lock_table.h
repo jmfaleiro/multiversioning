@@ -17,14 +17,14 @@ struct action_queue {
 
 
 struct lock_struct {
-        struct big_key key;	/* The record corresponding to the lock. */
-        lock_type type;		/* READ_LOCK or WRITE_LOCK */
-        bool is_held;		/* true if the lock is currently held. */
-        split_action *action;	/* action that the lock corresponds to. */
-        lock_struct *left;	/* left link of doubly-linked list. */
-        lock_struct *right;	/* right link of doubule-linked list. */
-        lock_struct *list_ptr;	/* linked-list of locks held by an action. */
-        lock_struct_queue *table_queue;		/* XXX fill this in.*/
+        struct big_key key;		/* Record corresponding to the lock */
+        lock_type type;			/* READ_LOCK or WRITE_LOCK */
+        bool is_held;			/* true if the lock is currently held */
+        split_action *action;		/* action correspoding to lock */
+        lock_struct *left;		/* left link of doubly-linked list */
+        lock_struct *right;	        /* right link of doubule-linked list. */
+        lock_struct *list_ptr;	        /* list of locks held by an action */
+        lock_struct_queue *table_queue;	/* XXX fill this in.*/
 };
 
 struct lock_struct_queue {
