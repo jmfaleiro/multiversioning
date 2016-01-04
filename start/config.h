@@ -100,6 +100,21 @@ struct locking_config {
         int read_txn_size;
 };
 
+struct split_config {
+        uint32_t num_threads;
+        uint32_t num_partitions;
+        uint32_t num_txns;
+        uint32_t num_records;
+        uint32_t num_contended_records;
+        uint32_t txn_size;
+        uint32_t experiment;
+        uint64_t record_size;
+        uint32_t distribution;
+        double theta;
+        int read_pct;
+        int read_txn_size;
+};
+
 struct MVConfig {
   uint32_t numCCThreads;
   uint32_t numTxns;

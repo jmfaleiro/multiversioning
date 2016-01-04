@@ -16,6 +16,8 @@
 #define MMAP_PROT (PROT_READ | PROT_WRITE)
 #define MMAP_ADDR (void *)(0x0UL)
 
+void* zmalloc(size_t sz);
+
 void
 init_cpuinfo();
 

@@ -11,6 +11,12 @@ struct cpuinfo {
 
 static struct cpuinfo cpu_info;
 
+void* zmalloc(size_t sz)
+{
+        void* ret = malloc(sz);
+        memset(ret, 0x0, sz);
+}
+
 void*
 alloc_huge(size_t size) {
   numa_set_strict(1);

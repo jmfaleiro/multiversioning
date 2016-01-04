@@ -8,6 +8,55 @@ inline static bool queue_invariant(lock_struct_queue *queue)
                 (queue->head != NULL && queue->tail != NULL);
 }
 
+lock_table::lock_table(lock_table_config config)
+{
+        this->config = config;
+        init_tables();
+        init_allocator();
+}
+
+/*
+ * For each database table, allocate memory to store its corresponding lock 
+ * table. 
+ */
+void lock_table::init_tables()
+{
+        uint32_t i;
+        size_t alloc_sz;
+
+        alloc_sz = sizeof(struct lock_struct_queue*)*config.num_tables;
+        tables = (struct lock_struct_queue**) alloc_mem(alloc_sz, 
+                                                        (int)config.cpu);
+        memset(tables, 0x0, alloc_sz);
+        for (i = 0; i < config.num_tables; ++i) {
+                alloc_sz = 
+                        sizeof(struct lock_struct_queue)*config.table_sizes[i];
+                tables[i] = (struct lock_struct_queue*) alloc_mem(alloc_sz, 
+                                                                  (int)config.cpu);
+                memset(tables[i], 0x0, alloc_sz);
+        }
+}
+
+void lock_table::init_allocator()
+{
+        lock_struct *lck_lst;
+        size_t alloc_sz;
+        uint32_t i;
+
+        alloc_sz = sizeof(lock_struct)*config.num_lock_structs;
+        lck_lst = (lock_struct*)alloc_mem(alloc_sz, (int)config.cpu);
+        memset(lck_lst, 0x0, alloc_sz);
+        for (i = 0; i < config.num_lock_structs; ++i) 
+                lck_lst[i].right = &lck_lst[i+1];        
+        lck_lst[i-1].right = NULL;
+        lock_allocator = new((int)config.cpu) lock_struct_manager(lck_lst);
+}
+
+lock_struct_manager::lock_struct_manager(lock_struct *lst)
+{
+        this->lock_list = lst;
+}
+
 /*
  * Add a single piece to a lock table queue.
  */

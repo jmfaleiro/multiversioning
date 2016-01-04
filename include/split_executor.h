@@ -5,17 +5,21 @@
 #include <split_action.h>
 #include <local_lock_table.h>
 #include <runnable.hh>
+#include <cpuinfo.h>
 
 struct split_action_batch {
         split_action **actions;
         uint32_t num_actions;
 };
 
+typedef SimpleQueue<split_action_batch> splt_inpt_queue;
+typedef SimpleQueue<split_action*> splt_comm_queue;
+
 struct split_executor_config {
         uint32_t cpu;
         uint32_t num_partitions;
         uint32_t partition_id;
-        SimpleQueue<split_action*> ready_queues;
+        SimpleQueue<split_action*> **ready_queues;
         SimpleQueue<split_action_batch> *input_queue;
         struct lock_table_config lock_table_conf;
 };
@@ -24,9 +28,8 @@ class split_executor : public Runnable {
  private:
         struct split_executor_config config;
         lock_table *lck_table;
-        
-        SimpleQueue<split_action_batch> *input_queue;
-        SimpleQueue<split_action*> **ready_queues;
+        splt_inpt_queue *input_queue;
+        splt_comm_queue **ready_queues;
         
         void run_action(split_action *action);
         void process_action(split_action *action);
@@ -39,7 +42,10 @@ class split_executor : public Runnable {
         virtual void Init();        
 
  public:
-        void* operator new(std::size_t sz, int cpu);
+        void* operator new(std::size_t sz, int cpu) {
+                return alloc_mem(sz, cpu);
+        }
+        
         split_executor(struct split_executor_config config);        
 };
 

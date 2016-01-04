@@ -2,6 +2,16 @@
 
 void add_action(action_queue *queue, split_action *action);
 
+split_executor::split_executor(struct split_executor_config config)
+        : Runnable((int)config.cpu)
+{
+        this->config = config;
+        this->lck_table = 
+                new((int)config.cpu) lock_table(config.lock_table_conf);
+        this->input_queue = config.input_queue;
+        this->ready_queues = config.ready_queues;
+}
+
 /*
  * XXX If we find that an action is immediately ready to run, it seems wasteful 
  * to acquire locks, run, and then release. Why acquire locks in the first 

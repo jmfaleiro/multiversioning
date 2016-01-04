@@ -2,6 +2,7 @@
 #define LOCAL_LOCK_TABLE_H_
 
 #include <split_action.h>
+#include <cpuinfo.h>
 
 struct lock_struct_queue;
 
@@ -47,6 +48,11 @@ class lock_struct_manager {
         lock_struct *lock_list;
         
  public:
+        void* operator new(std::size_t sz, int cpu) {
+                return alloc_mem(sz, cpu);
+        }
+        
+        lock_struct_manager(lock_struct *lst);
         lock_struct* get_lock();
         void return_lock(lock_struct *lock);
 };
@@ -57,6 +63,9 @@ class lock_table {
         lock_struct_manager *lock_allocator;
         lock_struct_queue **tables;
         
+        void init_tables();
+        void init_allocator();
+
         static bool conflicting(lock_struct *lock1, lock_struct *lock2);
         static bool check_conflict(lock_struct *lock, lock_struct_queue *queue);
         static bool insert_queue(lock_struct *lock, lock_struct_queue *queue);
@@ -72,6 +81,11 @@ class lock_table {
 
 
  public:
+        void* operator new(std::size_t sz, int cpu) {
+                return alloc_mem(sz, cpu);
+        }
+
+        lock_table(lock_table_config config);
         void acquire_locks(split_action *action);
         split_action* release_locks(split_action *action);
 };
