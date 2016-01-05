@@ -6,7 +6,8 @@
 #include <fstream>
 #include <db.h>
 
-#define LOCK_TABLE_SPACE (((uint64_t)1) << 29)	/* 512 M */
+#define LCK_TBL_SZ	(((uint64_t)1) << 29)	/* 512 M */
+#define SIMPLE_SZ 	2			/* simple action size */
 
 uint32_t num_split_tables = 0;
 uint64_t *split_table_sizes = NULL;
@@ -23,16 +24,94 @@ static void setup_table_info(split_config s_conf)
         split_table_sizes[0] = s_conf.num_records;
 }
 
-
-
 static uint32_t get_num_lock_structs()
 {
-        return LOCK_TABLE_SPACE / sizeof(lock_struct);        
+        return LCK_TBL_SZ / sizeof(lock_struct);        
 }
 
-static uint32_t partition_hash(const big_key *key)
+static uint32_t get_partition(const big_key *key, uint32_t num_partitions)
 {
-        return 0;
+        uint64_t temp;
+        temp = key->table_id;
+        temp <<= 32;
+        temp |= num_partitions;
+        return Hash128to64(std::make_pair(key->key, temp)) % num_partitions;
+}
+
+static split_action* gen_piece(big_key *keys, uint32_t num_keys, 
+                               __attribute__((unused)) uint32_t num_partitions)
+{
+        assert(num_keys > 0);
+        
+        uint32_t i;
+        split_action *action;
+        
+        action = new split_action(NULL);
+        for (i = 0; i < num_keys; ++i) {
+                
+                /* All keys must belong to the same partition */
+                assert(get_partition(&keys[0], num_partitions) == 
+                       get_partition(&keys[i], num_partitions));                
+                action->writeset.push_back(keys[i]);
+        }
+        return action;
+}
+
+/*
+ * Generate a single transaction which performs two RMW operations.
+ */
+static split_action* gen_single_action(split_config s_config, 
+                                       RecordGenerator *gen)
+{
+        split_action *root, *leaf;
+        uint32_t i, first_partition, second_partition;
+        big_key keys[2];
+
+        keys[0].table_id = 0;
+        keys[1].table_id = 0;
+        keys[0].key = gen->GenNext();
+        keys[1].key = gen->GenNext();
+
+        first_partition = get_partition(&keys[0], s_config.num_partitions);
+        second_partition = get_partition(&keys[1], s_config.num_partitions);
+        if (first_partition == second_partition) {
+                root = gen_piece(&keys[0], 2, s_config.num_partitions);
+        } else {
+                root = gen_piece(&keys[0], 1, s_config.num_partitions);
+                leaf = gen_piece(&keys[1], 1, s_config.num_partitions);
+        }        
+        return root;
+}
+
+/*
+ * Generate a batch of simple transactions consisting of two RMW transactions.
+ */
+static struct split_action_batch gen_batch(split_config s_config)
+{
+        uint32_t i;
+        split_action_batch ret;
+        split_action **actions;
+        size_t alloc_sz;
+
+        alloc_sz = sizeof(split_action*)*s_config.num_txns;
+        actions = (split_action**)zmalloc(alloc_sz);
+        ret.num_actions = s_config.num_txns;
+        for (i = 0; i < s_config.num_txns; ++i) {
+                actions[i] = gen_single_action(s_config, NULL);
+        }
+        ret.actions = actions;
+}
+
+/*
+ * Setup transactions consisting of two pieces. Each piece touches a single 
+ * record. 
+ */
+static void setup_simple_experiment(split_config s_config)
+{
+        uint32_t i;
+        for (i = 0; i < s_config.num_txns; ++i) {
+
+        }
 }
 
 static void setup_input(split_config s_conf, workload_config w_conf)
@@ -122,7 +201,7 @@ static split_executor** setup_threads(split_config s_conf,
         comm_queues = setup_comm_queues(s_conf);
         for (i = 0; i < s_conf.num_partitions; ++i) {
                 conf = setup_exec_config(i, s_conf.num_partitions, i, 
-                                        comm_queues[i], 
+                                        comm_queues[i],
                                         in_queues[i],
                                         s_conf);
                 ret[i] = new(i) split_executor(conf);
@@ -132,7 +211,6 @@ static split_executor** setup_threads(split_config s_conf,
 
 static void do_experiment()
 {
-
 }
 
 void split_experiment(split_config s_conf, workload_config w_confx)

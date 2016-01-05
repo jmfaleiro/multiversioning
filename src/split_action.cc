@@ -1,6 +1,17 @@
 #include <split_action.h>
 #include <util.h>
 
+split_action::split_action(txn *t) : translator(t)
+{
+        dependents = NULL;
+        num_dependents = 0;
+        num_partition_dependencies = 0;
+        list_ptr = NULL;
+        num_intra_dependencies = 0;
+        partition_id = 0;
+        exec_list = NULL;        
+}
+
 bool split_action::ready()
 {       
         uint64_t deps;
@@ -34,3 +45,33 @@ uint32_t split_action::get_partition_id()
 {
         return this->partition_id;
 }
+
+/* XXX Incomplete */
+void* split_action::write_ref(uint64_t key, uint32_t table_id)
+{
+        return NULL;
+}
+
+/* XXX Incomplete */
+void* split_action::read(uint64_t key, uint32_t table_id)
+{
+        return NULL;
+}
+
+/* XXX Incomplete */
+int split_action::rand()
+{
+        return 0;
+}
+
+/* XXX Incomplete */
+bool split_action::run()
+{
+        return false;
+}
+
+/* XXX Incomplete */
+void split_action::release_multi_partition()
+{
+}
+
