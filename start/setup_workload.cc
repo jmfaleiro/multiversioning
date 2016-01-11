@@ -240,3 +240,4 @@ txn* generate_transaction(workload_config config)
         assert(txn != NULL);
         return txn;
 }
+

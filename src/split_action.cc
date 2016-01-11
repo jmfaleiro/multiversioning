@@ -1,6 +1,11 @@
 #include <split_action.h>
 #include <util.h>
 
+txn_graph* split_txn::convert_to_graph()
+{
+        throw unimplemented_exception(0);
+}
+
 split_action::split_action(txn *t) : translator(t)
 {
         dependents = NULL;
@@ -44,6 +49,18 @@ void split_action::remove_partition_dependency()
 uint32_t split_action::get_partition_id()
 {
         return this->partition_id;
+}
+
+void split_action::set_rvp_wakeups(rendezvous_point **rvps, uint32_t count)
+{
+        this->rvps = rvps;
+        this->rvp_count = count;
+}
+
+void split_action::set_rvp(rendezvous_point *rvp)
+{
+        this->next = rvp->to_run;
+        rvp->to_run = this;
 }
 
 /* XXX Incomplete */

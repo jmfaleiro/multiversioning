@@ -7,6 +7,12 @@
 
 class txn;
 
+class unimplemented_exception : public std::exception {
+ public:
+        uint32_t code;
+        unimplemented_exception(uint32_t code) { this->code = code; }
+};
+
 struct big_key {
         uint64_t key;
         uint32_t table_id;

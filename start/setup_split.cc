@@ -5,12 +5,18 @@
 #include <common.h>
 #include <fstream>
 #include <db.h>
+#include <graph.h>
 
 #define LCK_TBL_SZ	(((uint64_t)1) << 29)	/* 512 M */
 #define SIMPLE_SZ 	2			/* simple action size */
 
 uint32_t num_split_tables = 0;
 uint64_t *split_table_sizes = NULL;
+
+struct txn_phase {
+        vector<int> *parent_nodes;
+        rendezvous_point *rvp;
+};
 
 /*
  * XXX Fix up this function to take different experiments into account.
@@ -36,6 +42,216 @@ static uint32_t get_partition(const big_key *key, uint32_t num_partitions)
         temp <<= 32;
         temp |= num_partitions;
         return Hash128to64(std::make_pair(key->key, temp)) % num_partitions;
+}
+
+static bool vector_eq(vector<int> *first, vector<int> *second)
+{
+        assert(first->size() == second->size());
+
+        uint32_t i, sz;
+        sz = first->size();
+        for (i = 0; i < sz; ++i) 
+                if ((*first)[i] != (*second)[i])
+                        return false;
+        return true;
+}
+
+static txn_phase* find_phase(vector<int> *in_edges, vector<txn_phase*> *phases)
+{
+        uint32_t i, j, num_phases, phase_sz;
+        txn_phase *cur_phase;
+
+        num_phases = phases->size();
+        for (i = 0; i < num_phases; ++i) 
+                if (vector_eq(in_edges, (*phases)[i]->parent_nodes))
+                        return (*phases)[i];
+        return NULL;
+}
+
+static split_action* txn_to_piece(txn *txn)
+{
+        return NULL;
+}
+
+static uint32_t get_parent_count(vector<int> *edge_map)
+{
+        uint32_t i, sz, count;
+        
+        sz = edge_map->size();
+        for (i = 0, count = 0; i < sz; ++i) 
+                if ((*edge_map)[i] == 1)
+                        ++count;
+        return count;
+}
+
+static uint32_t get_index_count(int index, vector<txn_phase*> *phases)
+{
+        uint32_t i, sz, count;
+        
+        sz = phases->size();
+        for (i = 0, count = 0; i < sz; ++i)
+                if ((*(*phases)[i]->parent_nodes)[index] == 1)
+                        count += 1;
+        return count;
+}
+
+/*
+ * First phase of processing. Associate a rendezvous point with a downstream 
+ * piece.
+ */
+static void proc_downstream_node(graph_node *node, vector<txn_phase*> *phases)
+{
+        txn_phase *node_phase;
+        split_action *piece;
+        rendezvous_point *rvp;
+
+        piece = txn_to_piece((txn*)node->app);
+        if ((node_phase = find_phase(node->in_links, phases)) == NULL) {
+                rvp = node_phase->rvp;
+        } else {
+                rvp = new rendezvous_point();
+                node_phase = (txn_phase*)zmalloc(sizeof(txn_phase));
+                node_phase->parent_nodes = node->in_links;
+                node_phase->rvp = rvp;
+                phases->push_back(node_phase);
+                rvp->counter = get_parent_count(node->in_links);
+                
+        }
+        piece->set_rvp(rvp);
+        node->txn = piece;
+}
+
+/*
+ * Second phase of processing. Associate an upstream piece with its rendezvous 
+ * points.
+ */
+static void proc_upstream_node(graph_node *node, vector<txn_phase*> *phases)
+{
+        rendezvous_point **rvps;
+        uint32_t count, i, j, sz;
+        txn_phase *ph;
+        split_action *piece;
+
+        piece = (split_action*)node->txn;
+        count = get_index_count(node->index, phases);
+        rvps = (rendezvous_point**)zmalloc(sizeof(rendezvous_point*)*count);
+
+        sz = phases->size();
+        for (i = 0, j = 0; i < sz; ++i) {
+                ph = (*phases)[i];
+                if ((*(ph->parent_nodes))[node->index] == 1) {
+                        rvps[j] = ph->rvp;
+                        j += 1;
+                }
+        }
+        piece->set_rvp_wakeups(rvps, count);
+}
+
+static void traverse_graph(graph_node *node, txn_graph *graph, int *processed, 
+                           split_action **actions, 
+                           int *cursor)
+{
+        /* This fn should not be called on processed nodes */ 
+        assert(processed[node->index] == 0);        
+
+        uint32_t i, sz;
+        vector<int> *out_edges;
+        vector<graph_node*> *nodes;
+
+        nodes = graph->get_nodes();
+        
+        /* 
+         * cursor points into the next free slot in the actions array, and must 
+         * therefore be less then the number of nodes 
+         */
+        assert(nodes->size() < *cursor);
+        actions[*cursor] = (split_action*)node->txn;
+        *cursor += 1;
+        processed[node->index] = 1;
+        
+        for (i = 0; i < sz; ++i) 
+                if ((*out_edges)[i] == 1 && processed[i] == 0)
+                        traverse_graph((*nodes)[i], graph, processed, actions, 
+                                       cursor);
+}
+
+static split_action** gen_piece_array(txn_graph *graph)
+{
+        split_action **ret;
+        uint32_t num_nodes, i;
+        vector<int> *root_bitmap;
+        vector<graph_node*> *nodes;
+        int *processed, cursor;
+
+        nodes = graph->get_nodes();
+        num_nodes = nodes->size();
+        processed = (int*)zmalloc(sizeof(int)*num_nodes);
+        ret = (split_action**)zmalloc(sizeof(split_action*)*num_nodes);
+        root_bitmap = graph->get_roots();
+        for (i = 0; i < num_nodes; ++i) 
+                if ((*root_bitmap)[i] == 1)
+                        traverse_graph((*nodes)[i], graph, processed, ret, &cursor);
+        return ret;
+}
+
+static split_action** graph_to_txn(txn_graph *graph)
+{
+        uint32_t i, num_nodes;
+        vector<txn_phase*> *phases;
+        split_action **ret;
+        vector<graph_node*> *nodes;
+        
+        nodes = graph->get_nodes();
+        num_nodes = nodes->size();
+        phases = new vector<txn_phase*>();
+        for (i = 0; i < num_nodes; ++i) 
+                proc_downstream_node((*nodes)[i], phases);
+        for (i = 0; i < num_nodes; ++i)
+                proc_upstream_node((*nodes)[i], phases);
+        free(phases);
+        ret = gen_piece_array(graph);
+        return ret;
+}
+
+
+
+/* 
+ * Take a transaction specified as a graph as input, and generate a split-action
+ * as output 
+ */
+static vector<split_action*> gen_split_action(txn_graph *graph)
+{
+        uint32_t i, j, num_nodes;
+        vector<int> *root_bitmap, *edges;
+        vector<int> visited;
+        vector<split_action*> ret;
+        vector<graph_node*> *graph_nodes;
+        graph_node *node;
+
+        root_bitmap = graph->get_roots();
+        num_nodes = root_bitmap->size();
+        graph_nodes = graph->get_nodes();
+        for (i = 0; i < num_nodes; ++i) {
+                visited[i] = 0;
+        }
+
+        for (i = 0; i < num_nodes; ++i) {
+                if ((*root_bitmap)[i] == 0)
+                        continue;
+                
+                assert(visited[i] == 0); /* Can't have visited a root */
+                node = (*graph_nodes)[i];
+                edges = node->out_links;
+                for (j = 0; j < edges->size(); ++j) {
+                        
+                }
+        }
+        
+        /* All nodes must be processed */
+        for (i = 0; i < num_nodes; ++i) 
+                assert(visited[i] == 1);
+
+        return ret;
 }
 
 static split_action* gen_piece(big_key *keys, uint32_t num_keys, 
