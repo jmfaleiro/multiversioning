@@ -1,6 +1,7 @@
 #include <config.h>
 #include <split_action.h>
 #include <split_executor.h>
+#include <split_workload_generator.h>
 #include <sys/time.h>
 #include <common.h>
 #include <fstream>
@@ -68,11 +69,6 @@ static txn_phase* find_phase(vector<int> *in_edges, vector<txn_phase*> *phases)
         return NULL;
 }
 
-static split_action* txn_to_piece(txn *txn)
-{
-        return NULL;
-}
-
 static uint32_t get_parent_count(vector<int> *edge_map)
 {
         uint32_t i, sz, count;
@@ -93,6 +89,37 @@ static uint32_t get_index_count(int index, vector<txn_phase*> *phases)
                 if ((*(*phases)[i]->parent_nodes)[index] == 1)
                         count += 1;
         return count;
+}
+
+static split_action* txn_to_piece(txn *txn)
+{
+        uint32_t num_reads, num_rmws, num_writes, max, i;
+        big_key *key_array;
+        split_action *action;
+
+        action = new split_action(txn);
+        num_reads = txn->num_reads();
+        num_writes = txn->num_writes();
+        num_rmws = txn->num_rmws();
+
+        if (num_reads >= num_writes && num_reads >= num_rmws) 
+                max = num_reads;
+        else if (num_rmws >= num_writes && num_rmws >= num_reads)
+                max = num_rmws;
+        else 
+                max = num_writes;
+        key_array = (big_key*)zmalloc(sizeof(big_key)*max);
+
+        txn->get_reads(key_array);
+        for (i = 0; i < num_reads; ++i) 
+                action->readset.push_back(key_array[i]);
+        txn->get_rmws(key_array);
+        for (i = 0; i < num_rmws; ++i) 
+                action->writeset.push_back(key_array[i]);
+        txn->get_writes(key_array);
+        for (i = 0; i < num_writes; ++i) 
+                action->writeset.push_back(key_array[i]);        
+        return action;
 }
 
 /*
@@ -148,8 +175,7 @@ static void proc_upstream_node(graph_node *node, vector<txn_phase*> *phases)
 }
 
 static void traverse_graph(graph_node *node, txn_graph *graph, int *processed, 
-                           split_action **actions, 
-                           int *cursor)
+                           vector<split_action*> *actions)
 {
         /* This fn should not be called on processed nodes */ 
         assert(processed[node->index] == 0);        
@@ -160,24 +186,24 @@ static void traverse_graph(graph_node *node, txn_graph *graph, int *processed,
 
         nodes = graph->get_nodes();
         
-        /* 
-         * cursor points into the next free slot in the actions array, and must 
-         * therefore be less then the number of nodes 
-         */
-        assert(nodes->size() < *cursor);
-        actions[*cursor] = (split_action*)node->txn;
-        *cursor += 1;
+        assert(nodes->size() < actions->size());
+        actions->push_back((split_action*)node->txn);
         processed[node->index] = 1;
         
         for (i = 0; i < sz; ++i) 
                 if ((*out_edges)[i] == 1 && processed[i] == 0)
-                        traverse_graph((*nodes)[i], graph, processed, actions, 
-                                       cursor);
+                        traverse_graph((*nodes)[i], graph, processed, actions);
+
 }
 
-static split_action** gen_piece_array(txn_graph *graph)
+static void gen_piece_array(txn_graph *graph, vector<split_action*> *actions)
 {
-        split_action **ret;
+        /* 
+         * Actions contains the set of generated split_actions. 
+         * At this point, should be empty. 
+         */
+        assert(actions->size() == 0);
+
         uint32_t num_nodes, i;
         vector<int> *root_bitmap;
         vector<graph_node*> *nodes;
@@ -186,16 +212,16 @@ static split_action** gen_piece_array(txn_graph *graph)
         nodes = graph->get_nodes();
         num_nodes = nodes->size();
         processed = (int*)zmalloc(sizeof(int)*num_nodes);
-        ret = (split_action**)zmalloc(sizeof(split_action*)*num_nodes);
         root_bitmap = graph->get_roots();
         for (i = 0; i < num_nodes; ++i) 
                 if ((*root_bitmap)[i] == 1)
-                        traverse_graph((*nodes)[i], graph, processed, ret, &cursor);
-        return ret;
+                        traverse_graph((*nodes)[i], graph, processed, actions);
 }
 
-static split_action** graph_to_txn(txn_graph *graph)
+static void graph_to_txn(txn_graph *graph, vector<split_action*> *actions)
 {
+        assert(actions != NULL && actions->size() == 0);
+
         uint32_t i, num_nodes;
         vector<txn_phase*> *phases;
         split_action **ret;
@@ -203,57 +229,82 @@ static split_action** graph_to_txn(txn_graph *graph)
         
         nodes = graph->get_nodes();
         num_nodes = nodes->size();
+        
+        /* Setup rvps */
         phases = new vector<txn_phase*>();
         for (i = 0; i < num_nodes; ++i) 
                 proc_downstream_node((*nodes)[i], phases);
         for (i = 0; i < num_nodes; ++i)
                 proc_upstream_node((*nodes)[i], phases);
         free(phases);
-        ret = gen_piece_array(graph);
-        return ret;
-}
-
-
-
-/* 
- * Take a transaction specified as a graph as input, and generate a split-action
- * as output 
- */
-static vector<split_action*> gen_split_action(txn_graph *graph)
-{
-        uint32_t i, j, num_nodes;
-        vector<int> *root_bitmap, *edges;
-        vector<int> visited;
-        vector<split_action*> ret;
-        vector<graph_node*> *graph_nodes;
-        graph_node *node;
-
-        root_bitmap = graph->get_roots();
-        num_nodes = root_bitmap->size();
-        graph_nodes = graph->get_nodes();
-        for (i = 0; i < num_nodes; ++i) {
-                visited[i] = 0;
-        }
-
-        for (i = 0; i < num_nodes; ++i) {
-                if ((*root_bitmap)[i] == 0)
-                        continue;
-                
-                assert(visited[i] == 0); /* Can't have visited a root */
-                node = (*graph_nodes)[i];
-                edges = node->out_links;
-                for (j = 0; j < edges->size(); ++j) {
-                        
-                }
-        }
         
-        /* All nodes must be processed */
-        for (i = 0; i < num_nodes; ++i) 
-                assert(visited[i] == 1);
+        /* Output actions, in order */
+        gen_piece_array(graph, actions);
+}
 
+static void setup_single_action(split_config s_conf, workload_config w_conf, 
+                                vector<split_action*> **actions)
+{
+        txn_graph *graph;
+        vector<split_action*> *generated;
+        uint32_t i, sz, partition;
+        split_action *cur;
+
+        graph = generate_split_action(w_conf, s_conf.num_partitions);
+        generated = new vector<split_action*>();
+        graph_to_txn(graph, generated);
+        sz = generated->size();
+        for (i = 0; i < sz; ++i) {
+                cur = (*generated)[i];
+                partition = cur->get_partition_id();
+                actions[partition]->push_back(cur);
+        }
+        delete(graph);
+        delete(generated);        
+}
+
+
+static split_action_batch* vector_to_batch(uint32_t num_partitions, 
+                                           vector<split_action*> **inputs)
+{
+        uint32_t i, j, num_txns;
+        split_action_batch *ret;        
+        split_action **actions;
+
+        ret = (split_action_batch*)zmalloc(sizeof(split_action_batch)*num_partitions);
+        for (i = 0; i < num_partitions; ++i) {
+                num_txns = inputs[i]->size();
+                actions = (split_action**)zmalloc(sizeof(split_action*)*num_txns);
+                for (j = 0; j < num_txns; ++j) 
+                        actions[j] = (*inputs[i])[j];
+                ret[i].actions = actions;
+                ret[i].num_actions = num_txns;
+        }
         return ret;
 }
 
+/* Setup a bunch of actions. # of action batches == num_partitions */
+static split_action_batch* setup_action_batch(split_config s_conf, 
+                                              workload_config w_conf,
+                                              uint32_t batch_sz)
+{
+        uint32_t i;
+        vector<split_action*> **temp;
+        split_action_batch *input;
+
+        temp = (vector<split_action*>**)zmalloc(batch_sz*sizeof(vector<split_action*>*));
+        for (i = 0; i < s_conf.num_partitions; ++i) 
+                temp[i] = new vector<split_action*>();
+        
+        for (i = 0; i < batch_sz; ++i) 
+                setup_single_action(s_conf, w_conf, temp);
+
+        input = vector_to_batch(s_conf.num_partitions, temp);
+        free(temp);
+        return input;
+}
+
+/*
 static split_action* gen_piece(big_key *keys, uint32_t num_keys, 
                                __attribute__((unused)) uint32_t num_partitions)
 {
@@ -265,17 +316,18 @@ static split_action* gen_piece(big_key *keys, uint32_t num_keys,
         action = new split_action(NULL);
         for (i = 0; i < num_keys; ++i) {
                 
-                /* All keys must belong to the same partition */
                 assert(get_partition(&keys[0], num_partitions) == 
                        get_partition(&keys[i], num_partitions));                
                 action->writeset.push_back(keys[i]);
         }
         return action;
 }
+*/
 
 /*
  * Generate a single transaction which performs two RMW operations.
  */
+/*
 static split_action* gen_single_action(split_config s_config, 
                                        RecordGenerator *gen)
 {
@@ -298,10 +350,12 @@ static split_action* gen_single_action(split_config s_config,
         }        
         return root;
 }
+*/
 
 /*
  * Generate a batch of simple transactions consisting of two RMW transactions.
  */
+/*
 static struct split_action_batch gen_batch(split_config s_config)
 {
         uint32_t i;
@@ -317,22 +371,22 @@ static struct split_action_batch gen_batch(split_config s_config)
         }
         ret.actions = actions;
 }
+*/
 
-/*
- * Setup transactions consisting of two pieces. Each piece touches a single 
- * record. 
- */
-static void setup_simple_experiment(split_config s_config)
+static split_action_batch* setup_action_batch(split_config s_conf, 
+                                              workload_config w_conf,
+                                              uint32_t batch_sz);
+
+
+static split_action_batch** setup_input(split_config s_conf, workload_config w_conf)
 {
-        uint32_t i;
-        for (i = 0; i < s_config.num_txns; ++i) {
+        split_action_batch **batches;
 
-        }
-}
-
-static void setup_input(split_config s_conf, workload_config w_conf)
-{
-        
+        /* We're generating only two batches for now */
+        batches = (split_action_batch**)zmalloc(sizeof(split_action_batch*)*2);
+        batches[0] = setup_action_batch(s_conf, w_conf, 10000);
+        batches[1] = setup_action_batch(s_conf, w_conf, s_conf.num_txns);
+        return batches;
 }
 
 /*
@@ -405,7 +459,8 @@ static struct split_executor_config setup_exec_config(uint32_t cpu,
  * Setup executor threads.
  */
 static split_executor** setup_threads(split_config s_conf, 
-                                      splt_inpt_queue **in_queues)
+                                      splt_inpt_queue **in_queues,
+                                      splt_inpt_queue **out_queues)
 {
         split_executor **ret;
         splt_comm_queue ***comm_queues;
@@ -425,16 +480,48 @@ static split_executor** setup_threads(split_config s_conf,
         return ret;
 }
 
-static void do_experiment()
+/* 
+ * XXX Measurements need to be more sophisticated. For now, use a single batch 
+ * to warmup, and another one to measure throughput.
+ */ 
+static void do_experiment(split_action_batch** inputs, 
+                          splt_inpt_queue **input_queues, 
+                          splt_inpt_queue **output_queues,
+                          uint32_t num_batches,
+                          split_config s_conf)
 {
+        uint32_t i;
+        split_action_batch *cur_batch;
+
+        /* One warmup, one real */
+        assert(num_batches == 2);
+        
+        /* Do warmup */
+        cur_batch = inputs[0];
+        for (i = 0; i < s_conf.num_partitions; ++i) 
+                input_queues[i]->EnqueueBlocking(cur_batch[i]);
+        for (i = 0; i < s_conf.num_partitions; ++i)
+                output_queues[i]->DequeueBlocking();
+        
+        /* Do real batch */
+        cur_batch = inputs[1];
+        for (i = 0; i < s_conf.num_partitions; ++i) 
+                input_queues[i]->EnqueueBlocking(cur_batch[i]);
+        for (i = 0; i < s_conf.num_partitions; ++i)
+                output_queues[i]->DequeueBlocking();
 }
 
-void split_experiment(split_config s_conf, workload_config w_confx)
+void split_experiment(split_config s_conf, workload_config w_conf)
 {
-        splt_inpt_queue **input_queues;
-
+        splt_inpt_queue **input_queues, **output_queues;
+        split_action_batch **inputs;
+        uint32_t num_batches;
+        
+        num_batches = 2;
         input_queues = setup_input_queues(s_conf);
-        //        setup_input();
-        setup_threads(s_conf, input_queues);
-        //        do_experiment();
+        output_queues = setup_input_queues(s_conf);
+
+        inputs = setup_input(s_conf, w_conf);
+        setup_threads(s_conf, input_queues, output_queues);
+        do_experiment(inputs, input_queues, output_queues, num_batches, s_conf);
 }

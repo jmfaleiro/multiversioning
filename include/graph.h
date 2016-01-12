@@ -44,10 +44,12 @@ class txn_graph {
 
  public:        
         txn_graph();
+        ~txn_graph();
         vector<int>* get_roots();
         vector<graph_node*>* get_nodes();
         void add_node(graph_node *node);
         static void add_edge(graph_node *from, graph_node *to);
+        static void free_graph(txn_graph *graph);
 };
 
 #endif 		// GRAPH_H_

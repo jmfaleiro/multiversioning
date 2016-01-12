@@ -63,6 +63,11 @@ vector<int>* txn_graph::get_roots()
         return root_bitmap;
 }
 
+vector<graph_node*>* txn_graph::get_nodes()
+{
+        return nodes;
+}
+
 void txn_graph::add_node(graph_node *node)
 {
         /* Edges cannot be added before the node is added to the graph */
@@ -91,5 +96,19 @@ void txn_graph::add_edge(graph_node *from, graph_node *to)
         to->in_links->push_back(from->index);
 }
 
-
-
+txn_graph::~txn_graph()
+{
+        graph_node *cur_node;
+        uint32_t i, num_nodes;
+        
+        num_nodes = nodes->size();
+        for (i = 0; i < num_nodes; ++i) {
+                cur_node = (*nodes)[i];
+                delete(cur_node->out_links);
+                delete(cur_node->in_links);
+                cur_node->index = INT_MAX;
+                delete(cur_node);
+        }
+        delete(root_bitmap);
+        delete(nodes);
+}
