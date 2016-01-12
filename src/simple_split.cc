@@ -23,6 +23,7 @@ bool simple_split::Run()
                 val = (uint64_t*)get_write_ref((*records)[i], 0);
                 *val += 1;                
         }
+        return true;
 }
 
 /* Txn interface functions */

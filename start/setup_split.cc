@@ -22,7 +22,7 @@ struct txn_phase {
 /*
  * XXX Fix up this function to take different experiments into account.
  */
-static void setup_table_info(split_config s_conf)
+__attribute__((unused)) static void setup_table_info(split_config s_conf)
 {
         assert(num_split_tables == 0 && split_table_sizes == NULL);
         num_split_tables = 1;
@@ -36,7 +36,7 @@ static uint32_t get_num_lock_structs()
         return LCK_TBL_SZ / sizeof(lock_struct);        
 }
 
-static uint32_t get_partition(const big_key *key, uint32_t num_partitions)
+__attribute__((unused)) static uint32_t get_partition(const big_key *key, uint32_t num_partitions)
 {
         uint64_t temp;
         temp = key->table_id;
@@ -59,8 +59,7 @@ static bool vector_eq(vector<int> *first, vector<int> *second)
 
 static txn_phase* find_phase(vector<int> *in_edges, vector<txn_phase*> *phases)
 {
-        uint32_t i, j, num_phases, phase_sz;
-        txn_phase *cur_phase;
+        uint32_t i, num_phases;
 
         num_phases = phases->size();
         for (i = 0; i < num_phases; ++i) 
@@ -185,11 +184,11 @@ static void traverse_graph(graph_node *node, txn_graph *graph, int *processed,
         vector<graph_node*> *nodes;
 
         nodes = graph->get_nodes();
-        
         assert(nodes->size() < actions->size());
         actions->push_back((split_action*)node->txn);
         processed[node->index] = 1;
-        
+        out_edges = node->out_links;
+        sz = out_edges->size();
         for (i = 0; i < sz; ++i) 
                 if ((*out_edges)[i] == 1 && processed[i] == 0)
                         traverse_graph((*nodes)[i], graph, processed, actions);
@@ -207,7 +206,7 @@ static void gen_piece_array(txn_graph *graph, vector<split_action*> *actions)
         uint32_t num_nodes, i;
         vector<int> *root_bitmap;
         vector<graph_node*> *nodes;
-        int *processed, cursor;
+        int *processed;
 
         nodes = graph->get_nodes();
         num_nodes = nodes->size();
@@ -224,7 +223,6 @@ static void graph_to_txn(txn_graph *graph, vector<split_action*> *actions)
 
         uint32_t i, num_nodes;
         vector<txn_phase*> *phases;
-        split_action **ret;
         vector<graph_node*> *nodes;
         
         nodes = graph->get_nodes();
@@ -419,7 +417,7 @@ static splt_inpt_queue** setup_input_queues(split_config s_conf)
  * Setup lock table config.
  */
 static struct lock_table_config setup_lock_table_config(uint32_t cpu, 
-                                                        split_config s_conf)
+                                                        __attribute__((unused)) split_config s_conf)
 {
 
         uint32_t num_lock_structs;
@@ -460,7 +458,7 @@ static struct split_executor_config setup_exec_config(uint32_t cpu,
  */
 static split_executor** setup_threads(split_config s_conf, 
                                       splt_inpt_queue **in_queues,
-                                      splt_inpt_queue **out_queues)
+                                      __attribute__((unused)) splt_inpt_queue **out_queues)
 {
         split_executor **ret;
         splt_comm_queue ***comm_queues;

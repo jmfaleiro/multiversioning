@@ -16,6 +16,7 @@
 #include <iostream>
 #include <common.h>
 #include <sys/mman.h>
+#include <setup_split.h>
 
 #define RECYCLE_QUEUE_SIZE 64
 #define INPUT_SIZE 1024
@@ -534,5 +535,10 @@ int main(int argc, char **argv) {
           assert(recordSize == 8 || recordSize == 1000);
           do_hekaton_experiment(cfg.hek_conf);
           exit(0);
+  } else if (cfg.ccType == SPLIT) {
+          recordSize = cfg.split_conf.record_size;
+          assert(cfg.split_conf.distribution < 2);
+          assert(recordSize == 8 || recordSize == 1000);
+          split_experiment(cfg.split_conf, cfg.get_workload_config());
   }
 }

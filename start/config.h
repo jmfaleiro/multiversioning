@@ -27,7 +27,8 @@ static struct option long_options[] = {
   {"occ_epoch", required_argument, NULL, 13},
   {"read_pct", required_argument, NULL, 14},
   {"read_txn_size", required_argument, NULL, 15},
-  {NULL, no_argument, NULL, 16},
+  {"num_partitions", required_argument, NULL, 16},
+  {NULL, no_argument, NULL, 17},
 };
 
 enum distribution_t {
@@ -51,6 +52,7 @@ enum ConcurrencyControl {
   LOCKING = 1,
   OCC,
   HEK,
+  SPLIT,
 };
 
 struct OCCConfig {
@@ -150,6 +152,7 @@ class ExperimentConfig {
     OCC_EPOCH,
     READ_PCT,
     READ_TXN_SIZE,
+    NUM_PARTITIONS,
   };
   unordered_map<int, char*> argMap;
 
@@ -159,6 +162,7 @@ class ExperimentConfig {
   OCCConfig occConfig;
   MVConfig mvConfig;    
   hek_config hek_conf;
+  split_config split_conf;
   workload_config w_conf;
   
   ExperimentConfig(int argc, char **argv) {
@@ -357,8 +361,43 @@ class ExperimentConfig {
       }
       this->ccType = HEK;
             
-    } else {
-            assert(false);
+    } else if (ccType == SPLIT) {
+      if (argMap.count(NUM_PARTITIONS) == 0 || 
+          argMap.count(NUM_TXNS) == 0 ||
+          argMap.count(NUM_RECORDS) == 0 ||
+          argMap.count(TXN_SIZE) == 0 || 
+          argMap.count(EXPERIMENT) == 0 ||
+          argMap.count(RECORD_SIZE) == 0 || 
+          argMap.count(DISTRIBUTION) == 0 ||
+          argMap.count(READ_PCT) == 0 ||
+          argMap.count(READ_TXN_SIZE) == 0) {
+        
+        std::cerr << "Missing one or more SPLIT params\n";
+        std::cerr << "--" << long_options[NUM_PARTITIONS].name << "\n";
+        std::cerr << "--" << long_options[NUM_TXNS].name << "\n";
+        std::cerr << "--" << long_options[NUM_RECORDS].name << "\n";
+        std::cerr << "--" << long_options[TXN_SIZE].name << "\n";
+        std::cerr << "--" << long_options[EXPERIMENT].name << "\n";
+        std::cerr << "--" << long_options[RECORD_SIZE].name << "\n";
+        std::cerr << "--" << long_options[DISTRIBUTION].name << "\n";
+        std::cerr << "--" << long_options[READ_PCT].name << "\n";
+        std::cerr << "--" << long_options[READ_TXN_SIZE].name << "\n";
+        exit(-1);
+      }
+      
+      split_conf.num_partitions = (uint32_t)atoi(argMap[NUM_PARTITIONS]);
+      split_conf.num_threads = (uint32_t)atoi(argMap[NUM_PARTITIONS]);
+      split_conf.num_txns = (uint32_t)atoi(argMap[NUM_TXNS]);
+      split_conf.num_records = (uint32_t)atoi(argMap[NUM_RECORDS]);
+      split_conf.txn_size = (uint32_t)atoi(argMap[TXN_SIZE]);
+      split_conf.experiment = (uint32_t)atoi(argMap[EXPERIMENT]);
+      split_conf.record_size = (uint32_t)atoi(argMap[RECORD_SIZE]);
+      split_conf.distribution = (uint32_t)atoi(argMap[DISTRIBUTION]);
+      split_conf.read_pct = (int)atoi(argMap[READ_PCT]);
+      split_conf.read_txn_size = (int)atoi(argMap[READ_TXN_SIZE]);
+      if (argMap.count(THETA) > 0)
+              split_conf.theta = (double)atof(argMap[THETA]);
+      this->ccType = SPLIT;
     }
 
     /* Initialize workload config. */

@@ -35,7 +35,7 @@ bool node_set::operator==(const node_set& other)
         /* Nodes from the same graph have sets of the same size */
         assert(sz == other.sz);
         
-        uint32_t i, sz;
+        uint32_t i;
         
         if (sz <= 64)
                 return bit_mask == other.bit_mask;

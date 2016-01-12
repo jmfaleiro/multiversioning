@@ -64,13 +64,15 @@ void split_action::set_rvp(rendezvous_point *rvp)
 }
 
 /* XXX Incomplete */
-void* split_action::write_ref(uint64_t key, uint32_t table_id)
+void* split_action::write_ref(__attribute__((unused)) uint64_t key, 
+                              __attribute__((unused)) uint32_t table_id)
 {
         return NULL;
 }
 
 /* XXX Incomplete */
-void* split_action::read(uint64_t key, uint32_t table_id)
+void* split_action::read(__attribute__((unused)) uint64_t key, 
+                         __attribute__((unused)) uint32_t table_id)
 {
         return NULL;
 }

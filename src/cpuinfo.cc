@@ -15,6 +15,7 @@ void* zmalloc(size_t sz)
 {
         void* ret = malloc(sz);
         memset(ret, 0x0, sz);
+        return ret;
 }
 
 void*
