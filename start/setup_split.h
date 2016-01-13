@@ -181,8 +181,9 @@ public:
                 piece->set_rvp_wakeups(rvps, count);
         }
 
-        static void traverse_graph(graph_node *node, txn_graph *graph, int *processed, 
-                                   vector<split_action*> *actions)
+        static void traverse_graph(graph_node *node, txn_graph *graph, 
+                                   int *processed, 
+                                   graph_node **topo_list)
         {
                 /* This fn should not be called on processed nodes */ 
                 assert(processed[node->index] == 0);        
@@ -192,15 +193,29 @@ public:
                 vector<graph_node*> *nodes;
 
                 nodes = graph->get_nodes();
-                assert(nodes->size() < actions->size());
-                actions->push_back((split_action*)node->txn);
                 processed[node->index] = 1;
                 out_edges = node->out_links;
                 sz = out_edges->size();
-                for (i = 0; i < sz; ++i) 
-                        if ((*out_edges)[i] == 1 && processed[i] == 0)
-                                traverse_graph((*nodes)[i], graph, processed, actions);
-
+                for (i = 0; i < sz; ++i) {
+                        if ((*out_edges)[i] == 1) {
+                                if (processed[i] == 0) {
+                                        traverse_graph((*nodes)[i], graph, processed, topo_list);
+                                } else if (processed[i] == 1) {
+                                        /* "DAG" has a cycle! */
+                                        assert(false);
+                                } else if (processed[i] == 2) {
+                                        /* Done with this node */
+                                        continue;
+                                } else {
+                                        /* Shouldn't get here */
+                                        assert(false);
+                                }
+                        }
+                }
+                processed[node->index] = 2;
+                assert(node->topo_link == NULL);
+                node->topo_link = *topo_list;
+                *topo_list = node;
         }
 
         static void gen_piece_array(txn_graph *graph, vector<split_action*> *actions)
@@ -215,14 +230,24 @@ public:
                 vector<int> *root_bitmap;
                 vector<graph_node*> *nodes;
                 int *processed;
+                graph_node *topo_list;
 
+                topo_list = NULL;
                 nodes = graph->get_nodes();
                 num_nodes = nodes->size();
                 processed = (int*)zmalloc(sizeof(int)*num_nodes);
                 root_bitmap = graph->get_roots();
                 for (i = 0; i < num_nodes; ++i) 
                         if ((*root_bitmap)[i] == 1)
-                                traverse_graph((*nodes)[i], graph, processed, actions);
+                                traverse_graph((*nodes)[i], graph, processed, &topo_list);
+                
+                i = 0;
+                while (topo_list != NULL) {
+                        actions->push_back((split_action*)topo_list->txn);
+                        topo_list = topo_list->topo_link;
+                        i += 1;
+                }
+                assert(i == num_nodes);                        
         }
 
         static void graph_to_txn(txn_graph *graph, vector<split_action*> *actions)

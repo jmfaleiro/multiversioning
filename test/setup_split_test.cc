@@ -236,3 +236,4 @@ TEST_F(graph_test, complex_test)
         }
         delete(graph);
 }
+

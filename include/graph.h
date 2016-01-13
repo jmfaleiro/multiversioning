@@ -33,12 +33,15 @@ class graph_node {
         vector<int> *in_links;
         vector<int> *out_links;
 
+        graph_node* topo_link;
+
         graph_node() {
                 index = INT_MAX;
                 app = NULL;
                 txn = NULL;
                 in_links = NULL;
                 out_links = NULL;
+                topo_link = NULL;
         }
 };
 
