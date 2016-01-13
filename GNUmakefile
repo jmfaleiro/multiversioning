@@ -23,7 +23,7 @@ DEPCFLAGS=-MD -MF $(DEPSDIR)/$*.d -MP
 all:CFLAGS+=-DTESTING=0 -DUSE_BACKOFF=1 -fno-omit-frame-pointer
 all:env build/db
 
-test:CFLAGS+=-DTESTING=1
+test:CFLAGS+=-DTESTING=1 -DUSE_BACKOFF=1 
 test:env build/tests
 
 -include $(wildcard $(DEPSDIR)/*.d)
@@ -37,7 +37,7 @@ $(TESTOBJECTS):$(OBJECTS)
 
 test/%.o: test/%.cc $(DEPSDIR)/stamp GNUmakefile
 	@echo + cc $<
-	@$(CXX) $(CFLAGS) -Wno-missing-field-initializers -Wno-conversion-null $(DEPCFLAGS) -I$(INCLUDE) -c -o $@ $<
+	@$(CXX) $(CFLAGS) -Wno-missing-field-initializers -Wno-conversion-null $(DEPCFLAGS) -Istart -I$(SRC) -I$(INCLUDE) -c -o $@ $<
 
 start/%.o: start/%.cc $(DEPSDIR)/stamp GNUmakefile
 	@echo + cc $<

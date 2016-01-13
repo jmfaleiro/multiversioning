@@ -23,17 +23,16 @@
 #define OFFSET 0
 #define OFFSET_CORE(x) (x+OFFSET)
 
-uint32_t GLOBAL_RECORD_SIZE;
-
 Database DB(2);
 
 uint64_t dbSize = ((uint64_t)1<<36);
 
+uint32_t GLOBAL_RECORD_SIZE;
 uint32_t NUM_CC_THREADS;
-
+uint64_t recordSize;
 int NumProcs;
 uint32_t numLockingRecords;
-uint64_t recordSize;
+
 /*
 readonly_eager_action* create_readonly_eager(uint64_t numRecords,
                                              RecordGenerator *gen,
@@ -486,6 +485,10 @@ void LockingExperiment(LockingConfig config) {
 // arg1: number of records in the database
 // arg2: number of txns in an epoch
 // arg3: number of epochs
+
+uint32_t setup_split::num_split_tables = 0;
+uint64_t* setup_split::split_table_sizes = NULL;
+
 int main(int argc, char **argv) {
         //        mlockall(MCL_FUTURE);
   srand(time(NULL));
@@ -539,6 +542,6 @@ int main(int argc, char **argv) {
           recordSize = cfg.split_conf.record_size;
           assert(cfg.split_conf.distribution < 2);
           assert(recordSize == 8 || recordSize == 1000);
-          split_experiment(cfg.split_conf, cfg.get_workload_config());
+          setup_split::split_experiment(cfg.split_conf, cfg.get_workload_config());
   }
 }

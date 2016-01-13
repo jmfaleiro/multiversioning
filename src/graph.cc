@@ -94,6 +94,7 @@ void txn_graph::add_edge(graph_node *from, graph_node *to)
         
         from->out_links->push_back(to->index);
         to->in_links->push_back(from->index);
+        (*root_bitmap)[to->index] = 0;
 }
 
 txn_graph::~txn_graph()
