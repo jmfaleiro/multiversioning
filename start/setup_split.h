@@ -19,6 +19,12 @@ struct txn_phase {
         rendezvous_point *rvp;
 };
 
+enum graph_node_state {
+        STATE_UNVISITED = 0,
+        STATE_PROCESSING,
+        STATE_VISITED,
+};
+
 class setup_split {
 public:
 
@@ -185,31 +191,28 @@ public:
                                    int *processed, 
                                    graph_node **topo_list)
         {
-                /* This fn should not be called on processed nodes */ 
-                assert(processed[node->index] == 0);        
+                /* "DAG" has a cycle! */
+                assert(processed[node->index] != 1);
+                
+                /* Node's been processed */
+                if (processed[node->index] == 2)
+                        return;
 
-                uint32_t i, sz;
+                uint32_t i, sz, index;
                 vector<int> *out_edges;
                 vector<graph_node*> *nodes;
 
-                nodes = graph->get_nodes();
                 processed[node->index] = 1;
+                nodes = graph->get_nodes();
                 out_edges = node->out_links;
-                sz = out_edges->size();
-                for (i = 0; i < sz; ++i) {
-                        if ((*out_edges)[i] == 1) {
-                                if (processed[i] == 0) {
-                                        traverse_graph((*nodes)[i], graph, processed, topo_list);
-                                } else if (processed[i] == 1) {
-                                        /* "DAG" has a cycle! */
-                                        assert(false);
-                                } else if (processed[i] == 2) {
-                                        /* Done with this node */
-                                        continue;
-                                } else {
-                                        /* Shouldn't get here */
-                                        assert(false);
-                                }
+                if (out_edges != NULL) {
+                        sz = out_edges->size();
+                        for (i = 0; i < sz; ++i) {
+                                index = (*out_edges)[i];
+                                assert(index < nodes->size());
+                                traverse_graph((*nodes)[index], graph, 
+                                               processed, 
+                                               topo_list);
                         }
                 }
                 processed[node->index] = 2;
@@ -227,7 +230,6 @@ public:
                 assert(actions->size() == 0);
 
                 uint32_t num_nodes, i;
-                vector<int> *root_bitmap;
                 vector<graph_node*> *nodes;
                 int *processed;
                 graph_node *topo_list;
@@ -236,11 +238,9 @@ public:
                 nodes = graph->get_nodes();
                 num_nodes = nodes->size();
                 processed = (int*)zmalloc(sizeof(int)*num_nodes);
-                root_bitmap = graph->get_roots();
                 for (i = 0; i < num_nodes; ++i) 
-                        if ((*root_bitmap)[i] == 1)
-                                traverse_graph((*nodes)[i], graph, processed, &topo_list);
-                
+                        traverse_graph((*nodes)[i], graph, processed, &topo_list);
+                free(processed);
                 i = 0;
                 while (topo_list != NULL) {
                         actions->push_back((split_action*)topo_list->txn);

@@ -2,6 +2,7 @@
 #include <graph.h>
 #include <iostream>
 #include <cpuinfo.h>
+#include <setup_split.h>
 
 struct node_internal {
         void *txn;
@@ -30,15 +31,15 @@ protected:
 };
 
 template<class T>
-static bool find_node(T node, vector<T> *node_set)
+static int find_node(T node, vector<T> *node_set)
 {
         uint32_t i, sz;
         
         sz = node_set->size();
         for (i = 0; i < sz; ++i) 
-                if ((*node_set)[i] == node)
-                        return true;
-        return false;        
+                if ((*node_set)[i] == node) 
+                        return (int)i;
+        return -1;
 }
 
 TEST_F(graph_test, empty)
@@ -85,7 +86,7 @@ TEST_F(graph_test, linked_list)
         
         for (i = 0; i < num_nodes; ++i) {                 
                 (*graph_roots)[i] = 1;
-                EXPECT_TRUE(find_node<graph_node*>(my_nodes[i], graph_nodes));
+                EXPECT_TRUE(find_node<graph_node*>(my_nodes[i], graph_nodes) >= 0);
         }
 
         for (i = 0; i < num_nodes-1; ++i) 
@@ -184,39 +185,39 @@ TEST_F(graph_test, complex_test)
                         
                         edges = (*nodes)[i]->out_links;
                         EXPECT_TRUE(edges->size() == 2);
-                        EXPECT_TRUE(find_node<int>(0, edges) == false);
-                        EXPECT_TRUE(find_node<int>(1, edges) == true);
-                        EXPECT_TRUE(find_node<int>(2, edges) == true);
-                        EXPECT_TRUE(find_node<int>(3, edges) == false);
-                        EXPECT_TRUE(find_node<int>(4, edges) == false);
-                        EXPECT_TRUE(find_node<int>(5, edges) == false);
+                        EXPECT_TRUE(find_node<int>(0, edges) == -1);
+                        EXPECT_TRUE(find_node<int>(1, edges) >= 0);
+                        EXPECT_TRUE(find_node<int>(2, edges) >= 0);
+                        EXPECT_TRUE(find_node<int>(3, edges) == -1);
+                        EXPECT_TRUE(find_node<int>(4, edges) == -1);
+                        EXPECT_TRUE(find_node<int>(5, edges) == -1);
                 } else if (i == 1 || i == 2) {
                         edges = (*nodes)[i]->in_links;
                         EXPECT_TRUE(edges->size() == 1);
-                        EXPECT_TRUE(find_node<int>(0, edges) == true);
-                        EXPECT_TRUE(find_node<int>(1, edges) == false);
-                        EXPECT_TRUE(find_node<int>(2, edges) == false);
-                        EXPECT_TRUE(find_node<int>(3, edges) == false);
-                        EXPECT_TRUE(find_node<int>(4, edges) == false);
-                        EXPECT_TRUE(find_node<int>(5, edges) == false);
+                        EXPECT_TRUE(find_node<int>(0, edges) >= 0);
+                        EXPECT_TRUE(find_node<int>(1, edges) == -1);
+                        EXPECT_TRUE(find_node<int>(2, edges) == -1);
+                        EXPECT_TRUE(find_node<int>(3, edges) == -1);
+                        EXPECT_TRUE(find_node<int>(4, edges) == -1);
+                        EXPECT_TRUE(find_node<int>(5, edges) == -1);
                         
                         edges = (*nodes)[i]->out_links;
                         EXPECT_TRUE(edges->size() == 1);
-                        EXPECT_TRUE(find_node<int>(0, edges) == false);
-                        EXPECT_TRUE(find_node<int>(1, edges) == false);
-                        EXPECT_TRUE(find_node<int>(2, edges) == false);
-                        EXPECT_TRUE(find_node<int>(3, edges) == true);
-                        EXPECT_TRUE(find_node<int>(4, edges) == false);
-                        EXPECT_TRUE(find_node<int>(5, edges) == false);
+                        EXPECT_TRUE(find_node<int>(0, edges) == -1);
+                        EXPECT_TRUE(find_node<int>(1, edges) == -1);
+                        EXPECT_TRUE(find_node<int>(2, edges) == -1);
+                        EXPECT_TRUE(find_node<int>(3, edges) >= 0);
+                        EXPECT_TRUE(find_node<int>(4, edges) == -1);
+                        EXPECT_TRUE(find_node<int>(5, edges) == -1);
                 } else if (i == 3) {
                         edges = (*nodes)[i]->in_links;
                         EXPECT_TRUE(edges->size() == 4);
-                        EXPECT_TRUE(find_node<int>(0, edges) == false);
-                        EXPECT_TRUE(find_node<int>(1, edges) == true);
-                        EXPECT_TRUE(find_node<int>(2, edges) == true);
-                        EXPECT_TRUE(find_node<int>(3, edges) == false);
-                        EXPECT_TRUE(find_node<int>(4, edges) == true);
-                        EXPECT_TRUE(find_node<int>(5, edges) == true);
+                        EXPECT_TRUE(find_node<int>(0, edges) == -1);
+                        EXPECT_TRUE(find_node<int>(1, edges) >= 0);
+                        EXPECT_TRUE(find_node<int>(2, edges) >= 0);
+                        EXPECT_TRUE(find_node<int>(3, edges) == -1);
+                        EXPECT_TRUE(find_node<int>(4, edges) >= 0);
+                        EXPECT_TRUE(find_node<int>(5, edges) >= 0);
                         
                         edges = (*nodes)[i]->out_links;
                         EXPECT_TRUE(edges == NULL);
@@ -226,14 +227,133 @@ TEST_F(graph_test, complex_test)
 
                         edges = (*nodes)[i]->out_links;
                         EXPECT_TRUE(edges->size() == 1);
-                        EXPECT_TRUE(find_node<int>(0, edges) == false);
-                        EXPECT_TRUE(find_node<int>(1, edges) == false);
-                        EXPECT_TRUE(find_node<int>(2, edges) == false);
-                        EXPECT_TRUE(find_node<int>(3, edges) == true);
-                        EXPECT_TRUE(find_node<int>(4, edges) == false);
-                        EXPECT_TRUE(find_node<int>(5, edges) == false);
+                        EXPECT_TRUE(find_node<int>(0, edges) == -1);
+                        EXPECT_TRUE(find_node<int>(1, edges) == -1);
+                        EXPECT_TRUE(find_node<int>(2, edges) == -1);
+                        EXPECT_TRUE(find_node<int>(3, edges) >= 0);
+                        EXPECT_TRUE(find_node<int>(4, edges) == -1);
+                        EXPECT_TRUE(find_node<int>(5, edges) == -1);
                 }
         }
+        delete(graph);
+}
+
+TEST_F(graph_test, single_topological_sort)
+{
+        graph_node *node;
+        txn_graph *graph;
+        vector<split_action*> *topo_sort;
+
+        graph = new txn_graph();
+        node = new graph_node();
+        node->txn = (void*)(uint64_t)3;
+        graph->add_node(node);
+        
+        topo_sort = new vector<split_action*>();
+        setup_split::gen_piece_array(graph, topo_sort);
+        
+        ASSERT_TRUE(topo_sort->size() == 1);
+        ASSERT_TRUE((*topo_sort)[0] == (split_action*)(uint64_t)3);
+}
+
+TEST_F(graph_test, linked_topological_sort)
+{
+        uint32_t i, num_nodes, *node_indices;
+        graph_node **my_nodes;
+        txn_graph *graph;        
+        vector<split_action*> *topo_sort;
+        int index;
+        
+        /* Setup linked-list graph */
+        num_nodes = 4;
+        my_nodes = (graph_node**)zmalloc(sizeof(graph_node*)*num_nodes);
+        graph = new txn_graph();
+        
+        /* Setup nodes */
+        for (i = 0; i < num_nodes; ++i) {
+                my_nodes[i] = new graph_node();
+                my_nodes[i]->txn = (void*)(uint64_t)i;
+                graph->add_node(my_nodes[i]);
+        }
+        
+        /* Setup edges */
+        graph->add_edge(my_nodes[0], my_nodes[1]);
+        graph->add_edge(my_nodes[1], my_nodes[2]);
+        graph->add_edge(my_nodes[2], my_nodes[3]);
+        
+        /* Do topological sort */
+        topo_sort = new vector<split_action*>();
+        setup_split::gen_piece_array(graph, topo_sort);
+        
+        /* Verify results */
+        node_indices = (uint32_t*)zmalloc(sizeof(uint32_t)*num_nodes);
+        for (i = 0; i < num_nodes; ++i) {
+                index = find_node((split_action*)(uint64_t)i, topo_sort);
+                ASSERT_TRUE(index != -1);
+                node_indices[i] = (uint32_t)index;
+        }
+        
+        ASSERT_TRUE(node_indices[0] < node_indices[1]);
+        ASSERT_TRUE(node_indices[1] < node_indices[2]);
+        ASSERT_TRUE(node_indices[2] < node_indices[3]);        
+        
+        /* Create a cycle */
+        graph->add_edge(my_nodes[3], my_nodes[0]);
+        topo_sort->clear();
+        ASSERT_TRUE(topo_sort->size() == 0);
+        ASSERT_DEATH(setup_split::gen_piece_array(graph, topo_sort), "");
+}
+
+TEST_F(graph_test, complex_topological_sort)
+{
+        uint32_t i, num_nodes, *node_indices;
+        graph_node **my_nodes;
+        txn_graph *graph;        
+        vector<split_action*> *topo_sort;
+        int index;
+
+        /* Setup complex graph */
+        num_nodes = 6;
+        my_nodes = (graph_node**)zmalloc(sizeof(graph_node*)*num_nodes);
+        graph = new txn_graph();
+        
+        /* Setup nodes */
+        for (i = 0; i < num_nodes; ++i) {
+                my_nodes[i] = new graph_node();
+                my_nodes[i]->txn = (void*)(uint64_t)i;
+                graph->add_node(my_nodes[i]);
+        }
+        
+        /* Setup edges */
+        graph->add_edge(my_nodes[0], my_nodes[1]);
+        graph->add_edge(my_nodes[0], my_nodes[2]);
+        graph->add_edge(my_nodes[1], my_nodes[3]);
+        graph->add_edge(my_nodes[2], my_nodes[3]);
+        graph->add_edge(my_nodes[4], my_nodes[3]);
+        graph->add_edge(my_nodes[5], my_nodes[3]);        
+        
+        /* Do topological sort */
+        topo_sort = new vector<split_action*>();
+        setup_split::gen_piece_array(graph, topo_sort);
+        
+        /* Verify results */
+        node_indices = (uint32_t*)zmalloc(sizeof(uint32_t)*num_nodes);
+        for (i = 0; i < num_nodes; ++i) {
+                index = find_node((split_action*)(uint64_t)i, topo_sort);
+                ASSERT_TRUE(index != -1);
+                node_indices[i] = (uint32_t)index;
+        }
+        
+        ASSERT_TRUE(node_indices[0] < node_indices[1]);
+        ASSERT_TRUE(node_indices[0] < node_indices[2]);
+        ASSERT_TRUE(node_indices[1] < node_indices[3]);
+        ASSERT_TRUE(node_indices[2] < node_indices[3]);
+        ASSERT_TRUE(node_indices[4] < node_indices[3]);
+        ASSERT_TRUE(node_indices[5] < node_indices[3]);
+        
+        delete(topo_sort);
+        free(node_indices);
+        free(my_nodes);
         delete(graph);
 }
 
