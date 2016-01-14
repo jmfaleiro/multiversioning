@@ -3,6 +3,7 @@
 #include <iostream>
 #include <cpuinfo.h>
 #include <setup_split.h>
+#include <simple_split.h>
 
 struct node_internal {
         void *txn;
@@ -15,6 +16,35 @@ private:
         node_internal *nodes;
 
 protected:
+        
+        static rendezvous_point** get_rvps(split_action *action)
+        {
+                return action->rvps;
+        }
+
+        static uint32_t get_rvp_count(split_action *action)
+        {
+                return action->rvp_count;
+        }
+        
+        static void* get_app(split_action *action)
+        {
+                return action->t;
+        }
+
+        static bool find_rvp(split_action *action, rendezvous_point *rvp)
+        {
+                split_action *start;
+                start = rvp->to_run;
+
+                while (start != NULL) {
+                        if (action == start)
+                                return true;
+                        start = start->next;
+                }
+                return false;
+        }
+
         
         virtual void SetUp() {
                 
@@ -41,6 +71,7 @@ static int find_node(T node, vector<T> *node_set)
                         return (int)i;
         return -1;
 }
+
 
 TEST_F(graph_test, empty)
 {
@@ -254,6 +285,13 @@ TEST_F(graph_test, single_topological_sort)
         
         ASSERT_TRUE(topo_sort->size() == 1);
         ASSERT_TRUE((*topo_sort)[0] == (split_action*)(uint64_t)3);
+        
+        delete(graph);
+        topo_sort->clear();
+        
+        graph = new txn_graph();
+        setup_split::gen_piece_array(graph, topo_sort);
+        ASSERT_TRUE(topo_sort->size() == 0);        
 }
 
 TEST_F(graph_test, linked_topological_sort)
@@ -355,5 +393,127 @@ TEST_F(graph_test, complex_topological_sort)
         free(node_indices);
         free(my_nodes);
         delete(graph);
+}
+
+TEST_F(graph_test, complex_rvp)
+{
+        simple_split **actions;
+        simple_split *cur_action;
+        graph_node **nodes;
+        vector<uint64_t> keys;
+        vector<split_action*> split_actions;
+        split_action **ordered_splits;
+        uint32_t i, num_actions;
+        txn_graph *graph;
+
+        /* Setup nodes */
+        num_actions = 6;
+        actions = (simple_split**)zmalloc(sizeof(split_action*)*num_actions);
+        nodes = (graph_node**)zmalloc(sizeof(split_action*)*num_actions);
+        ordered_splits = (split_action**)zmalloc(sizeof(split_action*)*num_actions);
+        graph = new txn_graph();
+        for (i = 0; i < num_actions; ++i) {
+                actions[i] = new simple_split(keys);
+                nodes[i] = new graph_node();
+                nodes[i]->app = actions[i];
+                graph->add_node(nodes[i]);                
+        }
+        
+        /* Add edges */        
+        graph->add_edge(nodes[0], nodes[1]);
+        graph->add_edge(nodes[0], nodes[2]);
+        graph->add_edge(nodes[1], nodes[3]);
+        graph->add_edge(nodes[2], nodes[3]);
+        graph->add_edge(nodes[4], nodes[3]);
+        graph->add_edge(nodes[5], nodes[3]);
+        
+        /* Process the graph */
+        setup_split::graph_to_txn(graph, &split_actions);
+        
+        ASSERT_TRUE(split_actions.size() == num_actions);
+
+        /* Check that RVPs have been correctly generated */
+        for (i = 0; i < num_actions; ++i) {
+                cur_action = (simple_split*)get_app(split_actions[i]);
+                if (cur_action == actions[0]) {
+                        ASSERT_TRUE(get_rvp_count(split_actions[i]) == 1);
+                        ordered_splits[0] = split_actions[i];
+                } else if (cur_action == actions[1]) {
+                        ASSERT_TRUE(get_rvp_count(split_actions[i]) == 1);
+                        ordered_splits[1] = split_actions[i];
+                } else if (cur_action == actions[2]) {
+                        ASSERT_TRUE(get_rvp_count(split_actions[i]) == 1);
+                        ordered_splits[2] = split_actions[i];
+                } else if (cur_action == actions[3]) {
+                        ASSERT_TRUE(get_rvp_count(split_actions[i]) == 0);
+                        ordered_splits[3] = split_actions[i];
+                } else if (cur_action == actions[4]) {
+                        ASSERT_TRUE(get_rvp_count(split_actions[i]) == 1);
+                        ordered_splits[4] = split_actions[i];
+                } else if (cur_action == actions[5]) {
+                        ASSERT_TRUE(get_rvp_count(split_actions[i]) == 1);
+                        ordered_splits[5] = split_actions[i];
+                }                        
+        }
+
+        EXPECT_TRUE(get_rvps(ordered_splits[1])[0] == 
+                    get_rvps(ordered_splits[2])[0]);
+        EXPECT_TRUE(get_rvps(ordered_splits[1])[0] == 
+                    get_rvps(ordered_splits[4])[0]);
+        EXPECT_TRUE(get_rvps(ordered_splits[1])[0] == 
+                    get_rvps(ordered_splits[5])[0]);
+
+        EXPECT_TRUE(find_rvp(ordered_splits[1], get_rvps(ordered_splits[0])[0]));
+        EXPECT_TRUE(find_rvp(ordered_splits[2], get_rvps(ordered_splits[0])[0]));
+        EXPECT_TRUE(find_rvp(ordered_splits[3], get_rvps(ordered_splits[1])[0]));
+        EXPECT_TRUE(find_rvp(ordered_splits[3], get_rvps(ordered_splits[2])[0]));
+        EXPECT_TRUE(find_rvp(ordered_splits[3], get_rvps(ordered_splits[4])[0]));
+        EXPECT_TRUE(find_rvp(ordered_splits[3], get_rvps(ordered_splits[5])[0]));
+}
+
+TEST_F(graph_test, linked_rvp)
+{
+        simple_split **actions;
+        simple_split *cur_action;
+        graph_node **nodes;
+        vector<uint64_t> keys;
+        vector<split_action*> split_actions;
+        uint32_t i, num_actions;
+        txn_graph *graph;
+
+        graph = new txn_graph();
+        num_actions = 4;
+        actions = (simple_split**)zmalloc(sizeof(simple_split*)*num_actions);
+        nodes = (graph_node**)zmalloc(sizeof(graph_node*)*num_actions);
+        for (i = 0; i < num_actions; ++i) {
+                actions[i] = new simple_split(keys);
+                nodes[i] = new graph_node();
+                nodes[i]->app = actions[i];
+                graph->add_node(nodes[i]);
+        }
+
+        graph->add_edge(nodes[0], nodes[1]);
+        graph->add_edge(nodes[1], nodes[2]);
+        graph->add_edge(nodes[2], nodes[3]);
+
+        setup_split::graph_to_txn(graph, &split_actions);
+        ASSERT_TRUE(split_actions.size() == 4);
+        
+        /* Check that RVPs have been correctly generated */
+        for (i = 0; i < num_actions; ++i) {
+                cur_action = (simple_split*)get_app(split_actions[i]);
+                if (cur_action == actions[num_actions-1])
+                        ASSERT_TRUE(get_rvp_count(split_actions[i]) == 0);
+                else 
+                        ASSERT_TRUE(get_rvp_count(split_actions[i]) == 1);
+        }
+        
+        ASSERT_TRUE(find_rvp(split_actions[1], get_rvps(split_actions[0])[0]));
+        ASSERT_TRUE(find_rvp(split_actions[2], get_rvps(split_actions[1])[0]));
+        ASSERT_TRUE(find_rvp(split_actions[3], get_rvps(split_actions[2])[0]));
+        
+        free(nodes);
+        delete(graph);
+        free(actions);                
 }
 

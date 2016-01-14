@@ -23,6 +23,8 @@ struct rendezvous_point {
  */
 class split_action : public translator {
         friend class split_executor;
+        friend class graph_test;
+
  private:
         
         /* Data for upstream nodes  */

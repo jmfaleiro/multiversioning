@@ -57,6 +57,28 @@ public:
                 return Hash128to64(std::make_pair(key->key, temp)) % num_partitions;
         }
 
+        static bool edge_list_eq(vector<int> *first, vector<int> *second)
+        {
+                uint32_t i, j, sz;
+                int cur;
+                
+                if (first->size() != second->size())
+                        return false;
+                
+                sz = first->size();
+                for (i = 0; i < sz; ++i) {
+                        cur = (*first)[i];
+                        for (j = 0; j < sz; ++j) {
+                                if (cur == (*second)[j])
+                                        break;
+                        }                        
+                        if (j == sz)
+                                return false;
+                }
+                return true;
+                
+        }
+
         static bool vector_eq(vector<int> *first, vector<int> *second)
         {
                 assert(first->size() == second->size());
@@ -72,11 +94,11 @@ public:
         static txn_phase* find_phase(vector<int> *in_edges, vector<txn_phase*> *phases)
         {
                 uint32_t i, num_phases;
-
                 num_phases = phases->size();
-                for (i = 0; i < num_phases; ++i) 
-                        if (vector_eq(in_edges, (*phases)[i]->parent_nodes))
+                for (i = 0; i < num_phases; ++i) {
+                        if (edge_list_eq(in_edges, (*phases)[i]->parent_nodes))
                                 return (*phases)[i];
+                }
                 return NULL;
         }
 
@@ -86,11 +108,34 @@ public:
                 vector<int> *edge_map;
 
                 edge_map = node->in_links;
+                if (edge_map == NULL)
+                        return 0;
                 sz = edge_map->size();
                 for (i = 0, count = 0; i < sz; ++i) 
                         if ((*edge_map)[i] == 1)
                                 ++count;
                 return count;
+        }
+
+        static void find_desc_rvps(int index, vector<txn_phase*> *phases, 
+                                   vector<txn_phase*> *desc)
+        {
+                assert(desc->size() == 0);
+                
+                uint32_t i, j, num_phases, phase_sz;
+                vector<int> *cur_phase;
+
+                num_phases = phases->size();
+                for (i = 0; i < num_phases; ++i) {
+                        cur_phase = (*phases)[i]->parent_nodes;
+                        phase_sz = cur_phase->size();
+                        for (j = 0; j < phase_sz; ++j) {
+                                if (index == (*cur_phase)[j]) {
+                                        desc->push_back((*phases)[i]);
+                                        break;
+                                }
+                        }
+                }
         }
 
         static uint32_t get_index_count(int index, vector<txn_phase*> *phases)
@@ -145,20 +190,25 @@ public:
                 split_action *piece;
                 rendezvous_point *rvp;
 
-                piece = txn_to_piece((txn*)node->app);
-                if ((node_phase = find_phase(node->in_links, phases)) == NULL) {
-                        rvp = node_phase->rvp;
+                piece = txn_to_piece((txn*)node->app);                
+                if (node->in_links == NULL) {
+                        piece->set_rvp(NULL);
+                        node->txn = piece;
                 } else {
-                        rvp = new rendezvous_point();
-                        node_phase = (txn_phase*)zmalloc(sizeof(txn_phase));
-                        node_phase->parent_nodes = node->in_links;
-                        node_phase->rvp = rvp;
-                        phases->push_back(node_phase);
-                        rvp->counter = get_parent_count(node);
-                
+                        if ((node_phase = find_phase(node->in_links, phases)) != NULL) {
+                                rvp = node_phase->rvp;
+                        } else {
+                                rvp = new rendezvous_point();
+                                node_phase = (txn_phase*)zmalloc(sizeof(txn_phase));
+                                node_phase->parent_nodes = node->in_links;
+                                node_phase->rvp = rvp;
+                                phases->push_back(node_phase);
+                                rvp->counter = get_parent_count(node);
+                                rvp->to_run = NULL;
+                        }
+                        piece->set_rvp(rvp);
+                        node->txn = piece;                
                 }
-                piece->set_rvp(rvp);
-                node->txn = piece;
         }
 
         /*
@@ -168,22 +218,17 @@ public:
         static void proc_upstream_node(graph_node *node, vector<txn_phase*> *phases)
         {
                 rendezvous_point **rvps;
-                uint32_t count, i, j, sz;
-                txn_phase *ph;
+                uint32_t count, i;
                 split_action *piece;
+                vector<txn_phase*> desc_rvps;
 
                 piece = (split_action*)node->txn;
-                count = get_index_count(node->index, phases);
+                find_desc_rvps(node->index, phases, &desc_rvps);
+                count = desc_rvps.size();
                 rvps = (rendezvous_point**)zmalloc(sizeof(rendezvous_point*)*count);
-
-                sz = phases->size();
-                for (i = 0, j = 0; i < sz; ++i) {
-                        ph = (*phases)[i];
-                        if ((*(ph->parent_nodes))[node->index] == 1) {
-                                rvps[j] = ph->rvp;
-                                j += 1;
-                        }
-                }
+                
+                for (i = 0; i < count; ++i) 
+                        rvps[i] = desc_rvps[i]->rvp;
                 piece->set_rvp_wakeups(rvps, count);
         }
 
@@ -267,7 +312,7 @@ public:
                         proc_downstream_node((*nodes)[i], phases);
                 for (i = 0; i < num_nodes; ++i)
                         proc_upstream_node((*nodes)[i], phases);
-                free(phases);
+                delete(phases);
         
                 /* Output actions, in order */
                 gen_piece_array(graph, actions);
