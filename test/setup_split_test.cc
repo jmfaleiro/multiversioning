@@ -4,6 +4,8 @@
 #include <cpuinfo.h>
 #include <setup_split.h>
 #include <simple_split.h>
+#include <split_workload_generator.h>
+#include <config.h>
 
 struct node_internal {
         void *txn;
@@ -277,6 +279,7 @@ TEST_F(graph_test, single_topological_sort)
 
         graph = new txn_graph();
         node = new graph_node();
+        node->partition = 0;
         node->txn = (void*)(uint64_t)3;
         graph->add_node(node);
         
@@ -310,6 +313,7 @@ TEST_F(graph_test, linked_topological_sort)
         /* Setup nodes */
         for (i = 0; i < num_nodes; ++i) {
                 my_nodes[i] = new graph_node();
+                my_nodes[i]->partition = 0;
                 my_nodes[i]->txn = (void*)(uint64_t)i;
                 graph->add_node(my_nodes[i]);
         }
@@ -358,6 +362,7 @@ TEST_F(graph_test, complex_topological_sort)
         /* Setup nodes */
         for (i = 0; i < num_nodes; ++i) {
                 my_nodes[i] = new graph_node();
+                my_nodes[i]->partition = 0;
                 my_nodes[i]->txn = (void*)(uint64_t)i;
                 graph->add_node(my_nodes[i]);
         }
@@ -415,6 +420,7 @@ TEST_F(graph_test, complex_rvp)
         for (i = 0; i < num_actions; ++i) {
                 actions[i] = new simple_split(keys);
                 nodes[i] = new graph_node();
+                nodes[i]->partition = 0;
                 nodes[i]->app = actions[i];
                 graph->add_node(nodes[i]);                
         }
@@ -489,6 +495,7 @@ TEST_F(graph_test, linked_rvp)
                 actions[i] = new simple_split(keys);
                 nodes[i] = new graph_node();
                 nodes[i]->app = actions[i];
+                nodes[i]->partition = 0;
                 graph->add_node(nodes[i]);
         }
 
@@ -517,3 +524,58 @@ TEST_F(graph_test, linked_rvp)
         free(actions);                
 }
 
+TEST_F(graph_test, simple_action_gen)
+{
+        split_config s_conf;
+        workload_config w_conf;
+        uint32_t num_txns, i, j, index;
+        vector<uint32_t> gen_indices;
+        vector<split_action*> **actions;
+
+        s_conf.num_partitions = 2;
+        w_conf.experiment = 0;
+        w_conf.distribution = UNIFORM;
+        w_conf.num_records = 1000000;
+        w_conf.theta = 0.0;
+        num_txns = 1000;
+        
+        actions = (vector<split_action*>**)zmalloc(sizeof(vector<split_action*>*)*
+                                                   s_conf.num_partitions);
+        for (i = 0; i < s_conf.num_partitions; ++i) 
+                actions[i] = new vector<split_action*>();
+
+        for (i = 0; i < num_txns; ++i) {
+                
+                /* Generate a transaction */
+                setup_split::setup_single_action(s_conf, w_conf, actions);
+                
+                /* Check generated actions */
+                for (j = 0; j < s_conf.num_partitions; ++j) 
+                        if (actions[j]->size() > 0 && 
+                            (find_node(j, &gen_indices) == -1)) {
+                                gen_indices.push_back(j);
+                        }
+                ASSERT_TRUE(gen_indices.size() == 1 || gen_indices.size() == 2);
+                if (gen_indices.size() == 1) {
+                        index = gen_indices[0];
+                        assert(actions[index]->size() == 1);
+                        ASSERT_TRUE(actions[index]->size() == 1);
+                        ASSERT_TRUE((*actions[index])[0]->writeset.size() == 2);
+                } else { 	/* gen_indices.size() == 2 */
+                        
+                        index = gen_indices[0];
+                        ASSERT_TRUE(actions[index]->size() == 1);
+                        ASSERT_TRUE((*actions[index])[0]->writeset.size() == 1);
+
+                        index = gen_indices[1];
+                        ASSERT_TRUE(actions[index]->size() == 1);
+                        ASSERT_TRUE((*actions[index])[0]->writeset.size() == 1);
+                }                
+                
+                
+                /* Clear vector */
+                for (j = 0; j < s_conf.num_partitions; ++j)  
+                        actions[j]->clear();
+                gen_indices.clear();
+        }        
+}

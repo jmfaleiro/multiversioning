@@ -44,6 +44,7 @@ txn_graph* generate_simple_action(RecordGenerator *gen, workload_config conf,
                 txn = new simple_split(records);
                 node0 = new graph_node();
                 node0->app = txn;
+                node0->partition = partition0;
                 graph->add_node(node0);
         } else {
                 
@@ -52,6 +53,7 @@ txn_graph* generate_simple_action(RecordGenerator *gen, workload_config conf,
                 txn = new simple_split(records);
                 node0 = new graph_node();
                 node0->app = txn;
+                node0->partition = partition0;
                 graph->add_node(node0);
                 
                 records.clear();
@@ -59,6 +61,7 @@ txn_graph* generate_simple_action(RecordGenerator *gen, workload_config conf,
                 txn = new simple_split(records);
                 node1 = new graph_node();
                 node1->app = txn;
+                node1->partition = partition1;
                 graph->add_node(node1);
                 graph->add_edge(node0, node1);
         }

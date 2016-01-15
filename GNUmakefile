@@ -15,6 +15,7 @@ TEST:=test
 TESTSOURCES:=$(wildcard $(TEST)/*.cc)
 TESTOBJECTS:=$(patsubst test/%.cc,test/%.o,$(TESTSOURCES))
 NON_HEK_OBJECTS:=$(filter-out $(HEK_OBJ),$(OBJECTS))
+NON_MAIN_STARTS:=$(filter-out start/main.o,$(START_OBJECTS))
 
 
 DEPSDIR:=.deps
@@ -46,7 +47,7 @@ start/%.o: start/%.cc $(DEPSDIR)/stamp GNUmakefile
 build/db:$(START_OBJECTS) $(OBJECTS)
 	@$(CXX) $(CFLAGS) -o $@ $^ $(LIBS)
 
-build/tests:$(OBJECTS) $(TESTOBJECTS)
+build/tests:$(OBJECTS) $(TESTOBJECTS) $(NON_MAIN_STARTS)
 	@$(CXX) $(CFLAGS) -o $@ $^ $(LIBS)
 
 $(DEPSDIR)/stamp:

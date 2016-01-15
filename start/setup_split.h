@@ -48,15 +48,6 @@ public:
                 return LCK_TBL_SZ / sizeof(lock_struct);        
         }
 
-        __attribute__((unused)) static uint32_t get_partition(const big_key *key, uint32_t num_partitions)
-        {
-                uint64_t temp;
-                temp = key->table_id;
-                temp <<= 32;
-                temp |= num_partitions;
-                return Hash128to64(std::make_pair(key->key, temp)) % num_partitions;
-        }
-
         static bool edge_list_eq(vector<int> *first, vector<int> *second)
         {
                 uint32_t i, j, sz;
@@ -149,13 +140,13 @@ public:
                 return count;
         }
 
-        static split_action* txn_to_piece(txn *txn)
+        static split_action* txn_to_piece(txn *txn, uint32_t partition_id)
         {
                 uint32_t num_reads, num_rmws, num_writes, max, i;
                 big_key *key_array;
                 split_action *action;
 
-                action = new split_action(txn);
+                action = new split_action(txn, partition_id);
                 num_reads = txn->num_reads();
                 num_writes = txn->num_writes();
                 num_rmws = txn->num_rmws();
@@ -189,8 +180,11 @@ public:
                 txn_phase *node_phase;
                 split_action *piece;
                 rendezvous_point *rvp;
+                
+                /* Check that the partition on the node has been initialized */
+                assert(node->partition != INT_MAX);
 
-                piece = txn_to_piece((txn*)node->app);                
+                piece = txn_to_piece((txn*)node->app, node->partition);
                 if (node->in_links == NULL) {
                         piece->set_rvp(NULL);
                         node->txn = piece;
@@ -351,8 +345,10 @@ public:
                 for (i = 0; i < num_partitions; ++i) {
                         num_txns = inputs[i]->size();
                         actions = (split_action**)zmalloc(sizeof(split_action*)*num_txns);
-                        for (j = 0; j < num_txns; ++j) 
+                        for (j = 0; j < num_txns; ++j) {
                                 actions[j] = (*inputs[i])[j];
+                                assert(actions[j]->get_partition_id() == i);
+                        }
                         ret[i].actions = actions;
                         ret[i].num_actions = num_txns;
                 }
@@ -379,75 +375,6 @@ public:
                 free(temp);
                 return input;
         }
-
-        /*
-          static split_action* gen_piece(big_key *keys, uint32_t num_keys, 
-          __attribute__((unused)) uint32_t num_partitions)
-          {
-          assert(num_keys > 0);
-        
-          uint32_t i;
-          split_action *action;
-        
-          action = new split_action(NULL);
-          for (i = 0; i < num_keys; ++i) {
-                
-          assert(get_partition(&keys[0], num_partitions) == 
-          get_partition(&keys[i], num_partitions));                
-          action->writeset.push_back(keys[i]);
-          }
-          return action;
-          }
-        */
-
-        /*
-         * Generate a single transaction which performs two RMW operations.
-         */
-        /*
-          static split_action* gen_single_action(split_config s_config, 
-          RecordGenerator *gen)
-          {
-          split_action *root, *leaf;
-          uint32_t i, first_partition, second_partition;
-          big_key keys[2];
-
-          keys[0].table_id = 0;
-          keys[1].table_id = 0;
-          keys[0].key = gen->GenNext();
-          keys[1].key = gen->GenNext();
-
-          first_partition = get_partition(&keys[0], s_config.num_partitions);
-          second_partition = get_partition(&keys[1], s_config.num_partitions);
-          if (first_partition == second_partition) {
-          root = gen_piece(&keys[0], 2, s_config.num_partitions);
-          } else {
-          root = gen_piece(&keys[0], 1, s_config.num_partitions);
-          leaf = gen_piece(&keys[1], 1, s_config.num_partitions);
-          }        
-          return root;
-          }
-        */
-
-        /*
-         * Generate a batch of simple transactions consisting of two RMW transactions.
-         */
-        /*
-          static struct split_action_batch gen_batch(split_config s_config)
-          {
-          uint32_t i;
-          split_action_batch ret;
-          split_action **actions;
-          size_t alloc_sz;
-
-          alloc_sz = sizeof(split_action*)*s_config.num_txns;
-          actions = (split_action**)zmalloc(alloc_sz);
-          ret.num_actions = s_config.num_txns;
-          for (i = 0; i < s_config.num_txns; ++i) {
-          actions[i] = gen_single_action(s_config, NULL);
-          }
-          ret.actions = actions;
-          }
-        */
 
         static split_action_batch** setup_input(split_config s_conf, workload_config w_conf)
         {

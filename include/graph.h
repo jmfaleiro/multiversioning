@@ -35,6 +35,8 @@ class graph_node {
 
         graph_node* topo_link;
 
+        uint32_t partition;
+
         graph_node() {
                 index = INT_MAX;
                 app = NULL;
@@ -42,6 +44,7 @@ class graph_node {
                 in_links = NULL;
                 out_links = NULL;
                 topo_link = NULL;
+                partition = INT_MAX;
         }
 };
 

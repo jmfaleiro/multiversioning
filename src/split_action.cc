@@ -6,14 +6,14 @@ txn_graph* split_txn::convert_to_graph()
         throw unimplemented_exception(0);
 }
 
-split_action::split_action(txn *t) : translator(t)
+split_action::split_action(txn *t, uint32_t partition_id) : translator(t)
 {
         dependents = NULL;
         num_dependents = 0;
         num_partition_dependencies = 0;
         list_ptr = NULL;
         num_intra_dependencies = 0;
-        partition_id = 0;
+        this->partition_id = partition_id;
         exec_list = NULL;        
 }
 

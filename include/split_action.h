@@ -54,7 +54,7 @@ class split_action : public translator {
         std::vector<big_key> readset;
         std::vector<big_key> writeset;
         
-        split_action(txn *t);
+        split_action(txn *t, uint32_t partition_id);
         bool ready();
         virtual bool run();
         virtual void release_multi_partition();
