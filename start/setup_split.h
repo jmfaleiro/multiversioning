@@ -294,19 +294,21 @@ public:
                 assert(actions != NULL && actions->size() == 0);
 
                 uint32_t i, num_nodes;
-                vector<txn_phase*> *phases;
+                vector<txn_phase*> phases;
                 vector<graph_node*> *nodes;
         
                 nodes = graph->get_nodes();
                 num_nodes = nodes->size();
         
                 /* Setup rvps */
-                phases = new vector<txn_phase*>();
                 for (i = 0; i < num_nodes; ++i) 
-                        proc_downstream_node((*nodes)[i], phases);
+                        proc_downstream_node((*nodes)[i], &phases);
                 for (i = 0; i < num_nodes; ++i)
-                        proc_upstream_node((*nodes)[i], phases);
-                delete(phases);
+                        proc_upstream_node((*nodes)[i], &phases);
+
+                /* Get rid of phases */
+                for (i = 0; i < phases.size(); ++i) 
+                        free(phases[i]);
         
                 /* Output actions, in order */
                 gen_piece_array(graph, actions);
@@ -316,21 +318,19 @@ public:
                                         vector<split_action*> **actions)
         {
                 txn_graph *graph;
-                vector<split_action*> *generated;
+                vector<split_action*> generated;
                 uint32_t i, sz, partition;
                 split_action *cur;
 
                 graph = generate_split_action(w_conf, s_conf.num_partitions);
-                generated = new vector<split_action*>();
-                graph_to_txn(graph, generated);
-                sz = generated->size();
+                graph_to_txn(graph, &generated);
+                sz = generated.size();
                 for (i = 0; i < sz; ++i) {
-                        cur = (*generated)[i];
+                        cur = generated[i];
                         partition = cur->get_partition_id();
                         actions[partition]->push_back(cur);
                 }
                 delete(graph);
-                delete(generated);        
         }
 
 
@@ -372,6 +372,8 @@ public:
                         setup_single_action(s_conf, w_conf, temp);
 
                 input = vector_to_batch(s_conf.num_partitions, temp);
+                for (i = 0; i < s_conf.num_partitions; ++i) 
+                        delete(temp[i]);
                 free(temp);
                 return input;
         }

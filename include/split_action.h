@@ -32,14 +32,14 @@ class split_action : public translator {
         uint32_t rvp_count;
 
         /* Data for downstream nodes */
-        
+        split_action *rvp_sibling;
          
         /* 
          * This list is constructed before transactions actually run. Basically,
          * the set of transactions to notify. 
          */        
         split_action **dependents;
-        split_action *next;
+        //        split_action *next;
         uint32_t num_dependents;
 
         uint64_t num_partition_dependencies;

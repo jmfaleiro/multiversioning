@@ -42,11 +42,15 @@ protected:
                 while (start != NULL) {
                         if (action == start)
                                 return true;
-                        start = start->next;
+                        start = start->rvp_sibling;
                 }
                 return false;
         }
 
+        static split_action* get_rvp_sibling(split_action *action)
+        {
+                return action->rvp_sibling;
+        }
         
         virtual void SetUp() {
                 
@@ -531,11 +535,15 @@ TEST_F(graph_test, simple_action_gen)
         uint32_t num_txns, i, j, index;
         vector<uint32_t> gen_indices;
         vector<split_action*> **actions;
+        uint64_t key0, key1;
+        split_action *cur_action, *action2, *ptr;
+        rendezvous_point **rvps;
+        
 
         s_conf.num_partitions = 2;
         w_conf.experiment = 0;
         w_conf.distribution = UNIFORM;
-        w_conf.num_records = 1000000;
+        w_conf.num_records = 10;
         w_conf.theta = 0.0;
         num_txns = 1000;
         
@@ -560,22 +568,52 @@ TEST_F(graph_test, simple_action_gen)
                         index = gen_indices[0];
                         assert(actions[index]->size() == 1);
                         ASSERT_TRUE(actions[index]->size() == 1);
-                        ASSERT_TRUE((*actions[index])[0]->writeset.size() == 2);
+                        cur_action = (*actions[index])[0];
+                        ASSERT_TRUE(cur_action->writeset.size() == 2);
+                        key0 = cur_action->writeset[0].key;
+                        key1 = cur_action->writeset[1].key;
+
+                        /* Test RVPs */
+                        ASSERT_TRUE(get_rvp_count(cur_action) == 0);
+
                 } else { 	/* gen_indices.size() == 2 */
                         
+                        ASSERT_TRUE(gen_indices[0] != gen_indices[1]);
                         index = gen_indices[0];
                         ASSERT_TRUE(actions[index]->size() == 1);
                         ASSERT_TRUE((*actions[index])[0]->writeset.size() == 1);
+                        key0 = (*actions[index])[0]->writeset[0].key;
+                        cur_action = (*actions[index])[0];
+                        if (get_rvp_count(cur_action) == 0) 
+                                action2 = cur_action;
+                        else 
+                                action2 = NULL;
 
                         index = gen_indices[1];
                         ASSERT_TRUE(actions[index]->size() == 1);
                         ASSERT_TRUE((*actions[index])[0]->writeset.size() == 1);
+                        key1 = (*actions[index])[0]->writeset[0].key;
+                        if (action2 == NULL) 
+                                action2 = (*actions[index])[0];
+                        else 
+                                cur_action = (*actions[index])[0];
+                        
+                        ASSERT_TRUE(get_rvp_count(cur_action) == 1);
+                        ASSERT_TRUE(get_rvp_count(action2) == 0);
+                        rvps = get_rvps(cur_action);                        
+                        
+                        ptr = rvps[0]->to_run;
+                        ASSERT_TRUE(ptr == action2);
+                        ASSERT_TRUE(get_rvp_sibling(ptr) == NULL);
                 }                
                 
-                
+                /* Keys should be unique */
+                ASSERT_TRUE(key0 != key1);
+
                 /* Clear vector */
                 for (j = 0; j < s_conf.num_partitions; ++j)  
                         actions[j]->clear();
                 gen_indices.clear();
         }        
 }
+

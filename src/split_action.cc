@@ -60,9 +60,9 @@ void split_action::set_rvp_wakeups(rendezvous_point **rvps, uint32_t count)
 void split_action::set_rvp(rendezvous_point *rvp)
 {
         if (rvp == NULL) {
-                this->next = NULL;
+                this->rvp_sibling = NULL;
         } else {
-                this->next = rvp->to_run;
+                this->rvp_sibling = rvp->to_run;
                 rvp->to_run = this;
         }
 }
