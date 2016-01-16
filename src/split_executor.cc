@@ -103,16 +103,14 @@ void split_executor::Init()
 void split_executor::StartWorking()
 {
         split_action_batch batch;
-        //        uint32_t i;
+        uint32_t i;
 
         while (true) {
                 batch = input_queue->DequeueBlocking();
-                /*
                 for (i = 0; i < batch.num_actions; ++i) {
                         process_action(batch.actions[i]);
                         check_pending();
                 }
-                */
                 output_queue->EnqueueBlocking(batch);
         }
 }

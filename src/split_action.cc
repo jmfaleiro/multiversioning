@@ -1,5 +1,6 @@
 #include <split_action.h>
 #include <util.h>
+#include <cassert>
 
 txn_graph* split_txn::convert_to_graph()
 {

@@ -34,7 +34,7 @@ public:
         /*
          * XXX Fix up this function to take different experiments into account.
          */
-        __attribute__((unused)) static void setup_table_info(split_config s_conf)
+        static void setup_table_info(split_config s_conf)
         {
                 assert(num_split_tables == 0 && split_table_sizes == NULL);
                 num_split_tables = 1;
@@ -525,6 +525,8 @@ public:
                 splt_inpt_queue **input_queues, **output_queues;
                 split_action_batch **inputs;
                 uint32_t num_batches;
+                
+                setup_table_info(s_conf);
         
                 num_batches = 2;
                 input_queues = setup_input_queues(s_conf);

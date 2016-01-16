@@ -115,6 +115,7 @@ void lock_table::acquire_locks(split_action *action)
                 cur_lock->key = action->readset[i];
                 cur_lock->type = READ_LOCK;
                 cur_lock->list_ptr = lock_list;
+                cur_lock->action = action;
                 lock_list = cur_lock;
                 if (!acquire_single(cur_lock))
                         action->add_partition_dependency();
@@ -126,6 +127,7 @@ void lock_table::acquire_locks(split_action *action)
                 cur_lock->key = action->writeset[i];
                 cur_lock->type = WRITE_LOCK;
                 cur_lock->list_ptr = lock_list;
+                cur_lock->action = action;
                 lock_list = cur_lock;
                 if (!acquire_single(cur_lock))
                         action->add_partition_dependency();
@@ -143,13 +145,17 @@ split_action* lock_table::release_locks(split_action *action)
         split_action *ret;
         lock_struct *locks, *cur;
         
+        unblocked.tail = NULL;
+        unblocked.head = NULL;
         ret = NULL;
         locks = (lock_struct*)action->get_lock_list();
         while (locks != NULL) {
                 cur = locks;
                 unblocked = release_single(cur);
-                unblocked.tail->exec_list = ret;
-                ret = unblocked.head;
+                if (unblocked.tail != NULL) {
+                        unblocked.tail->exec_list = ret;
+                        ret = unblocked.head;
+                }
                 this->lock_allocator->return_lock(cur);
                 locks = locks->list_ptr;
         }
@@ -212,7 +218,8 @@ bool lock_table::check_conflict(lock_struct *lock, lock_struct_queue *queue)
         else 
                 acquired = false;
         lock->is_held = acquired;
-        return !acquired;        
+        lock->table_queue = queue;
+        return acquired;        
 }
 
 bool lock_table::insert_queue(lock_struct *lock, lock_struct_queue *queue)
