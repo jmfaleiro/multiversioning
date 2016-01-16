@@ -50,9 +50,9 @@ struct workload_config
 enum ConcurrencyControl {
   MULTIVERSION = 0,
   LOCKING = 1,
-  OCC,
-  HEK,
-  SPLIT,
+  OCC = 2,
+  HEK = 3,
+  SPLIT = 4,
 };
 
 struct OCCConfig {
@@ -179,7 +179,8 @@ class ExperimentConfig {
     int ccType = -1;
     if ((argMap.count(CC_TYPE) == 0) || 
         ((ccType = atoi(argMap[CC_TYPE])) != MULTIVERSION && 
-         ccType != LOCKING && ccType != OCC && ccType != HEK)) {
+         ccType != LOCKING && ccType != OCC && ccType != HEK &&
+         ccType != SPLIT)) {
       std::cerr << "Undefined concurrency control type\n";
       exit(-1);
     }

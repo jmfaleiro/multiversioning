@@ -438,6 +438,7 @@ public:
                                                               uint32_t partition_id,
                                                               splt_comm_queue **ready_queues,
                                                               splt_inpt_queue *input_queue,
+                                                              splt_inpt_queue *output_queue,
                                                               split_config s_conf)
         {
                 struct split_executor_config exec_conf;
@@ -450,6 +451,7 @@ public:
                         partition_id,
                         ready_queues,
                         input_queue,
+                        output_queue,
                         lck_conf,
                 };
                 return exec_conf;
@@ -460,7 +462,7 @@ public:
          */
         static split_executor** setup_threads(split_config s_conf, 
                                               splt_inpt_queue **in_queues,
-                                              __attribute__((unused)) splt_inpt_queue **out_queues)
+                                              splt_inpt_queue **out_queues)
         {
                 split_executor **ret;
                 splt_comm_queue ***comm_queues;
@@ -471,11 +473,15 @@ public:
                         zmalloc(sizeof(split_executor*)*s_conf.num_partitions);
                 comm_queues = setup_comm_queues(s_conf);
                 for (i = 0; i < s_conf.num_partitions; ++i) {
+                        assert(in_queues[i] != NULL && out_queues[i] != NULL);
                         conf = setup_exec_config(i, s_conf.num_partitions, i, 
                                                  comm_queues[i],
                                                  in_queues[i],
+                                                 out_queues[i],
                                                  s_conf);
                         ret[i] = new(i) split_executor(conf);
+                        ret[i]->Run();
+                        ret[i]->WaitInit();
                 }
                 return ret;
         }
@@ -523,10 +529,16 @@ public:
                 num_batches = 2;
                 input_queues = setup_input_queues(s_conf);
                 output_queues = setup_input_queues(s_conf);
+                
+                std::cerr << "Setup queues\n";
 
                 inputs = setup_input(s_conf, w_conf);
+                
+                std::cerr << "Setup input\n";
                 setup_threads(s_conf, input_queues, output_queues);
+                std::cerr << "Setup database threads\n";
                 do_experiment(inputs, input_queues, output_queues, num_batches, s_conf);
+                std::cerr << "Done experiment\n";
         }
 };
 
