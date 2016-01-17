@@ -32,10 +32,11 @@ class split_executor : public Runnable {
         splt_inpt_queue *input_queue;
         splt_inpt_queue *output_queue;
         splt_comm_queue **ready_queues;
-        
+
+        void schedule_single_rvp(rendezvous_point *rvp);        
+        void schedule_downstream_pieces(split_action *action);
         void run_action(split_action *action);
         void process_action(split_action *action);
-        void schedule_intra_deps(split_action *action);
         void schedule_action(split_action *action);
         void check_pending();
         

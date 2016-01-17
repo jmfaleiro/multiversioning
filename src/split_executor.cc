@@ -23,28 +23,38 @@ split_executor::split_executor(struct split_executor_config config)
 void split_executor::process_action(split_action *action)
 {
         this->lck_table->acquire_locks(action);
+        assert(action->ready());
         if (action->ready()) {
                 action->run();
                 this->lck_table->release_locks(action);
         }
 }
 
-/*
- * After executing a piece, alert other partitions that the piece has finished 
- * executing. 
- */
-void split_executor::schedule_intra_deps(split_action *action)
+void split_executor::schedule_single_rvp(rendezvous_point *rvp)
 {
-        uint32_t i, partition_id;
-        split_action *dep;
+        split_action *action;
+        uint32_t partition;
 
-        for (i = 0; i < action->num_dependents; ++i) {
-                dep = action->dependents[i];
-                if (fetch_and_decrement(&dep->num_intra_dependencies) == 0) {
-                        partition_id = dep->get_partition_id();
-                        ready_queues[partition_id]->EnqueueBlocking(dep);
-                }
+        if (fetch_and_decrement(&rvp->counter) > 0)
+                return;
+        action = rvp->to_run;
+        assert(action != NULL);
+        while (action != NULL) {
+                partition = action->get_partition_id();
+                ready_queues[partition]->EnqueueBlocking(action);
+                action = action->get_rvp_sibling();
         }
+}
+
+void split_executor::schedule_downstream_pieces(split_action *action)
+{
+        uint32_t i, num_rvps;
+        rendezvous_point **rvps;
+         
+        num_rvps = action->num_downstream_rvps();
+        rvps = action->get_rvps();
+        for (i = 0; i < num_rvps; ++i) 
+                schedule_single_rvp(rvps[i]);
 }
 
 /*
@@ -59,7 +69,7 @@ void split_executor::run_action(split_action *action)
         is_ready = action->ready();
         assert(is_ready == true);
         action->run();
-        schedule_intra_deps(action);
+        schedule_downstream_pieces(action);
         descendants = this->lck_table->release_locks(action);
         while (descendants != NULL) {
                 run_action(descendants);

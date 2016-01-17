@@ -140,13 +140,15 @@ public:
                 return count;
         }
 
-        static split_action* txn_to_piece(txn *txn, uint32_t partition_id)
+        static split_action* txn_to_piece(txn *txn, uint32_t partition_id, 
+                                          bool dependency_flag)
         {
                 uint32_t num_reads, num_rmws, num_writes, max, i;
                 big_key *key_array;
                 split_action *action;
 
-                action = new split_action(txn, partition_id);
+                action = new split_action(txn, partition_id, dependency_flag);
+                txn->set_translator(action);
                 num_reads = txn->num_reads();
                 num_writes = txn->num_writes();
                 num_rmws = txn->num_rmws();
@@ -158,7 +160,7 @@ public:
                 else 
                         max = num_writes;
                 key_array = (big_key*)zmalloc(sizeof(big_key)*max);
-
+                
                 txn->get_reads(key_array);
                 for (i = 0; i < num_reads; ++i) 
                         action->readset.push_back(key_array[i]);
@@ -184,11 +186,12 @@ public:
                 /* Check that the partition on the node has been initialized */
                 assert(node->partition != INT_MAX);
 
-                piece = txn_to_piece((txn*)node->app, node->partition);
                 if (node->in_links == NULL) {
+                        piece = txn_to_piece((txn*)node->app, node->partition, false);
                         piece->set_rvp(NULL);
                         node->txn = piece;
                 } else {
+                        piece = txn_to_piece((txn*)node->app, node->partition, true);
                         if ((node_phase = find_phase(node->in_links, phases)) != NULL) {
                                 rvp = node_phase->rvp;
                         } else {

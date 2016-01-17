@@ -7,24 +7,27 @@ txn_graph* split_txn::convert_to_graph()
         throw unimplemented_exception(0);
 }
 
-split_action::split_action(txn *t, uint32_t partition_id) : translator(t)
+split_action::split_action(txn *t, uint32_t partition_id, 
+                           uint64_t dependency_flag) : translator(t)
 {
-        dependents = NULL;
-        num_dependents = 0;
-        num_partition_dependencies = 0;
-        list_ptr = NULL;
-        num_intra_dependencies = 0;
+        this->t = t;
         this->partition_id = partition_id;
+        this->dependency_flag = dependency_flag;
+        
+        num_pending_locks = 0;
+        list_ptr = NULL;
         exec_list = NULL;        
 }
 
 bool split_action::ready()
 {       
-        uint64_t deps;
+        bool has_deps;
+
         barrier();
-        deps = num_partition_dependencies + num_intra_dependencies;
+        has_deps = dependency_flag;
         barrier();
-        return (deps == 0);
+        
+        return (has_deps == false) && (num_pending_locks == 0);
 }
 
 void split_action::set_lock_list(void* list_ptr)
@@ -37,14 +40,14 @@ void* split_action::get_lock_list()
         return this->list_ptr;
 }
 
-void split_action::add_partition_dependency()
+void split_action::incr_pending_locks()
 {
-        this->num_partition_dependencies += 1;
+        this->num_pending_locks += 1;
 }
 
-void split_action::remove_partition_dependency()
+void split_action::decr_pending_locks()
 {
-        this->num_partition_dependencies -= 1;
+        this->num_pending_locks -= 1;
 }
 
 uint32_t split_action::get_partition_id()
@@ -52,12 +55,8 @@ uint32_t split_action::get_partition_id()
         return this->partition_id;
 }
 
-void split_action::set_rvp_wakeups(rendezvous_point **rvps, uint32_t count)
-{
-        this->rvps = rvps;
-        this->rvp_count = count;
-}
 
+/* RVP related functions */
 void split_action::set_rvp(rendezvous_point *rvp)
 {
         if (rvp == NULL) {
@@ -66,6 +65,27 @@ void split_action::set_rvp(rendezvous_point *rvp)
                 this->rvp_sibling = rvp->to_run;
                 rvp->to_run = this;
         }
+}
+
+void split_action::set_rvp_wakeups(rendezvous_point **rvps, uint32_t count)
+{
+        this->rvps = rvps;
+        this->rvp_count = count;
+}
+
+split_action* split_action::get_rvp_sibling()
+{
+        return this->rvp_sibling;
+}
+
+uint32_t split_action::num_downstream_rvps()
+{
+        return this->rvp_count;
+}
+
+rendezvous_point** split_action::get_rvps()
+{
+        return this->rvps;
 }
 
 /* XXX Incomplete */
@@ -91,7 +111,7 @@ int split_action::rand()
 /* XXX Incomplete */
 bool split_action::run()
 {
-        return false;
+        return true;
 }
 
 /* XXX Incomplete */

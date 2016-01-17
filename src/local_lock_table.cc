@@ -118,7 +118,7 @@ void lock_table::acquire_locks(split_action *action)
                 cur_lock->action = action;
                 lock_list = cur_lock;
                 if (!acquire_single(cur_lock))
-                        action->add_partition_dependency();
+                        action->incr_pending_locks();
         }
         
         num_writes = action->writeset.size();
@@ -130,7 +130,7 @@ void lock_table::acquire_locks(split_action *action)
                 cur_lock->action = action;
                 lock_list = cur_lock;
                 if (!acquire_single(cur_lock))
-                        action->add_partition_dependency();
+                        action->incr_pending_locks();
         }
         action->set_lock_list(lock_list);
 }
@@ -293,7 +293,7 @@ bool lock_table::pass_lock(lock_struct *lock)
         assert(lock->is_held == false);
         assert(action != NULL);
         lock->is_held = true;
-        action->remove_partition_dependency();
+        action->decr_pending_locks();
         return action->ready();
 }
 

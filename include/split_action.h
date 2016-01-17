@@ -5,6 +5,7 @@
 #include <vector>
 #include <db.h>
 #include <graph.h>
+#include <action.h>
 
 class split_txn : public txn {
  public:
@@ -33,18 +34,11 @@ class split_action : public translator {
 
         /* Data for downstream nodes */
         split_action *rvp_sibling;
-         
-        /* 
-         * This list is constructed before transactions actually run. Basically,
-         * the set of transactions to notify. 
-         */        
-        split_action **dependents;
-        //        split_action *next;
-        uint32_t num_dependents;
-
-        uint64_t num_partition_dependencies;
+        volatile bool dependency_flag;
+ 
+        /* State for local locks */
+        uint32_t num_pending_locks;
         void* list_ptr;
-        volatile uint64_t num_intra_dependencies;
 
         /* The partition on which this sub-action needs to execute. */
         uint32_t partition_id;
@@ -54,19 +48,25 @@ class split_action : public translator {
         std::vector<big_key> readset;
         std::vector<big_key> writeset;
         
-        split_action(txn *t, uint32_t partition_id);
+        split_action(txn *t, uint32_t partition_id, uint64_t dependency_flag);
         bool ready();
         virtual bool run();
+        
         virtual void release_multi_partition();
-        virtual void remove_partition_dependency();
         uint32_t get_partition_id();
-        void add_partition_dependency();
+        
+        /* Interface used by local lock table */
         void set_lock_list(void* list_ptr);
         void* get_lock_list();
+        virtual void decr_pending_locks();
+        virtual void incr_pending_locks();
         
         /* Rendezvous point functions */
         void set_rvp(rendezvous_point *rvp);
         void set_rvp_wakeups(rendezvous_point **rvps, uint32_t count);
+        split_action* get_rvp_sibling();
+        uint32_t num_downstream_rvps();
+        rendezvous_point** get_rvps();
 
         /* Translator interface functions  */
         void* write_ref(uint64_t key, uint32_t table_id);

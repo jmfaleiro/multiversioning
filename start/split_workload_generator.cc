@@ -29,20 +29,27 @@ txn_graph* generate_simple_action(RecordGenerator *gen, workload_config conf,
         uint32_t partition0, partition1;
         simple_split *txn;
         vector<uint64_t> records;
-        std::set<uint64_t> seen_keys;
+        //        std::set<uint64_t> seen_keys;
 
         /* XXX Generate simple actions. No other experiment supported */
         if (conf.experiment != 0) 
                 assert(false);
         
         graph = new txn_graph();
-        rec0 = gen_unique_key(gen, &seen_keys);
-        rec1 = gen_unique_key(gen, &seen_keys);
-        partition0 = get_partition(rec0, 0, num_partitions);
-        partition1 = get_partition(rec1, 0, num_partitions);
         
+        while (true) {
+                rec0 = gen->GenNext();
+                rec1 = gen->GenNext();
+                partition0 = get_partition(rec0, 0, num_partitions);
+                partition1 = get_partition(rec1, 0, num_partitions);
+                break;
+                if (partition0 == partition1)
+                        break;
+        }
+
         if (partition0 == partition1) {
-                
+                //                assert(false);
+
                 /* Both records belong to a single partition */
                 records.push_back(rec0);
                 records.push_back(rec1);
@@ -52,7 +59,7 @@ txn_graph* generate_simple_action(RecordGenerator *gen, workload_config conf,
                 node0->partition = partition0;
                 graph->add_node(node0);
         } else {
-                
+                assert(false);
                 /* Dual-partition transaction */
                 records.push_back(rec0);
                 txn = new simple_split(records);
