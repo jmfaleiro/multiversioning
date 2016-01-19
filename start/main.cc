@@ -488,6 +488,8 @@ void LockingExperiment(LockingConfig config) {
 
 uint32_t setup_split::num_split_tables = 0;
 uint64_t* setup_split::split_table_sizes = NULL;
+splt_comm_queue*** setup_split::comm_queues = NULL;
+
 
 int main(int argc, char **argv) {
         //        mlockall(MCL_FUTURE);

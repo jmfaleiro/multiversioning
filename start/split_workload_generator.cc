@@ -37,18 +37,24 @@ txn_graph* generate_simple_action(RecordGenerator *gen, workload_config conf,
         
         graph = new txn_graph();
         
+        /* First record goes to an even partition */
         while (true) {
                 rec0 = gen->GenNext();
-                rec1 = gen->GenNext();
                 partition0 = get_partition(rec0, 0, num_partitions);
+                if (partition0 % 2 == 0)
+                        break;
+        }
+
+        /* Second record goes to an odd partition */
+        while (true) {
+                rec1 = gen->GenNext();
                 partition1 = get_partition(rec1, 0, num_partitions);
-                break;
-                if (partition0 == partition1)
+                if (partition1 % 2 == 1)
                         break;
         }
 
         if (partition0 == partition1) {
-                //                assert(false);
+                assert(false);
 
                 /* Both records belong to a single partition */
                 records.push_back(rec0);
@@ -59,7 +65,7 @@ txn_graph* generate_simple_action(RecordGenerator *gen, workload_config conf,
                 node0->partition = partition0;
                 graph->add_node(node0);
         } else {
-                assert(false);
+
                 /* Dual-partition transaction */
                 records.push_back(rec0);
                 txn = new simple_split(records);

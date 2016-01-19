@@ -20,6 +20,7 @@ struct split_executor_config {
         uint32_t num_partitions;
         uint32_t partition_id;
         SimpleQueue<split_action*> **ready_queues;
+        SimpleQueue<split_action*> **signal_queues;
         SimpleQueue<split_action_batch> *input_queue;
         SimpleQueue<split_action_batch> *output_queue;
         struct lock_table_config lock_table_conf;
@@ -32,6 +33,7 @@ class split_executor : public Runnable {
         splt_inpt_queue *input_queue;
         splt_inpt_queue *output_queue;
         splt_comm_queue **ready_queues;
+        splt_comm_queue **signal_queues;
 
         void schedule_single_rvp(rendezvous_point *rvp);        
         void schedule_downstream_pieces(split_action *action);

@@ -28,6 +28,7 @@ enum graph_node_state {
 class setup_split {
 public:
 
+        static splt_comm_queue ***comm_queues;
         static uint32_t num_split_tables;
         static uint64_t *split_table_sizes;
 
@@ -392,6 +393,22 @@ public:
                 return batches;
         }
 
+        static splt_comm_queue** setup_signal_inputs(uint32_t partition, 
+                                                     split_config s_conf)
+        {
+                uint32_t i, num_partitions;
+                splt_comm_queue **ret;
+                size_t alloc_sz;
+
+                num_partitions = s_conf.num_partitions;
+                alloc_sz = sizeof(splt_comm_queue*)*num_partitions;
+                ret = (splt_comm_queue**)alloc_mem(alloc_sz, partition);
+
+                for (i = 0; i < num_partitions; ++i ) 
+                        ret[i] = comm_queues[i][partition];
+                return ret;
+        }
+
         /*
          * Setup communication queues between executor threads.
          */
@@ -404,7 +421,7 @@ public:
                                                   s_conf.num_partitions);
                 for (i = 0; i < s_conf.num_partitions; ++i) 
                         ret[i] = setup_queues<split_action*>(s_conf.num_partitions, 
-                                                             1024);
+                                                             (1<<20));
                 return ret;
         }
 
@@ -440,6 +457,7 @@ public:
                                                               uint32_t num_partitions, 
                                                               uint32_t partition_id,
                                                               splt_comm_queue **ready_queues,
+                                                              splt_comm_queue **comm_inputs,
                                                               splt_inpt_queue *input_queue,
                                                               splt_inpt_queue *output_queue,
                                                               split_config s_conf)
@@ -453,6 +471,7 @@ public:
                         num_partitions,
                         partition_id,
                         ready_queues,
+                        comm_inputs,
                         input_queue,
                         output_queue,
                         lck_conf,
@@ -466,19 +485,24 @@ public:
         static split_executor** setup_threads(split_config s_conf, 
                                               splt_inpt_queue **in_queues,
                                               splt_inpt_queue **out_queues)
+                                              
         {
                 split_executor **ret;
-                splt_comm_queue ***comm_queues;
                 split_executor_config conf;
+                splt_comm_queue **comm_inputs;
                 uint32_t i;
 
                 ret = (split_executor**)
                         zmalloc(sizeof(split_executor*)*s_conf.num_partitions);
                 comm_queues = setup_comm_queues(s_conf);
                 for (i = 0; i < s_conf.num_partitions; ++i) {
+                        if (i % 2 == 1)
+                                continue;
                         assert(in_queues[i] != NULL && out_queues[i] != NULL);
+                        comm_inputs = setup_signal_inputs(i, s_conf);
                         conf = setup_exec_config(i, s_conf.num_partitions, i, 
                                                  comm_queues[i],
+                                                 comm_inputs, 
                                                  in_queues[i],
                                                  out_queues[i],
                                                  s_conf);
@@ -507,19 +531,56 @@ public:
         
                 /* Do warmup */
                 cur_batch = inputs[0];
-                for (i = 0; i < s_conf.num_partitions; ++i) 
+                for (i = 0; i < s_conf.num_partitions; ++i) {
+                        if (i % 2 == 1)
+                                continue;
                         input_queues[i]->EnqueueBlocking(cur_batch[i]);
-                for (i = 0; i < s_conf.num_partitions; ++i)
+                }
+                for (i = 0; i < s_conf.num_partitions; ++i) {
+                        if (i % 2 == 1)
+                                continue;
                         output_queues[i]->DequeueBlocking();
+                }
         
                 /* Do real batch */
                 cur_batch = inputs[1];
-                for (i = 0; i < s_conf.num_partitions; ++i) 
+                for (i = 0; i < s_conf.num_partitions; ++i) {
+                        if (i % 2 == 1)
+                                continue;
                         input_queues[i]->EnqueueBlocking(cur_batch[i]);
-                for (i = 0; i < s_conf.num_partitions; ++i)
+                }
+                for (i = 0; i < s_conf.num_partitions; ++i) {
+                        if (i % 2 == 1)
+                                continue;
                         output_queues[i]->DequeueBlocking();
+                }
         }
 
+        static uint32_t single_comm(splt_comm_queue **txn_queues, 
+                                    uint32_t num_partitions)
+        {
+                uint32_t i, count;
+                split_action *temp;
+
+                count = 0;
+                for (i = 0; i < num_partitions; ++i) {
+                        while (txn_queues[i]->Dequeue(&temp))
+                                count += 1;
+                }
+                return count;                
+        }
+
+        static void check_comm(uint32_t expected_count, split_config s_conf)
+        {
+                uint32_t num_partitions, i;
+                uint32_t count = 0;
+                
+                num_partitions = s_conf.num_partitions;
+                for (i = 0; i < num_partitions; ++i)
+                        count += single_comm(comm_queues[i], num_partitions);
+                assert(expected_count == count);
+        }
+        
         static void split_experiment(split_config s_conf, workload_config w_conf)
         {
                 num_split_tables = 0;
@@ -544,6 +605,7 @@ public:
                 std::cerr << "Setup database threads\n";
                 do_experiment(inputs, input_queues, output_queues, num_batches, s_conf);
                 std::cerr << "Done experiment\n";
+                check_comm(10000+s_conf.num_txns, s_conf);
         }
 };
 

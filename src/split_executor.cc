@@ -11,6 +11,7 @@ split_executor::split_executor(struct split_executor_config config)
         this->input_queue = config.input_queue;
         this->output_queue = config.output_queue;
         this->ready_queues = config.ready_queues;
+        this->signal_queues = config.signal_queues;
 }
 
 /*
@@ -26,6 +27,7 @@ void split_executor::process_action(split_action *action)
         assert(action->ready());
         if (action->ready()) {
                 action->run();
+                schedule_downstream_pieces(action);
                 this->lck_table->release_locks(action);
         }
 }
@@ -35,13 +37,14 @@ void split_executor::schedule_single_rvp(rendezvous_point *rvp)
         split_action *action;
         uint32_t partition;
 
-        if (fetch_and_decrement(&rvp->counter) > 0)
+        if (fetch_and_decrement(&rvp->counter) > 0) 
                 return;
+
         action = rvp->to_run;
         assert(action != NULL);
         while (action != NULL) {
                 partition = action->get_partition_id();
-                ready_queues[partition]->EnqueueBlocking(action);
+                signal_queues[partition]->EnqueueBlocking(action);
                 action = action->get_rvp_sibling();
         }
 }
@@ -50,9 +53,10 @@ void split_executor::schedule_downstream_pieces(split_action *action)
 {
         uint32_t i, num_rvps;
         rendezvous_point **rvps;
-         
+
         num_rvps = action->num_downstream_rvps();
         rvps = action->get_rvps();
+        assert(num_rvps == 1);
         for (i = 0; i < num_rvps; ++i) 
                 schedule_single_rvp(rvps[i]);
 }
@@ -66,6 +70,7 @@ void split_executor::run_action(split_action *action)
         bool is_ready;
         split_action *descendants;
         
+        assert(false);
         is_ready = action->ready();
         assert(is_ready == true);
         action->run();
