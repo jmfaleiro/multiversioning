@@ -2,6 +2,8 @@
 #include <cassert>
 #include <cpuinfo.h>
 
+void merge_queues(action_queue *merge_into, action_queue *queue);
+
 inline static bool queue_invariant(lock_struct_queue *queue)
 {
         return (queue->head == NULL && queue->tail == NULL) ||
@@ -110,6 +112,7 @@ void lock_table::acquire_locks(split_action *action)
         
         lock_list = NULL;
         num_reads = action->readset.size();
+        action->set_lock_flag();
         for (i = 0; i < num_reads; ++i) {
                 cur_lock = this->lock_allocator->get_lock();
                 cur_lock->key = action->readset[i];
@@ -132,34 +135,40 @@ void lock_table::acquire_locks(split_action *action)
                 if (!acquire_single(cur_lock))
                         action->incr_pending_locks();
         }
+        
+
         action->set_lock_list(lock_list);
+        
+        /* XXX TESTING PURPOSES ONLY!!! */
+        i = 0;
+        while (lock_list != NULL)  {
+                assert(lock_list->action == action);
+                lock_list = lock_list->list_ptr;
+                i += 1;
+        }
+        assert(i == (num_writes + num_reads));
 }
 
 /* 
  * Called after action has finished executing. Use this to schedule the 
  * execution of succeeding actions.
  */
-split_action* lock_table::release_locks(split_action *action)
+void lock_table::release_locks(split_action *action, action_queue *queue)
 {
         action_queue unblocked;
-        split_action *ret;
         lock_struct *locks, *cur;
         
-        unblocked.tail = NULL;
-        unblocked.head = NULL;
-        ret = NULL;
+        queue->head = NULL;
+        queue->tail = NULL;
         locks = (lock_struct*)action->get_lock_list();
         while (locks != NULL) {
+                assert(locks->action == action);
                 cur = locks;
                 unblocked = release_single(cur);
-                if (unblocked.tail != NULL) {
-                        unblocked.tail->exec_list = ret;
-                        ret = unblocked.head;
-                }
-                this->lock_allocator->return_lock(cur);
+                merge_queues(queue, &unblocked);
                 locks = locks->list_ptr;
+                this->lock_allocator->return_lock(cur);
         }
-        return ret;
 }
 
 /*
@@ -304,8 +313,7 @@ lock_struct* lock_table::find_descendant(lock_struct *lock)
         if (can_wakeup(lock)) {
                 desc = lock->right;
                 while (desc != NULL) {
-                        if (desc->key == lock->key && 
-                            desc->action->ready() == true)
+                        if (desc->key == lock->key)
                                 break;
                         desc = desc->right;
                 }
@@ -332,6 +340,7 @@ action_queue lock_table::get_runnables(lock_struct *lock)
                         if (pass_lock(descendant)) 
                                 add_action(&ret, descendant->action);
                 } else {	
+                        assert(false);
                         /* Descendant is a reader. Unblock a chain of readers.*/
                         assert(descendant->type == READ_LOCK);
                         while (descendant != NULL && 

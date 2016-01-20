@@ -14,20 +14,35 @@ split_action::split_action(txn *t, uint32_t partition_id,
         this->partition_id = partition_id;
         this->dependency_flag = dependency_flag;
         
-        num_pending_locks = 0;
-        list_ptr = NULL;
-        exec_list = NULL;        
+        this->num_pending_locks = 0;
+        this->list_ptr = NULL;
+        this->exec_list = NULL;        
+        this->done_locking = false;
+        this->state = split_action::UNPROCESSED;
+}
+
+split_action::split_action_state split_action::get_state()
+{
+        return state;
 }
 
 bool split_action::ready()
 {       
         bool has_deps;
+        if (done_locking == false)
+                return false;
 
         barrier();
         has_deps = dependency_flag;
         barrier();
         
         return (has_deps == false) && (num_pending_locks == 0);
+}
+
+void split_action::set_lock_flag()
+{
+        assert(done_locking == false);
+        done_locking = true;
 }
 
 void split_action::set_lock_list(void* list_ptr)
@@ -65,6 +80,14 @@ void split_action::set_rvp(rendezvous_point *rvp)
                 this->rvp_sibling = rvp->to_run;
                 rvp->to_run = this;
         }
+}
+
+void split_action::clear_dependency_flag()
+{
+        assert(dependency_flag == true);
+        barrier();
+        dependency_flag = false;
+        barrier();
 }
 
 void split_action::set_rvp_wakeups(rendezvous_point **rvps, uint32_t count)
@@ -111,6 +134,8 @@ int split_action::rand()
 /* XXX Incomplete */
 bool split_action::run()
 {
+        assert(state == split_action::UNPROCESSED);
+        state = split_action::COMPLETE;
         return true;
 }
 

@@ -11,6 +11,9 @@ extern RecordGenerator *my_gen;
 extern uint64_t gen_unique_key(RecordGenerator *gen, 
                                std::set<uint64_t> *seen_keys);
 
+uint64_t simple_record0, simple_record1;
+bool init = false;
+
 uint32_t get_partition(uint64_t record, uint32_t table, uint32_t num_partitions)
 {
         uint64_t temp;
@@ -25,7 +28,7 @@ txn_graph* generate_simple_action(RecordGenerator *gen, workload_config conf,
 {
         txn_graph *graph;
         graph_node *node0, *node1;
-        uint64_t rec0, rec1;
+        static uint64_t rec0, rec1;
         uint32_t partition0, partition1;
         simple_split *txn;
         vector<uint64_t> records;
@@ -37,22 +40,32 @@ txn_graph* generate_simple_action(RecordGenerator *gen, workload_config conf,
         
         graph = new txn_graph();
         
-        /* First record goes to an even partition */
-        while (true) {
-                rec0 = gen->GenNext();
-                partition0 = get_partition(rec0, 0, num_partitions);
-                if (partition0 % 2 == 0)
-                        break;
-        }
+        if (init == false) {
+                /* First record goes to an even partition */
+                while (true) {
+                        simple_record0 = gen->GenNext();
+                        partition0 = get_partition(simple_record0, 0, num_partitions);
+                        if (partition0 % 2 == 0)
+                                break;
+                }
 
-        /* Second record goes to an odd partition */
-        while (true) {
-                rec1 = gen->GenNext();
-                partition1 = get_partition(rec1, 0, num_partitions);
-                if (partition1 % 2 == 1)
-                        break;
+                /* Second record goes to an odd partition */
+                while (true) {
+                        simple_record1 = gen->GenNext();
+                        partition1 = get_partition(simple_record1, 0, num_partitions);
+                        if (partition1 % 2 == 1)
+                                break;
+                }
+                init = true;                
+        } else {
+                partition0 = get_partition(simple_record0, 0, num_partitions);
+                assert(partition0 % 2 == 0);
+                
+                partition1 = get_partition(simple_record1, 0, num_partitions);
+                assert(partition1 % 2 == 1);
         }
-
+        rec0 = simple_record0;
+        rec1 = simple_record1;
         if (partition0 == partition1) {
                 assert(false);
 

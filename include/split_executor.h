@@ -34,13 +34,16 @@ class split_executor : public Runnable {
         splt_inpt_queue *output_queue;
         splt_comm_queue **ready_queues;
         splt_comm_queue **signal_queues;
+        uint32_t num_pending;
 
         void schedule_single_rvp(rendezvous_point *rvp);        
         void schedule_downstream_pieces(split_action *action);
-        void run_action(split_action *action);
+        void run_action(split_action *action, action_queue *queue);
+        //        void process_pending(split_action *action, action_queue *descendants);
+        void exec_list(split_action *action_list);
         void process_action(split_action *action);
         void schedule_action(split_action *action);
-        void check_pending();
+        split_action* check_pending();
         
  protected:
         virtual void StartWorking();

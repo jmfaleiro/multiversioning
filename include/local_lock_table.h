@@ -87,7 +87,7 @@ class lock_table {
 
         lock_table(lock_table_config config);
         void acquire_locks(split_action *action);
-        split_action* release_locks(split_action *action);
+        void release_locks(split_action *action, action_queue *queue);
 };
 
 #endif // LOCAL_LOCK_TABLE_H_

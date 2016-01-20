@@ -387,9 +387,9 @@ public:
                 split_action_batch **batches;
 
                 /* We're generating only two batches for now */
-                batches = (split_action_batch**)zmalloc(sizeof(split_action_batch*)*2);
-                batches[0] = setup_action_batch(s_conf, w_conf, 10000);
-                batches[1] = setup_action_batch(s_conf, w_conf, s_conf.num_txns);
+                batches = (split_action_batch**)zmalloc(sizeof(split_action_batch*));
+                batches[0] = setup_action_batch(s_conf, w_conf, s_conf.num_txns);
+                //batches[0] = setup_action_batch(s_conf, w_conf, s_conf.num_txns);
                 return batches;
         }
 
@@ -404,7 +404,7 @@ public:
                 alloc_sz = sizeof(splt_comm_queue*)*num_partitions;
                 ret = (splt_comm_queue**)alloc_mem(alloc_sz, partition);
 
-                for (i = 0; i < num_partitions; ++i ) 
+                for (i = 0; i < num_partitions; ++i) 
                         ret[i] = comm_queues[i][partition];
                 return ret;
         }
@@ -496,8 +496,6 @@ public:
                         zmalloc(sizeof(split_executor*)*s_conf.num_partitions);
                 comm_queues = setup_comm_queues(s_conf);
                 for (i = 0; i < s_conf.num_partitions; ++i) {
-                        if (i % 2 == 1)
-                                continue;
                         assert(in_queues[i] != NULL && out_queues[i] != NULL);
                         comm_inputs = setup_signal_inputs(i, s_conf);
                         conf = setup_exec_config(i, s_conf.num_partitions, i, 
@@ -508,8 +506,9 @@ public:
                                                  s_conf);
                         ret[i] = new(i) split_executor(conf);
                         ret[i]->Run();
-                        ret[i]->WaitInit();
                 }
+                for (i = 0; i < s_conf.num_partitions; ++i) 
+                        ret[i]->WaitInit();
                 return ret;
         }
 
@@ -520,40 +519,40 @@ public:
         static void do_experiment(split_action_batch** inputs, 
                                   splt_inpt_queue **input_queues, 
                                   splt_inpt_queue **output_queues,
-                                  uint32_t num_batches,
-                                  split_config s_conf)
+                                  __attribute__((unused)) uint32_t num_batches,
+                                  __attribute__((unused)) split_config s_conf)
         {
-                uint32_t i;
+                //                uint32_t i;
                 split_action_batch *cur_batch;
 
                 /* One warmup, one real */
-                assert(num_batches == 2);
+                //                assert(num_batches == 2);
         
                 /* Do warmup */
                 cur_batch = inputs[0];
+                /*
                 for (i = 0; i < s_conf.num_partitions; ++i) {
-                        if (i % 2 == 1)
-                                continue;
                         input_queues[i]->EnqueueBlocking(cur_batch[i]);
                 }
                 for (i = 0; i < s_conf.num_partitions; ++i) {
-                        if (i % 2 == 1)
-                                continue;
                         output_queues[i]->DequeueBlocking();
                 }
+                */
+                input_queues[0]->EnqueueBlocking(cur_batch[0]);
+                input_queues[1]->EnqueueBlocking(cur_batch[1]);
+                output_queues[0]->DequeueBlocking();
+                output_queues[1]->DequeueBlocking();
         
                 /* Do real batch */
+                /*
                 cur_batch = inputs[1];
                 for (i = 0; i < s_conf.num_partitions; ++i) {
-                        if (i % 2 == 1)
-                                continue;
                         input_queues[i]->EnqueueBlocking(cur_batch[i]);
                 }
                 for (i = 0; i < s_conf.num_partitions; ++i) {
-                        if (i % 2 == 1)
-                                continue;
                         output_queues[i]->DequeueBlocking();
                 }
+                */
         }
 
         static uint32_t single_comm(splt_comm_queue **txn_queues, 
@@ -592,7 +591,7 @@ public:
                 
                 setup_table_info(s_conf);
         
-                num_batches = 2;
+                num_batches = 1;
                 input_queues = setup_input_queues(s_conf);
                 output_queues = setup_input_queues(s_conf);
                 
@@ -605,7 +604,7 @@ public:
                 std::cerr << "Setup database threads\n";
                 do_experiment(inputs, input_queues, output_queues, num_batches, s_conf);
                 std::cerr << "Done experiment\n";
-                check_comm(10000+s_conf.num_txns, s_conf);
+                //                check_comm(10000+s_conf.num_txns, s_conf);
         }
 };
 
