@@ -36,10 +36,8 @@ split_executor::split_executor(struct split_executor_config config)
 
 void split_executor::run_action(split_action *action, action_queue *queue)
 {
-        if (action->get_partition_id() == 1)
-                std::cerr << "partition 1!\n";
-
         assert(action->ready());
+        //        assert(action->state != split_action::COMPLETE);
         queue->head = NULL;
         queue->tail = NULL;
         
@@ -114,12 +112,10 @@ void split_executor::process_pending(split_action *action, action_queue *descend
 }
 */
 
-void split_executor::exec_list(split_action *action_list)
+action_queue split_executor::exec_list(split_action *action_list)
 {
+        assert(action_list != NULL);
         action_queue to_exec, temp;
-        
-        if (action_list == NULL)
-                return;
 
         to_exec.head = NULL;
         to_exec.tail = NULL;
@@ -128,7 +124,8 @@ void split_executor::exec_list(split_action *action_list)
                 merge_queues(&to_exec, &temp);
                 action_list = action_list->exec_list;
         }
-        exec_list(to_exec.head);
+        
+        return to_exec;
 }
 
 /*
@@ -157,6 +154,24 @@ void split_executor::Init()
 {
 }
 
+void split_executor::do_pending() 
+{
+        action_queue temp;
+        split_action *action;
+        
+        action = check_pending();
+        if (action != NULL) 
+                while (true) {
+                        temp = exec_list(action);
+                        if (temp.head != NULL)
+                                action = temp.head;
+                        else 
+                                break;
+                }
+
+}
+
+
 /*
  * Executor threads's "main" function.
  */
@@ -165,6 +180,7 @@ void split_executor::StartWorking()
         split_action_batch batch;
         split_action *action;
         uint32_t i;
+        action_queue temp;
         
         while (true) {
                 batch = input_queue->DequeueBlocking();
@@ -174,9 +190,17 @@ void split_executor::StartWorking()
                         assert(batch.actions[i]->done_locking);
                         //                        check_pending();
                 }
-                while (num_pending != 0) {                        
+                while (num_pending != 0) {                                                
                         action = check_pending();
-                        exec_list(action);
+                        i = 0;
+                        if (action != NULL) 
+                                while (true) {
+                                        temp = exec_list(action);
+                                        if (temp.head != NULL)
+                                                action = temp.head;
+                                        else 
+                                                break;
+                                }
                 }
                 output_queue->EnqueueBlocking(batch);
         }

@@ -34,6 +34,7 @@ class split_action : public translator {
         friend class split_executor;
         friend class graph_test;
 
+
  private:
         split_action::split_action_state state;
         

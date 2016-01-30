@@ -40,10 +40,11 @@ class split_executor : public Runnable {
         void schedule_downstream_pieces(split_action *action);
         void run_action(split_action *action, action_queue *queue);
         //        void process_pending(split_action *action, action_queue *descendants);
-        void exec_list(split_action *action_list);
+        action_queue exec_list(split_action *action_list);
         void process_action(split_action *action);
         void schedule_action(split_action *action);
         split_action* check_pending();
+        void do_pending();
         
  protected:
         virtual void StartWorking();

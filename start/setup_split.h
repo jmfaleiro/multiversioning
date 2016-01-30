@@ -368,7 +368,7 @@ public:
                 vector<split_action*> **temp;
                 split_action_batch *input;
 
-                temp = (vector<split_action*>**)zmalloc(batch_sz*sizeof(vector<split_action*>*));
+                temp = (vector<split_action*>**)zmalloc(s_conf.num_partitions*sizeof(vector<split_action*>*));
                 for (i = 0; i < s_conf.num_partitions; ++i) 
                         temp[i] = new vector<split_action*>();
         
@@ -388,8 +388,8 @@ public:
 
                 /* We're generating only two batches for now */
                 batches = (split_action_batch**)zmalloc(sizeof(split_action_batch*));
-                batches[0] = setup_action_batch(s_conf, w_conf, s_conf.num_txns);
-                //batches[0] = setup_action_batch(s_conf, w_conf, s_conf.num_txns);
+                batches[0] = setup_action_batch(s_conf, w_conf, 10000);
+                batches[1] = setup_action_batch(s_conf, w_conf, s_conf.num_txns);
                 return batches;
         }
 
@@ -520,9 +520,9 @@ public:
                                   splt_inpt_queue **input_queues, 
                                   splt_inpt_queue **output_queues,
                                   __attribute__((unused)) uint32_t num_batches,
-                                  __attribute__((unused)) split_config s_conf)
+                                  split_config s_conf)
         {
-                //                uint32_t i;
+                uint32_t i;
                 split_action_batch *cur_batch;
 
                 /* One warmup, one real */
@@ -530,21 +530,14 @@ public:
         
                 /* Do warmup */
                 cur_batch = inputs[0];
-                /*
                 for (i = 0; i < s_conf.num_partitions; ++i) {
                         input_queues[i]->EnqueueBlocking(cur_batch[i]);
                 }
                 for (i = 0; i < s_conf.num_partitions; ++i) {
                         output_queues[i]->DequeueBlocking();
                 }
-                */
-                input_queues[0]->EnqueueBlocking(cur_batch[0]);
-                input_queues[1]->EnqueueBlocking(cur_batch[1]);
-                output_queues[0]->DequeueBlocking();
-                output_queues[1]->DequeueBlocking();
-        
+                
                 /* Do real batch */
-                /*
                 cur_batch = inputs[1];
                 for (i = 0; i < s_conf.num_partitions; ++i) {
                         input_queues[i]->EnqueueBlocking(cur_batch[i]);
@@ -552,7 +545,6 @@ public:
                 for (i = 0; i < s_conf.num_partitions; ++i) {
                         output_queues[i]->DequeueBlocking();
                 }
-                */
         }
 
         static uint32_t single_comm(splt_comm_queue **txn_queues, 
@@ -591,7 +583,7 @@ public:
                 
                 setup_table_info(s_conf);
         
-                num_batches = 1;
+                num_batches = 2;
                 input_queues = setup_input_queues(s_conf);
                 output_queues = setup_input_queues(s_conf);
                 

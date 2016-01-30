@@ -32,7 +32,7 @@ txn_graph* generate_simple_action(RecordGenerator *gen, workload_config conf,
         uint32_t partition0, partition1;
         simple_split *txn;
         vector<uint64_t> records;
-        //        std::set<uint64_t> seen_keys;
+        std::set<uint64_t> seen_keys;
 
         /* XXX Generate simple actions. No other experiment supported */
         if (conf.experiment != 0) 
@@ -40,34 +40,14 @@ txn_graph* generate_simple_action(RecordGenerator *gen, workload_config conf,
         
         graph = new txn_graph();
         
-        if (init == false) {
-                /* First record goes to an even partition */
-                while (true) {
-                        simple_record0 = gen->GenNext();
-                        partition0 = get_partition(simple_record0, 0, num_partitions);
-                        if (partition0 % 2 == 0)
-                                break;
-                }
-
-                /* Second record goes to an odd partition */
-                while (true) {
-                        simple_record1 = gen->GenNext();
-                        partition1 = get_partition(simple_record1, 0, num_partitions);
-                        if (partition1 % 2 == 1)
-                                break;
-                }
-                init = true;                
-        } else {
-                partition0 = get_partition(simple_record0, 0, num_partitions);
-                assert(partition0 % 2 == 0);
-                
-                partition1 = get_partition(simple_record1, 0, num_partitions);
-                assert(partition1 % 2 == 1);
-        }
+        /* First record goes to an even partition */
+        simple_record0 = gen_unique_key(gen, &seen_keys);
+        partition0 = get_partition(simple_record0, 0, num_partitions);
+        simple_record1 = gen_unique_key(gen, &seen_keys);
+        partition1 = get_partition(simple_record1, 0, num_partitions);
         rec0 = simple_record0;
         rec1 = simple_record1;
         if (partition0 == partition1) {
-                assert(false);
 
                 /* Both records belong to a single partition */
                 records.push_back(rec0);

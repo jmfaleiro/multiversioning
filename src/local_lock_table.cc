@@ -6,8 +6,10 @@ void merge_queues(action_queue *merge_into, action_queue *queue);
 
 inline static bool queue_invariant(lock_struct_queue *queue)
 {
-        return (queue->head == NULL && queue->tail == NULL) ||
-                (queue->head != NULL && queue->tail != NULL);
+
+        return ((queue->head == NULL && queue->tail == NULL) ||
+                (queue->head != NULL && queue->tail != NULL)) &&
+                (queue->head == NULL || queue->head->is_held == true);
 }
 
 lock_table::lock_table(lock_table_config config)
@@ -67,6 +69,7 @@ void add_action(action_queue *queue, split_action *action)
         bool ready;
         
         ready = action->ready();
+        assert(action->exec_list == NULL);
         assert(queue != NULL && action != NULL);
         assert((queue->head == NULL && queue->tail == NULL) ||
                (queue->head != NULL && queue->head != NULL));
@@ -109,7 +112,7 @@ void lock_table::acquire_locks(split_action *action)
 {
         uint32_t num_reads, num_writes, i;
         lock_struct *cur_lock, *lock_list;
-        
+
         lock_list = NULL;
         num_reads = action->readset.size();
         action->set_lock_flag();
@@ -301,6 +304,7 @@ bool lock_table::pass_lock(lock_struct *lock)
         assert(lock != NULL);
         assert(lock->is_held == false);
         assert(action != NULL);
+        assert(action->get_state() == split_action::UNPROCESSED);
         lock->is_held = true;
         action->decr_pending_locks();
         return action->ready();
@@ -359,6 +363,7 @@ void lock_struct_queue::add_lock(lock_struct *lock)
         /* Queue invariant. */
         assert(lock->table_queue == NULL);
         assert(queue_invariant(this) == true);
+        assert(false);
 
         if (this->head == NULL) /* Queue is empty. */
                 this->head = lock;
