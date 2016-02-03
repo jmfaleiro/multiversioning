@@ -47,4 +47,16 @@ class ycsb_rmw : public txn {
         virtual void get_rmws(struct big_key *array);
 };
 
+class ycsb_update : public txn {
+ private:
+        uint64_t _updates[10];
+        vector<uint64_t> _writes;
+
+ public:
+        ycsb_update(vector<uint64_t> writes, uint64_t *updates);
+        virtual bool Run();
+        virtual uint32_t num_rmws();
+        virtual void get_rmws(struct big_key *array);
+};
+
 #endif // YCSB_H_

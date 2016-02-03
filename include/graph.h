@@ -8,6 +8,9 @@
 
 using namespace std;
 
+class txn;
+class split_action;
+
 /* Represents a set of graph nodes */
 class node_set {
  private:
@@ -27,8 +30,8 @@ class node_set {
 class graph_node {
  public:
         int index;
-        void *app;        
-        void *txn;
+        txn *app;        
+        split_action *t;
 
         vector<int> *in_links;
         vector<int> *out_links;
@@ -40,7 +43,7 @@ class graph_node {
         graph_node() {
                 index = INT_MAX;
                 app = NULL;
-                txn = NULL;
+                t = NULL;
                 in_links = NULL;
                 out_links = NULL;
                 topo_link = NULL;

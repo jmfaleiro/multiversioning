@@ -188,11 +188,11 @@ public:
                 assert(node->partition != INT_MAX);
 
                 if (node->in_links == NULL) {
-                        piece = txn_to_piece((txn*)node->app, node->partition, false);
+                        piece = txn_to_piece(node->app, node->partition, false);
                         piece->set_rvp(NULL);
-                        node->txn = piece;
+                        node->t = piece;
                 } else {
-                        piece = txn_to_piece((txn*)node->app, node->partition, true);
+                        piece = txn_to_piece(node->app, node->partition, true);
                         if ((node_phase = find_phase(node->in_links, phases)) != NULL) {
                                 rvp = node_phase->rvp;
                         } else {
@@ -205,7 +205,7 @@ public:
                                 rvp->to_run = NULL;
                         }
                         piece->set_rvp(rvp);
-                        node->txn = piece;                
+                        node->t = piece;                
                 }
         }
 
@@ -220,7 +220,7 @@ public:
                 split_action *piece;
                 vector<txn_phase*> desc_rvps;
 
-                piece = (split_action*)node->txn;
+                piece = node->t;
                 find_desc_rvps(node->index, phases, &desc_rvps);
                 count = desc_rvps.size();
                 rvps = (rendezvous_point**)zmalloc(sizeof(rendezvous_point*)*count);
@@ -286,7 +286,7 @@ public:
                 free(processed);
                 i = 0;
                 while (topo_list != NULL) {
-                        actions->push_back((split_action*)topo_list->txn);
+                        actions->push_back(topo_list->t);
                         topo_list = topo_list->topo_link;
                         i += 1;
                 }

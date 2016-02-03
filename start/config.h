@@ -31,6 +31,14 @@ static struct option long_options[] = {
   {NULL, no_argument, NULL, 17},
 };
 
+enum exp_codes {
+        YCSB_10RMW = 0,
+        YCSB_2RMW8R = 1,
+        YCSB_SINGLE_HOT = 2,
+        SMALL_BANK = 3,
+        YCSB_UPDATE = 4,
+};
+
 enum distribution_t {
         UNIFORM = 0,
         ZIPFIAN,

@@ -154,3 +154,48 @@ bool ycsb_rmw::Run()
         }
         return true;
 }
+
+ycsb_update::ycsb_update(vector<uint64_t> writes, uint64_t *updates)
+{
+        uint32_t i, sz;
+
+        memcpy(_updates, updates, sizeof(uint64_t)*10);
+        
+        sz = writes.size();
+        for (i = 0; i < sz; ++i) 
+                _writes[i] = writes[i];
+}
+
+uint32_t ycsb_update::num_rmws()
+{
+        return _writes.size();
+}
+
+void ycsb_update::get_rmws(big_key *array)
+{
+        uint32_t i, sz;
+        
+        sz = _writes.size();
+        for (i = 0; i < sz; ++i) {
+                array->key = _writes[i];
+                array->table_id = 0;
+        }                
+}
+
+bool ycsb_update::Run()
+{
+        uint32_t i, j, num_records, num_updates;
+        char *record;
+        uint64_t *temp;
+
+        num_records = _writes.size();
+        num_updates = 10;        
+        for (i = 0; i < num_records; ++i) {
+                record = (char*)get_write_ref(_writes[i], 0);
+                for (j = 0; j < num_updates; ++j) {
+                        temp = (uint64_t*)&record[j*100];
+                        *temp += _updates[j];
+                }
+        }
+        return true;
+}
