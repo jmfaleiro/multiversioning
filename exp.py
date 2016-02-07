@@ -36,7 +36,7 @@ def main():
 #    test_cc()
 #    exp_0()
 #    occ_uncontended_1000()
-    new_contention()
+    test_locking()
 #    search_best()
 #    test_cc()
 #    ccontrol()
@@ -66,11 +66,8 @@ def test_locking():
     low_dir = os.path.join(result_dir, "low/")
     
     for i in range(0, 10):
-#        locking_expt(high_dir, "locking.txt", 4, 40, 3000000, 1000000, 4, 0, 0.0, 1000, 0)
-#        split_expt(high_dir, "split.txt", 4, 40, 3000000, 1000000, 4, 1, 0.0, 1000, 10)
-
-        locking_expt(low_dir, "locking.txt", 4, 40, 3000000, 1000000, 4, 1, 0.9, 1000, 0)
-        split_expt(low_dir, "split.txt", 4, 40, 3000000, 1000000, 4, 1, 0.9, 1000, 10)
+        occ_expt(high_dir, "occ.txt", 4, 40, 3000000, 1000000, 4, 1, 0.9, 1000, 0)
+#        occ_expt(low_dir, "occ.txt", 4, 40, 3000000, 1000000, 4, 1, 0.0, 1000)
 
 
 def print_cc():

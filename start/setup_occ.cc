@@ -5,6 +5,7 @@
 #include <small_bank.h>
 #include <fstream>
 #include <setup_workload.h>
+#include <unistd.h>
 
 extern uint32_t GLOBAL_RECORD_SIZE;
 
@@ -238,16 +239,18 @@ uint64_t get_completed_count(OCCWorker **workers, uint32_t num_workers,
         return total_completed;
 }
 
-uint64_t wait_to_completion(SimpleQueue<OCCActionBatch> **output_queues,
-                            uint32_t num_workers)
+uint64_t wait_to_completion(__attribute__((unused)) SimpleQueue<OCCActionBatch> **output_queues,
+                            uint32_t num_workers, OCCWorker **workers)
 {        
         uint32_t i;
         uint64_t num_completed = 0;
-        OCCActionBatch temp;
-        for (i = 1; i < num_workers; ++i) {
-                temp = output_queues[i]->DequeueBlocking();
-                num_completed += temp.batchSize;
-        }
+        //        OCCActionBatch temp;
+        //        for (i = 1; i < num_workers; ++i) 
+        //                output_queues[i]->DequeueBlocking();
+
+        sleep(60);
+                for (i = 1; i < num_workers; ++i) 
+                        num_completed += workers[i]->NumCompleted();
         return num_completed;
 }
 
@@ -311,11 +314,14 @@ struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
                 for (j = 0; j < config.numThreads-1; ++j) 
                         inputQueues[j+1]->EnqueueBlocking(inputBatches[i+1][j]);
         barrier();
-        result.num_txns = wait_to_completion(outputQueues, config.numThreads);
+        result.num_txns = wait_to_completion(outputQueues, config.numThreads, 
+                                             workers);
         barrier();
         clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end_time);
         barrier();
         result.time_elapsed = diff_time(end_time, start_time);
+        for (i = 0; i < config.numThreads-1; ++i)
+                result.num_txns -= inputBatches[0][i].batchSize;
         //        result.num_txns = config.numTxns;
         std::cout << "Num completed: " << result.num_txns << "\n";
         return result;
