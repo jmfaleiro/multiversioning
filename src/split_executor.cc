@@ -28,6 +28,7 @@ split_executor::split_executor(struct split_executor_config config)
         this->config = config;
         this->lck_table = 
                 new((int)config.cpu) lock_table(config.lock_table_conf);
+        this->tables = config.tables;
         this->input_queue = config.input_queue;
         this->output_queue = config.output_queue;
         this->ready_queues = config.ready_queues;
@@ -40,11 +41,12 @@ void split_executor::run_action(split_action *action, action_queue *queue)
         //        assert(action->state != split_action::COMPLETE);
         queue->head = NULL;
         queue->tail = NULL;
-        
+        action->tables = tables;
         action->run();
         num_pending -= 1;
         schedule_downstream_pieces(action);
-        lck_table->release_locks(action, queue);
+        if (action->shortcut_flag() == false)
+                lck_table->release_locks(action, queue);
 }
 
 /*
@@ -72,7 +74,7 @@ void split_executor::schedule_single_rvp(rendezvous_point *rvp)
 {
         split_action *action;
         uint32_t partition;
-
+        assert(false);
         if (fetch_and_decrement(&rvp->counter) > 0) 
                 return;
 

@@ -26,7 +26,7 @@
 Database DB(2);
 
 uint64_t dbSize = ((uint64_t)1<<36);
-
+bool split_flag;
 uint32_t GLOBAL_RECORD_SIZE;
 uint32_t NUM_CC_THREADS;
 uint64_t recordSize;
@@ -489,7 +489,7 @@ void LockingExperiment(LockingConfig config) {
 uint32_t setup_split::num_split_tables = 0;
 uint64_t* setup_split::split_table_sizes = NULL;
 splt_comm_queue*** setup_split::comm_queues = NULL;
-
+vector<uint32_t> *setup_split::partitions_txns = NULL;
 
 int main(int argc, char **argv) {
         //        mlockall(MCL_FUTURE);
@@ -500,6 +500,7 @@ int main(int argc, char **argv) {
   
   
   if (cfg.ccType == MULTIVERSION) {
+          split_flag = false;
           if (cfg.mvConfig.experiment < 3) 
                   recordSize = cfg.mvConfig.recordSize;
           else if (cfg.mvConfig.experiment < 5)
@@ -514,36 +515,43 @@ int main(int argc, char **argv) {
           do_mv_experiment(cfg.mvConfig, cfg.get_workload_config());
           exit(0);
   } else if (cfg.ccType == LOCKING) {
+          split_flag = false;
           recordSize = cfg.lockConfig.record_size;
           assert(recordSize == 8 || recordSize == 1000);
           assert(cfg.lockConfig.distribution < 2);
-          if (cfg.lockConfig.experiment < 3)
+          if (cfg.lockConfig.experiment != 3)
                   GLOBAL_RECORD_SIZE = 1000;
           else
                   GLOBAL_RECORD_SIZE = sizeof(SmallBankRecord);
           locking_experiment(cfg.lockConfig, cfg.get_workload_config());
           exit(0);
   } else if (cfg.ccType == OCC) {
+          split_flag = false;
           recordSize = cfg.occConfig.recordSize;
           assert(cfg.occConfig.distribution < 2);
           assert(recordSize == 8 || recordSize == 1000);
-          if (cfg.occConfig.experiment < 3)
+          if (cfg.occConfig.experiment != 3)
                   GLOBAL_RECORD_SIZE = 1000;
           else
                   GLOBAL_RECORD_SIZE = sizeof(SmallBankRecord);
 
           occ_experiment(cfg.occConfig, cfg.get_workload_config());
+          
           exit(0);
   } else if (cfg.ccType == HEK) {
+          split_flag = false;
           recordSize = cfg.hek_conf.record_size;
           assert(cfg.hek_conf.distribution < 2);
           assert(recordSize == 8 || recordSize == 1000);
           do_hekaton_experiment(cfg.hek_conf);
           exit(0);
   } else if (cfg.ccType == SPLIT) {
+          split_flag = true;
           recordSize = cfg.split_conf.record_size;
           assert(cfg.split_conf.distribution < 2);
           assert(recordSize == 8 || recordSize == 1000);
+          GLOBAL_RECORD_SIZE = recordSize;
           setup_split::split_experiment(cfg.split_conf, cfg.get_workload_config());
+          exit(0);
   }
 }

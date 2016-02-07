@@ -163,7 +163,7 @@ ycsb_update::ycsb_update(vector<uint64_t> writes, uint64_t *updates)
         
         sz = writes.size();
         for (i = 0; i < sz; ++i) 
-                _writes[i] = writes[i];
+                _writes.push_back(writes[i]);
 }
 
 uint32_t ycsb_update::num_rmws()
@@ -177,8 +177,8 @@ void ycsb_update::get_rmws(big_key *array)
         
         sz = _writes.size();
         for (i = 0; i < sz; ++i) {
-                array->key = _writes[i];
-                array->table_id = 0;
+                array[i].key = _writes[i];
+                array[i].table_id = 0;
         }                
 }
 

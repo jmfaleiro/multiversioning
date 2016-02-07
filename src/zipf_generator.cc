@@ -1,5 +1,7 @@
 #include <zipf_generator.h>
 #include <cassert>
+#include <algorithm>
+#include <cpuinfo.h>
 
 // Each thread computes the contribution of a specific range of elements to zeta
 double ZipfGenerator::ZetaPartition(ZetaParams* zetaParams) {
@@ -20,9 +22,17 @@ double ZipfGenerator::GenZeta(uint64_t numElems, double theta)
 }
 
 ZipfGenerator::ZipfGenerator(uint64_t numElems, double theta) {
-  this->theta = theta;
-  this->numElems = numElems;
-  this->zetan = GenZeta(numElems, theta);  
+        uint64_t i;
+        //        std::random_device rd;
+        //        std::mt19937 g(rd());
+
+        this->theta = theta;
+        this->numElems = numElems;
+        this->zetan = GenZeta(numElems, theta);  
+        this->perm = (uint64_t*)zmalloc(sizeof(uint64_t)*numElems);
+        for (i = 0; i < numElems; ++i) 
+                perm[i] = i;
+        std::random_shuffle(perm, &perm[numElems]);
 }
 
 uint64_t ZipfGenerator::GenNext() {
@@ -30,17 +40,20 @@ uint64_t ZipfGenerator::GenNext() {
   double eta = (1 - pow(2.0 / this->numElems, 1 - this->theta));
   double u = (double)rand() / ((double)RAND_MAX);
   double uz = u * this->zetan;
+  uint64_t index;
   if (uz < 1.0) {
-    return 0;
+          index = 0;
   }
   else if (uz < (1.0 + pow(0.5, this->theta))) {
-    return 1;
+          index = 1;
   }
   else {
     uint64_t temp = (uint64_t)(this->numElems*pow(eta*u - eta + 1, alpha));
     assert(temp > 0 && temp <= this->numElems);
-    return temp-1;
+    index = temp - 1;
   }
+  
+  return perm[index];
 }
 
 ZipfGenerator::~ZipfGenerator()

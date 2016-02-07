@@ -23,6 +23,25 @@ uint64_t gen_unique_key(RecordGenerator *gen,
         }
 }
 
+static txn* generate_ycsb_update(RecordGenerator *gen, uint32_t num_writes)
+{
+        uint32_t i;
+        std::set<uint64_t> seen;
+        std::vector<uint64_t> keys;
+        uint64_t updates[10];
+        txn *t;
+        
+        /* Generate updates */
+        for (i = 0; i < 10; ++i) 
+                updates[i] = rand();
+        
+        /* Generate writeset */
+        for (i = 0; i < num_writes; ++i) 
+                keys.push_back(gen_unique_key(gen, &seen));
+        
+        t = new ycsb_update(keys, updates);
+        return t;
+}
 
 txn* generate_small_bank_action(uint32_t num_records, bool read_only)
 {
@@ -128,6 +147,7 @@ txn* generate_ycsb_rmw(RecordGenerator *gen, uint32_t num_reads,
         return ret;
 }
 
+
 txn* generate_ycsb_action(RecordGenerator *gen, workload_config config)
 {
         assert(RMW_COUNT <= config.txn_size);
@@ -141,17 +161,17 @@ txn* generate_ycsb_action(RecordGenerator *gen, workload_config config)
         assert(flip >= 0 && flip < 100);
         if (flip < config.read_pct) {
                 return generate_ycsb_readonly(gen, config);
-        } else if (config.experiment == 0) {
-                //                num_writes = 0;
+        } else if (config.experiment == YCSB_10RMW) {
                 num_rmws = config.txn_size;
                 num_reads = 0;
-        } else if (config.experiment == 1) {
+        } else if (config.experiment == YCSB_2RMW8R) {
                 //                num_writes = 0;
                 num_rmws = RMW_COUNT;
                 num_reads = config.txn_size - RMW_COUNT;
-        } else if (config.experiment == 2) {
+        } else if (config.experiment == YCSB_UPDATE) {
+                return generate_ycsb_update(gen, config.txn_size);
+        } else {
                 assert(false);
-                return NULL;
         }
         return generate_ycsb_rmw(gen, num_reads, num_rmws);
 }
@@ -184,6 +204,9 @@ uint32_t generate_small_bank_input(workload_config conf, txn ***loaders)
 
 uint32_t generate_ycsb_input(workload_config conf, txn ***loaders)
 {
+        assert(conf.experiment == YCSB_10RMW || conf.experiment == YCSB_2RMW8R ||
+               conf.experiment == YCSB_SINGLE_HOT || 
+               conf.experiment == YCSB_UPDATE);
         using namespace SmallBank;
         uint32_t num_txns, i, remainder;
         uint64_t start, end;
@@ -209,29 +232,32 @@ uint32_t generate_ycsb_input(workload_config conf, txn ***loaders)
 
 uint32_t generate_input(workload_config conf, txn ***loaders)
 {
-        if (conf.experiment == 3 || conf.experiment == 4) {
-                return generate_small_bank_input(conf, loaders);
-        } else if (conf.experiment < 3) {
+        if (conf.experiment == YCSB_10RMW || 
+            conf.experiment == YCSB_2RMW8R ||
+            conf.experiment == YCSB_SINGLE_HOT || 
+            conf.experiment == YCSB_UPDATE)
                 return generate_ycsb_input(conf, loaders);
-        } else {
+        else if (conf.experiment == SMALL_BANK)
+                return generate_small_bank_input(conf, loaders);
+        else
                 assert(false);
-        }
 }
 
 txn* generate_transaction(workload_config config)
 {
         txn *txn;
         
-        if (config.experiment == 3) {
+        if (config.experiment == SMALL_BANK) {
                 txn = generate_small_bank_action(config.num_records, false);
-        } else if (config.experiment == 4) {
-                txn = generate_small_bank_action(config.num_records, true);
-        } else if (config.experiment < 3) {
-                if (config.distribution == UNIFORM && my_gen == NULL)
+        } else if (config.experiment == YCSB_10RMW || 
+                   config.experiment == YCSB_2RMW8R ||
+                   config.experiment == YCSB_SINGLE_HOT ||
+                   config.experiment == YCSB_UPDATE) {
+                if (config.distribution == UNIFORM && my_gen == NULL) 
                         my_gen = new UniformGenerator(config.num_records);
                 else if (config.distribution == ZIPFIAN && my_gen == NULL)
                         my_gen = new ZipfGenerator((uint64_t)config.num_records,
-                                                config.theta);
+                                                   config.theta);
                 assert(my_gen != NULL);
                 txn = generate_ycsb_action(my_gen, config);
         } else {

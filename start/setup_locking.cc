@@ -240,7 +240,7 @@ static struct locking_result do_measurement(locking_config conf,
 
         std::cerr << "Done setting up tables!\n";
         
-        /* Dry run */
+       /* Dry run */
         for (i = 0; i < conf.num_threads; ++i) {
                 inputs[i]->EnqueueBlocking(batches[0][i]);
         }
@@ -285,17 +285,20 @@ void locking_experiment(locking_config conf, workload_config w_conf)
         setup_txns = setup_db(w_conf);
         experiment_txns = setup_input(conf, w_conf, EXTRA_BATCHES);
         
-        if (w_conf.experiment < 3) {
-                num_records[0] = w_conf.num_records;
-                num_tables = 1;
-        } else if (w_conf.experiment < 5) {
-                num_tables = 2;
+        if (w_conf.experiment == SMALL_BANK) {
                 num_records[0] = w_conf.num_records;
                 num_records[1] = w_conf.num_records;
+                num_tables = 2;
+        } else if (w_conf.experiment == YCSB_UPDATE || 
+                   w_conf.experiment == YCSB_10RMW ||
+                   w_conf.experiment == YCSB_2RMW8R ||
+                   w_conf.experiment == YCSB_SINGLE_HOT) {
+                num_records[0] = w_conf.num_records;
+                num_tables = 1;
         } else {
                 assert(false);
         }
-
+                   
         assert(conf.num_threads > 0);
         mgr_config = {
                 num_tables,

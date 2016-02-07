@@ -6,6 +6,7 @@
 #include <local_lock_table.h>
 #include <runnable.hh>
 #include <cpuinfo.h>
+#include <table.h>
 
 struct split_action_batch {
         split_action **actions;
@@ -24,12 +25,14 @@ struct split_executor_config {
         SimpleQueue<split_action_batch> *input_queue;
         SimpleQueue<split_action_batch> *output_queue;
         struct lock_table_config lock_table_conf;
+        Table **tables;
 };
 
 class split_executor : public Runnable {
  private:
         struct split_executor_config config;
         lock_table *lck_table;
+        Table **tables;
         splt_inpt_queue *input_queue;
         splt_inpt_queue *output_queue;
         splt_comm_queue **ready_queues;

@@ -5,6 +5,7 @@ import sys
 import os.path
 import clean
 
+fmt_split = "numactl --interleave=all build/db --cc_type 4 --num_partitions {0} --num_txns {1} --num_records {2} --txn_size {3} --experiment {4} --record_size {5} --distribution {6} --theta {7} --read_pct 0 --read_txn_size 10000"
 
 fmt_locking = "numactl --interleave=all build/db --cc_type 1  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5} --read_pct {7} --read_txn_size 10000"
 
@@ -35,7 +36,7 @@ def main():
 #    test_cc()
 #    exp_0()
 #    occ_uncontended_1000()
-    test_locking()
+    new_contention()
 #    search_best()
 #    test_cc()
 #    ccontrol()
@@ -48,28 +49,28 @@ def main():
 #    exp_1()
 #    exp_2()
 
+def new_contention():
+    result_dir = "results/ycsb_update/vary_contention"
+    zipf_vals = [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]
+
+    for i in range(0, 10):
+        for z in zipf_vals:
+            locking_expt(result_dir, "locking.txt", 40,40,3000000,1000000,4,1,z,1000,0)
+            split_expt(result_dir, "split.txt", 40, 40, 3000000, 1000000, 4, 1, z, 1000, 10)
+
+
+
 def test_locking():
-    low_dir = "results/low_contention/"
-    high_dir = "results/high_contention/"
-    p10rmw = "10rmw"
-    p2rmw8r = "2rmw8r"
-    for i in range(0, 4):
-        cur_dir = os.path.join(low_dir, p2rmw8r)
-        occ_expt(cur_dir, "occ.txt", 4, 40, 3000000, 1000000, 1, 1, 0.0, 1000, 0)
-        locking_expt(cur_dir, "locking.txt", 4, 40, 3000000, 1000000, 1, 1, 0.0, 1000, 0)
+    result_dir = "results/ycsb_update/"
+    high_dir = os.path.join(result_dir, "high/")
+    low_dir = os.path.join(result_dir, "low/")
+    
+    for i in range(0, 10):
+#        locking_expt(high_dir, "locking.txt", 4, 40, 3000000, 1000000, 4, 0, 0.0, 1000, 0)
+#        split_expt(high_dir, "split.txt", 4, 40, 3000000, 1000000, 4, 1, 0.0, 1000, 10)
 
-        cur_dir = os.path.join(high_dir, p10rmw)
-        occ_expt(cur_dir, "occ.txt", 4, 40, 3000000, 1000000, 0, 1, 0.9, 1000, 0)
-        locking_expt(cur_dir, "locking.txt", 4, 40, 3000000, 1000000, 0, 1, 0.9, 1000, 0)
-
-        cur_dir = os.path.join(high_dir, p2rmw8r)
-        occ_expt(cur_dir, "occ.txt", 4, 40, 3000000, 1000000, 1, 1, 0.9, 1000, 0)
-        locking_expt(cur_dir, "locking.txt", 4, 40, 3000000, 1000000, 1, 1, 0.9, 1000, 0)
-
-        cur_dir = os.path.join(low_dir, p10rmw)
-        occ_expt(cur_dir, "occ.txt", 4, 40, 3000000, 1000000, 0, 1, 0.0, 1000, 0)
-        locking_expt(cur_dir, "locking.txt", 4, 40, 3000000, 1000000, 0, 1, 0.0, 1000, 0)
-
+        locking_expt(low_dir, "locking.txt", 4, 40, 3000000, 1000000, 4, 1, 0.9, 1000, 0)
+        split_expt(low_dir, "split.txt", 4, 40, 3000000, 1000000, 4, 1, 0.9, 1000, 10)
 
 
 def print_cc():
@@ -239,6 +240,29 @@ def mv_expt(outdir, filename, ccThreads, txns, records, lowThreads, highThreads,
             os.system(cmd)
             os.system("cat results.txt >>" + outfile)
             clean.clean_fn("mv", outfile, temp, only_worker)
+            saved_dir = os.getcwd()
+            os.chdir(outdir)
+            os.system("gnuplot plot.plt")
+            os.chdir(saved_dir)
+
+
+
+def split_expt(outdir, filename, lowThreads, highThreads, txns, records, expt, distribution, theta, rec_size, txn_size):
+    outfile = os.path.join(outdir, filename)
+    
+    temp = os.path.join(outdir, filename[:filename.find(".txt")] + "_out.txt")
+
+    os.system("mkdir -p outdir")
+    outdep = os.path.join(outdir, "." + filename)
+    if not os.path.exists(outdep):
+
+        val_range = gen_range(lowThreads, highThreads, 4)
+        for i in val_range:
+            os.system("rm split.txt")
+            cmd = fmt_split.format(str(i), str(txns), str(records), str(txn_size), str(expt), str(rec_size), str(distribution), str(theta))
+            os.system(cmd)
+            os.system("cat split.txt >>" + outfile)
+            clean.clean_fn("locking", outfile, temp)
             saved_dir = os.getcwd()
             os.chdir(outdir)
             os.system("gnuplot plot.plt")

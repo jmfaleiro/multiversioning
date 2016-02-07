@@ -10,9 +10,14 @@
 #include <fstream>
 #include <db.h>
 #include <graph.h>
+#include <algorithm>
 
 #define LCK_TBL_SZ	(((uint64_t)1) << 29)	/* 512 M */
 #define SIMPLE_SZ 	2			/* simple action size */
+
+extern uint32_t GLOBAL_RECORD_SIZE;
+extern uint32_t get_partition(uint64_t record, uint32_t table, 
+                              uint32_t num_partitions);
 
 struct txn_phase {
         vector<int> *parent_nodes;
@@ -27,7 +32,8 @@ enum graph_node_state {
 
 class setup_split {
 public:
-
+        
+        static vector<uint32_t> *partitions_txns;
         static splt_comm_queue ***comm_queues;
         static uint32_t num_split_tables;
         static uint64_t *split_table_sizes;
@@ -42,6 +48,59 @@ public:
                 split_table_sizes = 
                         (uint64_t*)zmalloc(num_split_tables*sizeof(uint64_t));
                 split_table_sizes[0] = s_conf.num_records;
+        }
+
+        static void setup_single_table(int partition, split_config s_conf, 
+                                       Table ***tbl)
+        {
+                Table **init_tbl;
+                TableConfig t_conf;
+                assert(s_conf.experiment == YCSB_UPDATE);
+                if (s_conf.experiment == YCSB_UPDATE) {
+                        t_conf.tableId = 0;
+                        t_conf.numBuckets = (split_table_sizes[0]*2)/s_conf.num_partitions;
+                        t_conf.startCpu = partition;
+                        t_conf.endCpu = partition+1;
+                        t_conf.freeListSz = (split_table_sizes[0]*2)/s_conf.num_partitions;
+                        t_conf.valueSz = GLOBAL_RECORD_SIZE;
+                        t_conf.recordSize = 0;
+                        init_tbl = (Table**)zmalloc(sizeof(Table*));
+                        init_tbl[0] = new (partition) Table(t_conf);
+                } else {
+                        assert(false);
+                }
+                
+                tbl[partition] = init_tbl;
+        }
+
+        static Table*** setup_tables(split_config s_conf)
+        {
+                uint32_t i;
+                Table ***ret;
+
+                assert(s_conf.experiment == YCSB_UPDATE);
+
+                ret = (Table***)zmalloc(sizeof(Table**)*s_conf.num_partitions);
+                for (i = 0; i < s_conf.num_partitions; ++i) 
+                        setup_single_table(i, s_conf, ret);                
+                return ret;
+        }
+
+        /* XXX Initializes only a single table */
+        static void init_tables(split_config s_conf, Table ***tbls)
+        {
+                uint32_t partition;
+                uint64_t i, j;
+                char buf[1000];
+                assert(s_conf.experiment == YCSB_UPDATE);
+                
+                for (i = 0; i < split_table_sizes[0]; ++i) {
+                        for (j = 0; j < 1000/sizeof(uint64_t); ++j)
+                                ((uint64_t*)buf)[j] = rand();
+                        partition = get_partition(i, 0, s_conf.num_partitions);
+                        tbls[partition][0]->Put(i, buf);
+                }
+                return;
         }
 
         static uint32_t get_num_lock_structs()
@@ -147,12 +206,14 @@ public:
                 uint32_t num_reads, num_rmws, num_writes, max, i;
                 big_key *key_array;
                 split_action *action;
+                split_key temp_key;
 
                 action = new split_action(txn, partition_id, dependency_flag);
                 txn->set_translator(action);
                 num_reads = txn->num_reads();
                 num_writes = txn->num_writes();
                 num_rmws = txn->num_rmws();
+                temp_key._value = NULL;
 
                 if (num_reads >= num_writes && num_reads >= num_rmws) 
                         max = num_reads;
@@ -163,14 +224,20 @@ public:
                 key_array = (big_key*)zmalloc(sizeof(big_key)*max);
                 
                 txn->get_reads(key_array);
-                for (i = 0; i < num_reads; ++i) 
-                        action->readset.push_back(key_array[i]);
+                for (i = 0; i < num_reads; ++i) {
+                        temp_key._record = key_array[i];
+                        action->readset.push_back(temp_key);
+                }
                 txn->get_rmws(key_array);
-                for (i = 0; i < num_rmws; ++i) 
-                        action->writeset.push_back(key_array[i]);
+                for (i = 0; i < num_rmws; ++i) {
+                        temp_key._record = key_array[i];
+                        action->writeset.push_back(temp_key);
+                }
                 txn->get_writes(key_array);
-                for (i = 0; i < num_writes; ++i) 
-                        action->writeset.push_back(key_array[i]);        
+                for (i = 0; i < num_writes; ++i) {
+                        temp_key._record = key_array[i];
+                        action->writeset.push_back(temp_key);        
+                }
                 return action;
         }
 
@@ -276,6 +343,7 @@ public:
                 vector<graph_node*> *nodes;
                 int *processed;
                 graph_node *topo_list;
+                
 
                 topo_list = NULL;
                 nodes = graph->get_nodes();
@@ -389,7 +457,9 @@ public:
                 /* We're generating only two batches for now */
                 batches = (split_action_batch**)zmalloc(sizeof(split_action_batch*));
                 batches[0] = setup_action_batch(s_conf, w_conf, 10000);
+                std::cerr << "here!\n";
                 batches[1] = setup_action_batch(s_conf, w_conf, s_conf.num_txns);
+                std::cerr << "here!\n";
                 return batches;
         }
 
@@ -421,7 +491,7 @@ public:
                                                   s_conf.num_partitions);
                 for (i = 0; i < s_conf.num_partitions; ++i) 
                         ret[i] = setup_queues<split_action*>(s_conf.num_partitions, 
-                                                             (1<<20));
+                                                             (1<<10));
                 return ret;
         }
 
@@ -460,7 +530,8 @@ public:
                                                               splt_comm_queue **comm_inputs,
                                                               splt_inpt_queue *input_queue,
                                                               splt_inpt_queue *output_queue,
-                                                              split_config s_conf)
+                                                              split_config s_conf, 
+                                                              Table **tables)
         {
                 struct split_executor_config exec_conf;
                 struct lock_table_config lck_conf;
@@ -475,6 +546,7 @@ public:
                         input_queue,
                         output_queue,
                         lck_conf,
+                        tables,
                 };
                 return exec_conf;
         }
@@ -484,7 +556,8 @@ public:
          */
         static split_executor** setup_threads(split_config s_conf, 
                                               splt_inpt_queue **in_queues,
-                                              splt_inpt_queue **out_queues)
+                                              splt_inpt_queue **out_queues,
+                                              Table ***tbls)
                                               
         {
                 split_executor **ret;
@@ -503,7 +576,8 @@ public:
                                                  comm_inputs, 
                                                  in_queues[i],
                                                  out_queues[i],
-                                                 s_conf);
+                                                 s_conf,
+                                                 tbls[i]);
                         ret[i] = new(i) split_executor(conf);
                         ret[i]->Run();
                 }
@@ -516,17 +590,21 @@ public:
          * XXX Measurements need to be more sophisticated. For now, use a single batch 
          * to warmup, and another one to measure throughput.
          */ 
-        static void do_experiment(split_action_batch** inputs, 
-                                  splt_inpt_queue **input_queues, 
-                                  splt_inpt_queue **output_queues,
-                                  __attribute__((unused)) uint32_t num_batches,
-                                  split_config s_conf)
+        static timespec do_experiment(split_action_batch** inputs, 
+                                      splt_inpt_queue **input_queues, 
+                                      splt_inpt_queue **output_queues,
+                                      uint32_t num_batches,
+                                      split_config s_conf)
         {
                 uint32_t i;
                 split_action_batch *cur_batch;
+                timespec start_time, end_time;
 
                 /* One warmup, one real */
-                //                assert(num_batches == 2);
+                assert(num_batches == 2);
+
+                for (i = 0; i < s_conf.num_partitions; ++i) 
+                        std::cerr << inputs[1][i].num_actions << "\n";
         
                 /* Do warmup */
                 cur_batch = inputs[0];
@@ -538,6 +616,10 @@ public:
                 }
                 
                 /* Do real batch */
+                barrier();
+                clock_gettime(CLOCK_REALTIME, &start_time);
+                barrier();
+
                 cur_batch = inputs[1];
                 for (i = 0; i < s_conf.num_partitions; ++i) {
                         input_queues[i]->EnqueueBlocking(cur_batch[i]);
@@ -545,6 +627,12 @@ public:
                 for (i = 0; i < s_conf.num_partitions; ++i) {
                         output_queues[i]->DequeueBlocking();
                 }
+
+                barrier();
+                clock_gettime(CLOCK_REALTIME, &end_time);
+                barrier();
+                
+                return diff_time(end_time, start_time);
         }
 
         static uint32_t single_comm(splt_comm_queue **txn_queues, 
@@ -571,6 +659,62 @@ public:
                         count += single_comm(comm_queues[i], num_partitions);
                 assert(expected_count == count);
         }
+
+        static void write_output(split_config conf,
+                                 double elapsed_milli)
+        {
+                std::ofstream result_file;
+
+                result_file.open("split.txt", std::ios::app | std::ios::out);
+                result_file << "split ";
+                result_file << "time:" << elapsed_milli << " ";
+                result_file << "txns:" << conf.num_txns << " ";
+                result_file << "threads:" << conf.num_partitions << " ";
+                result_file << "records:" << conf.num_records << " ";
+                result_file << "read_pct:" << conf.read_pct << " ";
+                if (conf.experiment == 0) 
+                        result_file << "10rmw" << " ";
+                else if (conf.experiment == 1) 
+                        result_file << "8r2rmw" << " ";
+                else if (conf.experiment == 3) 
+                        result_file << "small_bank" << " ";
+                else if (conf.experiment == 4)
+                        result_file << "ycsb_update" << " ";
+                else
+                        assert(false);
+ 
+                if (conf.distribution == 0) 
+                        result_file << "uniform ";
+                else if (conf.distribution == 1) 
+                        result_file << "zipf theta:" << conf.theta << " ";
+                else
+                        assert(false);
+
+                result_file << "\n";
+                result_file.close();  
+                std::cout << "Time elapsed: " << elapsed_milli << " ";
+                std::cout << "Num txns: " << conf.num_txns << "\n";
+        }
+
+        static void write_sizes() 
+        {
+                assert(partitions_txns != NULL);
+                std::ofstream result_file;
+                uint32_t i;
+                double diff, cur;
+                
+                std::sort(partitions_txns->begin(), partitions_txns->end());
+                result_file.open("txn_sizes.txt", std::ios::app | std::ios::out);
+                
+                diff = 1.0 / (double)(partitions_txns->size());
+                cur = 0.0;
+                for (i = 0; i < partitions_txns->size(); ++i) {
+                        result_file << (*partitions_txns)[i] << " " << cur << "\n";
+                        cur += diff;
+                }
+                
+                result_file.close();
+        }
         
         static void split_experiment(split_config s_conf, workload_config w_conf)
         {
@@ -580,9 +724,14 @@ public:
                 splt_inpt_queue **input_queues, **output_queues;
                 split_action_batch **inputs;
                 uint32_t num_batches;
-                
+                timespec exp_time;
+                double elapsed_milli;
+                Table ***tables;
+
                 setup_table_info(s_conf);
-        
+                tables = setup_tables(s_conf);
+                init_tables(s_conf, tables);
+
                 num_batches = 2;
                 input_queues = setup_input_queues(s_conf);
                 output_queues = setup_input_queues(s_conf);
@@ -592,11 +741,13 @@ public:
                 inputs = setup_input(s_conf, w_conf);
                 
                 std::cerr << "Setup input\n";
-                setup_threads(s_conf, input_queues, output_queues);
+                setup_threads(s_conf, input_queues, output_queues, tables);
                 std::cerr << "Setup database threads\n";
-                do_experiment(inputs, input_queues, output_queues, num_batches, s_conf);
+                exp_time = do_experiment(inputs, input_queues, output_queues, num_batches, s_conf);
                 std::cerr << "Done experiment\n";
-                //                check_comm(10000+s_conf.num_txns, s_conf);
+                elapsed_milli =
+                        1000.0*exp_time.tv_sec + exp_time.tv_nsec/1000000.0;
+                write_output(s_conf, elapsed_milli);
         }
 };
 

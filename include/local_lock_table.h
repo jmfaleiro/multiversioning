@@ -67,11 +67,15 @@ class lock_table {
         void init_allocator();
 
         static bool conflicting(lock_struct *lock1, lock_struct *lock2);
-        static bool check_conflict(lock_struct *lock, lock_struct_queue *queue);
-        static bool insert_queue(lock_struct *lock, lock_struct_queue *queue);
+        static bool check_conflict(big_key key, lock_struct_queue *queue, 
+                                   lock_type lck_tp, 
+                                   lock_struct ***tail_ptr);
+        //        static bool insert_queue(lock_struct *lock, lock_struct_queue *queue);
+
+        lock_struct_queue* get_slot(big_key key);
 
         void init_tables(lock_table_config config);
-        bool acquire_single(lock_struct *lock);
+        //        bool acquire_single(lock_struct *lock);
         action_queue release_single(lock_struct *lock);
         void release_multi_partition(lock_struct *lock);
         bool can_wakeup(lock_struct *lock);

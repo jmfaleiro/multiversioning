@@ -69,22 +69,24 @@ txn_graph* gen_ycsb_update(RecordGenerator *gen, workload_config conf,
                         graph->add_node(cur_node);
                 }                                
         }
-
+        assert(seen.size() == writes.size());
         
         /* Create actions */
         nodes = graph->get_nodes();
         write_check = 0;
-        num_partitions = nodes->size();
-        for (i = 0; i < num_partitions; ++i) {
+        for (i = 0; i < nodes->size(); ++i) {
+                args.clear();
                 cur_node = (*nodes)[i];
                 partition = cur_node->partition;
                 assert(partition != INT_MAX);
                 for (j = 0; j < conf.txn_size; ++j) {
-                        if (get_partition(writes[i], 0, num_partitions) == 
+                        if (get_partition(writes[j], 0, num_partitions) == 
                             partition) {
-                                args.push_back(writes[i]);
+                                args.push_back(writes[j]);
+                                write_check += 1;
                         }
                 }
+                assert(args.size() != 0);
                 cur_node->app = new ycsb_update(args, updates);
         }        
         assert(write_check == conf.txn_size);
@@ -150,12 +152,10 @@ txn_graph* generate_simple_action(RecordGenerator *gen, workload_config conf,
 
 txn_graph* generate_split_action(workload_config conf, uint32_t num_partitions)
 {
-        if (conf.distribution == 0) 
+        if (conf.distribution == 0 && my_gen == NULL) 
                 my_gen = new UniformGenerator(conf.num_records);
-        else if (conf.distribution == 1)
+        else if (conf.distribution == 1 && my_gen == NULL)
                 my_gen = new ZipfGenerator(conf.num_records, conf.theta);
-        else
-                assert(false);
                 
         if (conf.experiment == 0)
                 return generate_simple_action(my_gen, conf, num_partitions);

@@ -111,18 +111,63 @@ rendezvous_point** split_action::get_rvps()
         return this->rvps;
 }
 
-/* XXX Incomplete */
-void* split_action::write_ref(__attribute__((unused)) uint64_t key, 
-                              __attribute__((unused)) uint32_t table_id)
+void* split_action::write_ref(uint64_t key, uint32_t table_id)
 {
-        return NULL;
+        uint32_t index, num_writes;
+        split_key *k;
+        
+        num_writes = writeset.size();
+        for (index = 0; index < num_writes; ++index) {
+                k = &writeset[index];
+                if (k->_record.key == key && k->_record.table_id == table_id) 
+                        break;
+        }
+        assert(index != num_writes);
+        
+        if (k->_value == NULL) 
+                k->_value = tables[k->_record.table_id]->Get(k->_record.key);
+        assert(k->_value != NULL);
+        return k->_value;
 }
 
 /* XXX Incomplete */
-void* split_action::read(__attribute__((unused)) uint64_t key, 
-                         __attribute__((unused)) uint32_t table_id)
+void* split_action::read(uint64_t key, uint32_t table_id)
 {
-        return NULL;
+        uint32_t index, num_reads;
+        split_key *k;
+
+        num_reads = readset.size();
+        for (index = 0; index < num_reads; ++index) {
+                k = &readset[index];
+                if (k->_record.key == key && k->_record.table_id == table_id) 
+                        break;
+        }
+        assert(index != num_reads);
+        
+        if (k->_value == NULL) 
+                k->_value = tables[k->_record.table_id]->Get(k->_record.key);
+        assert(k->_value != NULL);
+        return k->_value;
+}
+
+bool split_action::shortcut_flag()
+{
+        return shortcut;
+}
+
+void split_action::set_shortcut_flag()
+{
+        shortcut = true;
+}
+
+void split_action::reset_shortcut_flag()
+{
+        shortcut = false;
+}
+
+bool split_action::remote_deps()
+{
+        return dependency_flag;
 }
 
 /* XXX Incomplete */
@@ -134,9 +179,11 @@ int split_action::rand()
 /* XXX Incomplete */
 bool split_action::run()
 {
+        bool ret;
         assert(state == split_action::UNPROCESSED);
+        ret = t->Run();
         state = split_action::COMPLETE;
-        return true;
+        return ret;
 }
 
 /* XXX Incomplete */

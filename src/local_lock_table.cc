@@ -15,6 +15,7 @@ inline static bool queue_invariant(lock_struct_queue *queue)
 lock_table::lock_table(lock_table_config config)
 {
         this->config = config;
+        std::cerr << config.cpu << "\n";
         init_tables();
         init_allocator();
 }
@@ -110,46 +111,75 @@ void lock_struct_manager::return_lock(lock_struct *lock)
  */
 void lock_table::acquire_locks(split_action *action)
 {
-        uint32_t num_reads, num_writes, i;
+        uint32_t num_reads, num_writes, i, conflicts;
         lock_struct *cur_lock, *lock_list;
+        lock_struct **ptrs[action->readset.size() + action->writeset.size()];
+        lock_struct_queue *queues[action->readset.size() + action->writeset.size()];
 
-        lock_list = NULL;
-        num_reads = action->readset.size();
         action->set_lock_flag();
+        action->set_shortcut_flag();
+
+        conflicts = 0;
+        num_reads = action->readset.size();
         for (i = 0; i < num_reads; ++i) {
-                cur_lock = this->lock_allocator->get_lock();
-                cur_lock->key = action->readset[i];
-                cur_lock->type = READ_LOCK;
-                cur_lock->list_ptr = lock_list;
-                cur_lock->action = action;
-                lock_list = cur_lock;
-                if (!acquire_single(cur_lock))
+                queues[i] = get_slot(action->readset[i]._record);
+                if (!check_conflict(action->readset[i]._record, queues[i], 
+                                    READ_LOCK,
+                                    &ptrs[i])) {
+                        conflicts += 1;
                         action->incr_pending_locks();
-        }
+                }
+        }        
         
         num_writes = action->writeset.size();
         for (i = 0; i < num_writes; ++i) {
+                queues[num_reads+i] = get_slot(action->writeset[i]._record);
+                if (!check_conflict(action->writeset[i]._record, queues[num_reads+i], 
+                                    WRITE_LOCK,
+                                    &ptrs[i+num_reads])) {
+                        conflicts += 1;
+                        action->incr_pending_locks();
+                }
+        }
+        
+        if (conflicts == 0 && action->remote_deps() == false) {
+                assert(action->ready() == true);
+                return;
+        }
+
+        action->reset_shortcut_flag();        
+        lock_list = NULL;
+
+        /* Insert read locks */
+        for (i = 0; i < num_reads; ++i) {
                 cur_lock = this->lock_allocator->get_lock();
-                cur_lock->key = action->writeset[i];
+                cur_lock->key = action->readset[i]._record;
+                cur_lock->type = READ_LOCK;
+                cur_lock->list_ptr = lock_list;
+                cur_lock->action = action;
+                cur_lock->table_queue = queues[i];
+                lock_list = cur_lock;
+                if (*ptrs[i] != NULL && (*ptrs[i])->type == WRITE_LOCK) 
+                        cur_lock->is_held = false;
+                else 
+                        cur_lock->is_held = true;                        
+        }
+
+        /* Insert write locks */
+        for (i = 0; i < num_writes; ++i) {
+                cur_lock = this->lock_allocator->get_lock();
+                cur_lock->key = action->writeset[i]._record;
+                cur_lock->table_queue = queues[i+num_reads];
                 cur_lock->type = WRITE_LOCK;
                 cur_lock->list_ptr = lock_list;
                 cur_lock->action = action;
                 lock_list = cur_lock;
-                if (!acquire_single(cur_lock))
-                        action->incr_pending_locks();
+                if (*ptrs[num_reads+i] != NULL)
+                        cur_lock->is_held = false;
+                else 
+                        cur_lock->is_held = true;
         }
-        
-
         action->set_lock_list(lock_list);
-        
-        /* XXX TESTING PURPOSES ONLY!!! */
-        i = 0;
-        while (lock_list != NULL)  {
-                assert(lock_list->action == action);
-                lock_list = lock_list->list_ptr;
-                i += 1;
-        }
-        assert(i == (num_writes + num_reads));
 }
 
 /* 
@@ -158,11 +188,14 @@ void lock_table::acquire_locks(split_action *action)
  */
 void lock_table::release_locks(split_action *action, action_queue *queue)
 {
+        assert(action->shortcut_flag() == false);
+
         action_queue unblocked;
         lock_struct *locks, *cur;
         
         queue->head = NULL;
         queue->tail = NULL;
+
         locks = (lock_struct*)action->get_lock_list();
         while (locks != NULL) {
                 assert(locks->action == action);
@@ -208,31 +241,42 @@ bool lock_table::conflicting(lock_struct *lock1, lock_struct *lock2)
  * Check if "lock" conflicts with any prior locks in the lock queue. 
  * Returns true if lock is acquired.
  */
-bool lock_table::check_conflict(lock_struct *lock, lock_struct_queue *queue)
+bool lock_table::check_conflict(big_key key, lock_struct_queue *queue, 
+                                lock_type lck_tp, lock_struct ***tail_ptr)
 {
-        lock_struct *ancestor;
         bool acquired = false;
-        ancestor = queue->tail;
+        *tail_ptr = &queue->tail;
 
         /* Find the first ancestor in the queue. */
-        while (ancestor != NULL && ancestor->key != lock->key)
-                ancestor = ancestor->left;
-
+        while (**tail_ptr != NULL && (**tail_ptr)->key != key)
+                *tail_ptr = &((**tail_ptr)->left);
+        
         /* No ancestor, ie, no prior logical locks. */
-        if (ancestor == NULL) 
+        if (**tail_ptr == NULL) 
                 acquired = true;
         /* Ancestor's logical lock conflicts. */
-        else if (lock_table::conflicting(ancestor, lock) == true) 
+        else if (lck_tp == WRITE_LOCK || (**tail_ptr)->type == WRITE_LOCK)
                 acquired = false;
         /* Ancestor holds logical lock and both are reads. */
-        else if (ancestor->is_held == true) 
+        else if ((**tail_ptr)->is_held == true) 
                 acquired = true;
         else 
                 acquired = false;
-        lock->is_held = acquired;
-        lock->table_queue = queue;
+
         return acquired;        
 }
+
+lock_struct_queue* lock_table::get_slot(big_key key)
+{
+        uint64_t index, num_slots;
+        
+        num_slots = config.table_sizes[key.table_id];
+        index = big_key::Hash(&key) % num_slots;
+        return &tables[key.table_id][index];
+}
+
+
+/*
 
 bool lock_table::insert_queue(lock_struct *lock, lock_struct_queue *queue)
 {
@@ -244,7 +288,7 @@ bool lock_table::insert_queue(lock_struct *lock, lock_struct_queue *queue)
         assert((acquired == false && lock->is_held == false) || 
                (acquired == true && lock->is_held == true));
 
-        if (queue->head == NULL) { /* The queue is empty. */                
+        if (queue->head == NULL) { 
                 assert(queue->tail == NULL);
                 queue->head = lock;
                 queue->tail = lock;
@@ -257,19 +301,21 @@ bool lock_table::insert_queue(lock_struct *lock, lock_struct_queue *queue)
         return acquired;
 }
 
+
 bool lock_table::acquire_single(lock_struct *lock)
 {
         uint64_t index, num_slots;        
         uint32_t table_id;
         bool acquired;
 
-        /* Find the slot in which to insert the lock. */
+  
         table_id = lock->key.table_id;
         num_slots = this->config.table_sizes[table_id];
         index = big_key::Hash(&lock->key) % num_slots;
         acquired = insert_queue(lock, &this->tables[table_id][index]);
         return acquired;
 }
+*/
 
 /*
  * XXX This function may need to be optimized.

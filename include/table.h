@@ -5,6 +5,8 @@
 #include <cpuinfo.h>
 #include <cassert>
 
+extern bool split_flag;
+
 struct TableRecord {
         struct TableRecord *next;
         uint64_t key;
@@ -48,20 +50,30 @@ class Table {
   }
 
   Table(TableConfig conf) {
+          
     this->init = false;
     this->conf = conf;    
     
     // Initialize hash buckets
-    buckets = (TableRecord**)alloc_interleaved_all((conf.numBuckets+1)*sizeof(TableRecord*));
-    //                                               conf.startCpu, 
-    //                                               conf.endCpu);
+    if (split_flag) {
+            buckets = (TableRecord**)alloc_mem((conf.numBuckets+1)*sizeof(TableRecord*), 
+                                               conf.startCpu);
+    } else {
+            buckets = (TableRecord**)alloc_interleaved_all((conf.numBuckets+1)*sizeof(TableRecord*));
+
+    }
+
     memset(buckets, 0x0, conf.numBuckets*sizeof(TableRecord*));
 
     // Initialize freelist
     uint32_t recordSz = sizeof(TableRecord)+conf.valueSz;
-    char *data = (char*)alloc_interleaved_all(conf.freeListSz*recordSz);
-                                          //                                        conf.startCpu, 
-                                          //                                          conf.endCpu);
+    char *data;
+    if (split_flag) {
+            data = (char*)alloc_mem(conf.freeListSz*recordSz, conf.startCpu);
+    } else {
+            data = (char*)alloc_interleaved_all(conf.freeListSz*recordSz);
+    }
+
     memset(data, 0x0, conf.freeListSz*recordSz);
     for (uint64_t i = 0; i < conf.freeListSz; ++i) {
       ((TableRecord*)(data + i*recordSz))->next = (TableRecord*)(data + (i+1)*recordSz);

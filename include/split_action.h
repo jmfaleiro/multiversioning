@@ -6,7 +6,12 @@
 #include <db.h>
 #include <graph.h>
 #include <action.h>
+#include <table.h>
 
+struct split_key {
+        big_key _record;	/* Record indexed by this key */
+        void *_value;		
+};
 
 class split_txn : public txn {
  public:
@@ -40,7 +45,6 @@ class split_action : public translator {
         
         /* Data for upstream nodes  */
         rendezvous_point **rvps;
-        //        uint32_t rvp_count;
 
         /* Data for downstream nodes */
         split_action *rvp_sibling;
@@ -54,15 +58,19 @@ class split_action : public translator {
         /* The partition on which this sub-action needs to execute. */
         uint32_t partition_id;
         
+        Table **tables;
+        bool shortcut;
+
  public:
 
         split_action *exec_list;
-        std::vector<big_key> readset;
-        std::vector<big_key> writeset;
+        std::vector<split_key> readset;
+        std::vector<split_key> writeset;
         uint32_t rvp_count;
         
         split_action(txn *t, uint32_t partition_id, uint64_t dependency_flag);
         bool ready();
+        bool remote_deps();
         virtual bool run();
         split_action::split_action_state get_state();
         virtual void release_multi_partition();
@@ -74,6 +82,9 @@ class split_action : public translator {
         virtual void decr_pending_locks();
         virtual void incr_pending_locks();
         void set_lock_flag();
+        bool shortcut_flag();
+        void set_shortcut_flag();
+        void reset_shortcut_flag();
         
         /* Rendezvous point functions */
         void set_rvp(rendezvous_point *rvp);

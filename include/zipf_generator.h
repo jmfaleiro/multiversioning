@@ -22,6 +22,7 @@ class ZipfGenerator : public RecordGenerator {
   double theta;
   uint64_t numElems;
   double zetan;  
+  uint64_t *perm;
 
   static double ZetaPartition(ZetaParams *zetaParams);
   static double GenZeta(uint64_t numElems, double theta);
