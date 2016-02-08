@@ -114,6 +114,8 @@ OCCWorker** setup_occ_workers(SimpleQueue<OCCActionBatch> **inputQueue,
         volatile uint32_t *epoch_ptr;
         int i;
         bool is_leader;
+        Table **tables_copy;
+
         struct OCCWorkerConfig worker_config;
         struct RecordBuffersConfig buf_config;
         recordSizes[0] = GLOBAL_RECORD_SIZE;
@@ -125,13 +127,21 @@ OCCWorker** setup_occ_workers(SimpleQueue<OCCActionBatch> **inputQueue,
         barrier();
         *epoch_ptr = 0;
         barrier();
+        
+        /* Copy tables */
         for (i = 0; i < numThreads; ++i) {
+                tables_copy = (Table**)alloc_mem(sizeof(Table*)*numTables, i);
+                memcpy(tables_copy, tables, sizeof(Table*)*numTables);
+                //                for (i = 0; i < numTables; ++i) {
+                //                        tables_copy[i] = Table::copy_table(tables[i], i);
+                //                }
+
                 is_leader = (i == 0);
                 worker_config = {
                         inputQueue[i],
                         outputQueue[i],
                         i,
-                        tables,
+                        tables_copy,
                         is_leader,
                         epoch_ptr,
                         0,
@@ -308,7 +318,7 @@ struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
 
         std::cerr << "Done dry run\n";
         barrier();
-        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_time);
+        clock_gettime(CLOCK_REALTIME, &start_time);
         barrier();
         for (i = 0; i < num_batches; ++i) 
                 for (j = 0; j < config.numThreads-1; ++j) 
@@ -317,7 +327,7 @@ struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
         result.num_txns = wait_to_completion(outputQueues, config.numThreads, 
                                              workers);
         barrier();
-        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end_time);
+        clock_gettime(CLOCK_REALTIME, &end_time);
         barrier();
         result.time_elapsed = diff_time(end_time, start_time);
         for (i = 0; i < config.numThreads-1; ++i)

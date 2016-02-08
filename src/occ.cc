@@ -68,7 +68,7 @@ uint32_t OCCWorker::exec_pending(OCCAction **pending_list)
 void OCCWorker::TxnRunner()
 {
         uint32_t i, j, num_pending;
-        OCCActionBatch input, output, batches[2];
+        OCCActionBatch input, output;//, batches[2];
         OCCAction *pending_list;
         
         num_pending = 0;
@@ -89,32 +89,33 @@ void OCCWorker::TxnRunner()
         barrier();
 
         for (j = 0; j < 3 ; ++j) {
-                if (j < 3) {
-                        input = config.inputQueue->DequeueBlocking();
-                        if (j == 1)
-                                batches[0] = input;
-                        else if (j == 2)
-                                batches[1] = input;
-                        else if (j > 2)
-                                assert(false);
-                } else {
-                        input = batches[j % 2];
-                }
-                for (i = 0; i < input.batchSize; ++i) {
-                        while (num_pending >= 50) 
+                input = config.inputQueue->DequeueBlocking();
+                if (j < 1) {
+                        for (i = 0; i < input.batchSize; ++i) {
+                                while (num_pending >= 50) 
+                                        num_pending -= exec_pending(&pending_list);
+                                if (!RunSingle(input.batch[i])) {
+                                        input.batch[i]->link = pending_list;
+                                        pending_list = input.batch[i];
+                                        num_pending += 1;
+                                } 
+                        }
+                        while (num_pending != 0) 
                                 num_pending -= exec_pending(&pending_list);
-                        if (!RunSingle(input.batch[i])) {
-                                input.batch[i]->link = pending_list;
-                                pending_list = input.batch[i];
-                                num_pending += 1;
-                        } 
-                }                
-                while (num_pending != 0) 
-                        num_pending -= exec_pending(&pending_list);
-                assert(pending_list == NULL);
-                if (j < 2) {
+                        assert(pending_list == NULL);
                         output.batchSize = input.batchSize;
                         config.outputQueue->EnqueueBlocking(output);
+                } else {
+                        uint32_t batch_sz = input.batchSize;
+                        for (i = 0; ; ++i) {
+                                while (num_pending >= 50)
+                                        num_pending -= exec_pending(&pending_list);
+                                if (!RunSingle(input.batch[i % batch_sz])) {
+                                        input.batch[i % batch_sz]->link = pending_list;
+                                        pending_list = input.batch[i % batch_sz];
+                                        num_pending += 1;
+                                }
+                        }
                 }
         }
         

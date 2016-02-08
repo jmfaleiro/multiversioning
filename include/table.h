@@ -25,6 +25,9 @@ struct TableConfig {
 
 class Table {
  private:
+  Table() {
+  }
+
   TableRecord **buckets;
   TableRecord *freeList;
   TableConfig  conf;
@@ -42,11 +45,22 @@ class Table {
  public:
   void* operator new(std::size_t sz, int cpu) {
           return alloc_mem(sz, cpu);
-          //          return malloc(sz);
   }
 
   void SetInit() {
     this->init = true;
+  }
+
+
+  static Table* copy_table(Table *tbl, int cpu)
+  {
+          Table *ret = new (cpu) Table();
+          ret->buckets = tbl->buckets;
+          ret->freeList = tbl->freeList;
+          ret->conf = tbl->conf;
+          ret->init = tbl->init;
+          ret->default_value = tbl->default_value;
+          return ret;
   }
 
   Table(TableConfig conf) {

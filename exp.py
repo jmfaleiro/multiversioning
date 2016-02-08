@@ -36,6 +36,7 @@ def main():
 #    test_cc()
 #    exp_0()
 #    occ_uncontended_1000()
+    new_contention()
     test_locking()
 #    search_best()
 #    test_cc()
@@ -51,14 +52,11 @@ def main():
 
 def new_contention():
     result_dir = "results/ycsb_update/vary_contention"
-    zipf_vals = [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]
+    zipf_vals = [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1,0.0]
 
     for i in range(0, 10):
         for z in zipf_vals:
-            locking_expt(result_dir, "locking.txt", 40,40,3000000,1000000,4,1,z,1000,0)
-            split_expt(result_dir, "split.txt", 40, 40, 3000000, 1000000, 4, 1, z, 1000, 10)
-
-
+            occ_expt(result_dir, "occ.txt", 40, 40, 3000000, 1000000, 4, 1, z, 1000, 0)
 
 def test_locking():
     result_dir = "results/ycsb_update/"
@@ -66,8 +64,8 @@ def test_locking():
     low_dir = os.path.join(result_dir, "low/")
     
     for i in range(0, 10):
-        occ_expt(high_dir, "occ.txt", 4, 40, 3000000, 1000000, 4, 1, 0.9, 1000, 0)
-#        occ_expt(low_dir, "occ.txt", 4, 40, 3000000, 1000000, 4, 1, 0.0, 1000)
+        occ_expt(high_dir, "occ_new.txt", 4, 40, 3000000, 1000000, 4, 1, 0.9, 1000, 0)
+        occ_expt(low_dir, "occ.txt", 4, 40, 3000000, 1000000, 4, 1, 0.0, 1000, 0)
 
 
 def print_cc():
