@@ -147,6 +147,7 @@ void lock_table::acquire_locks(split_action *action)
         
         if (conflicts == 0 && action->remote_deps() == false) {
                 assert(action->ready() == true);
+                action->transition_locked();
                 return;
         }
 
@@ -180,6 +181,7 @@ void lock_table::acquire_locks(split_action *action)
                 queues[num_reads+i]->add_lock(cur_lock);
         }
         action->set_lock_list(lock_list);
+        action->transition_locked();
 }
 
 /* 
@@ -188,21 +190,23 @@ void lock_table::acquire_locks(split_action *action)
  */
 void lock_table::release_locks(split_action *action, ready_queue *queue)
 {
-        assert(action->shortcut_flag() == false);
         assert(queue->is_empty() == true);
 
         ready_queue unblocked;
         lock_struct *locks, *cur;
         
-        locks = (lock_struct*)action->get_lock_list();
-        while (locks != NULL) {
-                assert(locks->action == action);
-                cur = locks;
-                unblocked = release_single(cur);
-                ready_queue::merge_queues(queue, &unblocked);
-                locks = locks->list_ptr;
-                this->lock_allocator->return_lock(cur);
+        if (action->shortcut_flag() == false) {
+                locks = (lock_struct*)action->get_lock_list();
+                while (locks != NULL) {
+                        assert(locks->action == action);
+                        cur = locks;
+                        unblocked = release_single(cur);
+                        ready_queue::merge_queues(queue, &unblocked);
+                        locks = locks->list_ptr;
+                        this->lock_allocator->return_lock(cur);
+                }
         }
+        action->transition_complete();
 }
 
 /*

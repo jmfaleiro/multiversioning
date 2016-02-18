@@ -32,7 +32,7 @@ class graph_node {
         int index;
         txn *app;        
         split_action *t;
-
+        bool abortable;
         vector<int> *in_links;
         vector<int> *out_links;
 
@@ -48,6 +48,7 @@ class graph_node {
                 out_links = NULL;
                 topo_link = NULL;
                 partition = INT_MAX;
+                abortable = false;
         }
 };
 

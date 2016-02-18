@@ -58,6 +58,27 @@ struct rendezvous_point {
         split_action *to_run;
 };
 
+enum split_action_status {
+        ACTION_UNDECIDED = 0,
+        ACTION_COMMITTED = 1,
+        ACTION_ABORTED = 2,
+};
+
+/* 
+ * Rendezvous point which is used to coordinate action commit. In order to 
+ * commit, num_committed must equal num_actions. 
+ * 
+ * state moves from ACTION_UNDECIDED to either ACTION_COMMITTED or 
+ * ACTION_ABORTED.
+ */
+struct commit_rvp {
+        volatile uint64_t 	num_committed;
+        volatile uint64_t	status;
+        uint32_t 		num_actions;
+        split_action 		**to_notify;
+
+}__attribute__((__packed__, __aligned__(CACHE_LINE)));
+
 /*
  * Assumes that split actions are always partition local. 
  */
@@ -65,7 +86,9 @@ class split_action : public translator {
  public:
         enum split_action_state {
                 UNPROCESSED,
-                PROCESSING,
+                LOCKED,
+                SCHEDULED,
+                EXECUTED,
                 COMPLETE,
         };
 
@@ -78,6 +101,10 @@ class split_action : public translator {
  private:
         split_action::split_action_state state;
         
+        /* Data for abortable actions */
+        bool 			can_abort;
+        commit_rvp 		*commit_rendezvous;
+
         /* Data for upstream nodes  */
         rendezvous_point 	**rvps;
 
@@ -91,8 +118,6 @@ class split_action : public translator {
         split_action 		*ready_ptr;
         split_action 		*link_ptr;
         bool 			done_locking;
-        bool 			wait_commit;
-        bool 			committed;
         bool 			scheduled;
 
         /* The partition on which this sub-action needs to execute. */
@@ -112,10 +137,16 @@ class split_action : public translator {
         bool ready();
         bool remote_deps();
         virtual bool run();
-        split_action::split_action_state get_state();
         virtual void release_multi_partition();
         uint32_t get_partition_id();
         
+        /* Abstract action state machine */
+        split_action::split_action_state get_state();
+        void transition_locked();
+        void transition_scheduled();
+        void transition_executed();
+        void transition_complete();
+
         /* Interface used by local lock table */
         void set_lock_list(void* list_ptr);
         void* get_lock_list();
@@ -125,7 +156,8 @@ class split_action : public translator {
         bool shortcut_flag();
         void set_shortcut_flag();
         void reset_shortcut_flag();
-        bool must_wait();
+        bool decr_abortable_count();
+        bool abortable();
         bool can_commit();
         
         /* Rendezvous point functions */
@@ -135,7 +167,8 @@ class split_action : public translator {
         uint32_t num_downstream_rvps();
         rendezvous_point** get_rvps();
         void clear_dependency_flag();
-
+        commit_rvp *get_commit_rvp();
+        
         /* Translator interface functions  */
         void* write_ref(uint64_t key, uint32_t table_id);
         void* read(uint64_t key, uint32_t table_id);

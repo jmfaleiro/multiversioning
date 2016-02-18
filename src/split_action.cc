@@ -37,6 +37,7 @@ void ready_queue::enqueue(split_action *action)
                (_head != NULL && _tail != NULL));
         assert(_sealed == false);
         
+        action->transition_scheduled();
         action->ready_ptr = NULL;
         if (_head == NULL) 
                 _head = action;
@@ -135,14 +136,18 @@ split_action::split_action_state split_action::get_state()
 bool split_action::ready()
 {       
         bool has_deps;
-        if (done_locking == false)
-                return false;
-
-        barrier();
-        has_deps = dependency_flag;
-        barrier();
+        bool local_condition;
         
-        return (has_deps == false) && (num_pending_locks == 0);
+        local_condition = ((state == split_action::LOCKED) && 
+                           (num_pending_locks == 0 || shortcut == true));
+        if (local_condition == true) {
+                barrier();
+                has_deps = dependency_flag;
+                barrier();
+                return (has_deps == false);
+        } else {
+                return false;
+        }
 }
 
 void split_action::set_lock_flag()
@@ -286,9 +291,8 @@ int split_action::rand()
 bool split_action::run()
 {
         bool ret;
-        assert(state == split_action::UNPROCESSED);
+        assert(state == split_action::SCHEDULED);
         ret = t->Run();
-        state = split_action::COMPLETE;
         return ret;
 }
 
@@ -297,16 +301,68 @@ void split_action::release_multi_partition()
 {
 }
 
-bool split_action::must_wait()
+bool split_action::abortable()
 {
-        assert(false);
-        return true;
+        return can_abort;
 }
 
+/* Returns true if action can commit */
 bool split_action::can_commit()
 {
-        assert(false);
-        return true;
+        assert(can_abort == true);
+        
+        split_action_status status;
+        status = (split_action_status)commit_rendezvous->status;        
+        assert(status == ACTION_COMMITTED || status == ACTION_ABORTED);
+        
+        return (status == ACTION_COMMITTED);
 }
 
- 
+/* Call this function _after_ logical locks have been acquired */
+void split_action::transition_locked()
+{
+        /* Must transition from unprocessed */
+        assert(state == split_action::UNPROCESSED);
+        
+        /* If abortable, cannot be shortcutted */
+        assert(can_abort == false || shortcut == false);
+        
+        /* If not abortable, should be shortcutted or have some pending locks */
+        assert(can_abort == true || shortcut == true || num_pending_locks > 0);
+        state = split_action::LOCKED;
+}
+
+/* Call this function when the piece is ready to run */
+void split_action::transition_scheduled()
+{
+        assert(state == split_action::LOCKED);
+        
+        /* Must be ready to execute */
+        assert(ready() == true);
+        state = split_action::SCHEDULED;
+}
+
+/* Call this function when an abortable piece has finished executing */
+void split_action::transition_executed()
+{
+        assert(state == split_action::LOCKED);
+        assert(can_abort == true);
+        assert(shortcut == false);
+        state = split_action::EXECUTED;        
+}
+
+/* 
+ * Call this function when the piece has completed, and all state has been 
+ * purged 
+ */
+void split_action::transition_complete()
+{
+        assert(can_abort == false || state == split_action::EXECUTED);
+        assert(can_abort == true || state == split_action::LOCKED);
+        state = split_action::COMPLETE;
+}
+
+commit_rvp* split_action::get_commit_rvp()
+{
+        return commit_rendezvous;
+}

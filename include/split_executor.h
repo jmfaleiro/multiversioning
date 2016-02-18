@@ -69,6 +69,9 @@ class split_executor : public Runnable {
         void commit_action(split_action *action);
         void process_action(split_action *action);
         void schedule_action(split_action *action);
+
+        void sync_commit_rvp(split_action *action, bool committed, 
+                             ready_queue *queue);
         
  protected:
         virtual void StartWorking();

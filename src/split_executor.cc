@@ -19,16 +19,70 @@ split_executor::split_executor(struct split_executor_config config)
  */
 void split_executor::run_action(split_action *action, ready_queue *queue)
 {
-        assert(action->ready());
-        assert(action->state != split_action::COMPLETE);
         assert(queue->is_empty() == true);
+
         num_outstanding -= 1;
         action->tables = tables;
         action->run();
         num_pending -= 1;
         schedule_downstream_pieces(action);
-        if (action->shortcut_flag() == false)
-                lck_table->release_locks(action, queue);
+        if (action->abortable() == true) 
+                sync_commit_rvp(action, true, queue);
+        else 
+                lck_table->release_locks(action, queue);        
+}
+
+void split_executor::sync_commit_rvp(split_action *action, bool committed, 
+                                     ready_queue *queue)
+{
+        commit_rvp *rvp;
+        uint64_t prev_state;
+        bool sched_rights;
+        linked_queue local_actions;
+        uint32_t i, partition;
+        split_message msg;
+        split_action *cur;
+        split_action **to_notify;
+
+        action->transition_executed();
+
+        /* 
+         * First determine whether the current action is responsible for 
+         * notifying other partitions. Needed for idempotence.
+         */
+        sched_rights = false;
+        rvp = action->get_commit_rvp();
+        if (committed == false) {
+                if (cmp_and_swap(&rvp->status, (uint64_t)ACTION_UNDECIDED, 
+                                 (uint64_t)ACTION_ABORTED)) 
+                        sched_rights = true;         
+        } else if (fetch_and_increment(&rvp->num_committed) == rvp->num_actions) {
+                sched_rights = true;
+                prev_state = xchgq(&rvp->status, (uint64_t)ACTION_COMMITTED);
+                assert(prev_state == ACTION_UNDECIDED);
+        }
+        
+        if (sched_rights) {
+                to_notify = rvp->to_notify;
+                for (i = 0; i < rvp->num_actions; ++i) {
+                        partition = to_notify[i]->get_partition_id();
+                        if (partition == config.partition_id) {
+                                local_actions.enqueue(to_notify[i]);
+                        } else {
+                                msg.type = EXECUTED;
+                                msg.action = to_notify[i];
+                                signal_queues[partition]->EnqueueBlocking(msg);
+                        }
+                }
+        }
+        
+        local_actions.seal();
+        while ((cur = local_actions.dequeue()) != NULL) {
+                
+                /* XXX For now, can only handle a single piece per partition */
+                assert(cur == action);
+                lck_table->release_locks(cur, queue);
+        }
 }
 
 /*
@@ -45,8 +99,10 @@ void split_executor::process_action(split_action *action)
         ready_queue descendants;
 
         this->lck_table->acquire_locks(action);
-        if (action->ready()) 
+        if (action->ready()) { 
+                action->transition_scheduled();
                 run_action(action, &descendants);
+        }
         assert(descendants.is_empty() == true);
 }
 
@@ -173,8 +229,7 @@ ready_queue split_executor::process_ready_msgs(ready_queue to_exec,
         split_action *action;
         
         while ((action = msgs.dequeue()) != NULL) 
-                if (action->get_state() == split_action::UNPROCESSED && 
-                    action->ready()) 
+                if (action->ready()) 
                         to_exec.enqueue(action);        
         return to_exec;
 }
@@ -188,7 +243,7 @@ ready_queue split_executor::process_release_msgs(linked_queue release_queue)
         while ((cur = release_queue.dequeue()) != NULL) {
 
                 /* Action be waited on */
-                assert(cur->must_wait() == true);
+                assert(cur->abortable() == true);
                 
                 /* Uncommitted actions's writes are buffered */
                 if (cur->can_commit() == true)
@@ -236,4 +291,3 @@ void split_executor::StartWorking()
                 output_queue->EnqueueBlocking(batch);
         }
 }
-
