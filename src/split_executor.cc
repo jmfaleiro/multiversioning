@@ -11,6 +11,7 @@ split_executor::split_executor(struct split_executor_config config)
         this->output_queue = config.output_queue;
         this->ready_queues = config.ready_queues;
         this->signal_queues = config.signal_queues;
+        this->pending_run_count = 0;
 }
 
 /*
@@ -51,21 +52,20 @@ void split_executor::process_action(split_action *action)
 
 void split_executor::schedule_single_rvp(rendezvous_point *rvp)
 {
-        split_action *action;
         split_message msg;
         uint32_t partition;
-        assert(false);
+
         if (fetch_and_decrement(&rvp->counter) > 0) 
                 return;
 
         msg.type = READY;
         msg.action = rvp->to_run;
-        assert(action != NULL);
-        while (action != NULL) {
-                partition = action->get_partition_id();
-                action->clear_dependency_flag();
+        assert(msg.action != NULL);
+        while (msg.action != NULL) {
+                partition = msg.action->get_partition_id();
+                msg.action->clear_dependency_flag();
                 signal_queues[partition]->EnqueueBlocking(msg);
-                action = action->get_rvp_sibling();
+                msg.action = msg.action->get_rvp_sibling();
         }
 }
 
@@ -86,11 +86,10 @@ void split_executor::schedule_downstream_pieces(split_action *action)
  */
 void split_executor::exec_pending()
 {
-        split_action *action;
         ready_queue action_queue;
         
         action_queue = check_pending();
-        if ((action = action_queue.dequeue()) != NULL) {
+        if (action_queue.is_empty() == false) {
                 while (true) {
                         action_queue = exec_list(action_queue);
                         if (action_queue.is_empty() == true)
@@ -110,6 +109,7 @@ ready_queue split_executor::exec_list(ready_queue ready)
         split_action *action;
 
         while ((action = ready.dequeue()) != NULL) {
+                pending_run_count += 1;
                 temp.reset();
                 run_action(action, &temp);
                 ready_queue::merge_queues(&to_exec, &temp);                
@@ -130,6 +130,7 @@ ready_queue split_executor::check_pending()
         get_new_messages(&released, &ready);
         to_exec = process_release_msgs(released);
         to_exec = process_ready_msgs(to_exec, ready);
+        to_exec.seal();
         return to_exec;
 }
 

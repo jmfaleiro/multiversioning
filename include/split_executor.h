@@ -51,6 +51,8 @@ class split_executor : public Runnable {
         uint32_t num_pending;
         uint32_t num_outstanding;
 
+        uint32_t pending_run_count;
+
         void schedule_single_rvp(rendezvous_point *rvp);        
         void schedule_downstream_pieces(split_action *action);
         void run_action(split_action *action, ready_queue *queue);

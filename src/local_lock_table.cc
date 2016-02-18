@@ -157,30 +157,27 @@ void lock_table::acquire_locks(split_action *action)
         for (i = 0; i < num_reads; ++i) {
                 cur_lock = this->lock_allocator->get_lock();
                 cur_lock->key = action->readset[i]._record;
+                cur_lock->table_queue = NULL;
                 cur_lock->type = READ_LOCK;
-                cur_lock->list_ptr = lock_list;
                 cur_lock->action = action;
-                cur_lock->table_queue = queues[i];
+                cur_lock->list_ptr = lock_list;
                 lock_list = cur_lock;
-                if (*ptrs[i] != NULL && (*ptrs[i])->type == WRITE_LOCK) 
-                        cur_lock->is_held = false;
-                else 
-                        cur_lock->is_held = true;                        
+                cur_lock->is_held = !(*ptrs[i] != NULL && 
+                                      (*ptrs[i])->type == WRITE_LOCK);
+                queues[i]->add_lock(cur_lock);
         }
 
         /* Insert write locks */
         for (i = 0; i < num_writes; ++i) {
                 cur_lock = this->lock_allocator->get_lock();
                 cur_lock->key = action->writeset[i]._record;
-                cur_lock->table_queue = queues[i+num_reads];
+                cur_lock->table_queue = NULL;
                 cur_lock->type = WRITE_LOCK;
                 cur_lock->list_ptr = lock_list;
                 cur_lock->action = action;
                 lock_list = cur_lock;
-                if (*ptrs[num_reads+i] != NULL)
-                        cur_lock->is_held = false;
-                else 
-                        cur_lock->is_held = true;
+                cur_lock->is_held = (*ptrs[num_reads+i] == NULL);
+                queues[num_reads+i]->add_lock(cur_lock);
         }
         action->set_lock_list(lock_list);
 }
@@ -408,7 +405,6 @@ void lock_struct_queue::add_lock(lock_struct *lock)
         /* Queue invariant. */
         assert(lock->table_queue == NULL);
         assert(queue_invariant(this) == true);
-        assert(false);
 
         if (this->head == NULL) /* Queue is empty. */
                 this->head = lock;
@@ -417,6 +413,7 @@ void lock_struct_queue::add_lock(lock_struct *lock)
         lock->left = this->tail;
         lock->right = NULL;
         this->tail = lock;        
+        lock->table_queue = this;
 
         assert(queue_invariant(this) == true);
 }

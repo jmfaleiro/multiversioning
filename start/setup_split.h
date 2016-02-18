@@ -55,13 +55,13 @@ public:
         {
                 Table **init_tbl;
                 TableConfig t_conf;
-                assert(s_conf.experiment == YCSB_UPDATE);
-                if (s_conf.experiment == YCSB_UPDATE) {
+                //                assert(s_conf.experiment == YCSB_UPDATE);
+                if (s_conf.experiment == YCSB_UPDATE || s_conf.experiment == 0) {
                         t_conf.tableId = 0;
-                        t_conf.numBuckets = (split_table_sizes[0]*2)/s_conf.num_partitions;
+                        t_conf.numBuckets = (split_table_sizes[0]*4)/s_conf.num_partitions;
                         t_conf.startCpu = partition;
                         t_conf.endCpu = partition+1;
-                        t_conf.freeListSz = (split_table_sizes[0]*2)/s_conf.num_partitions;
+                        t_conf.freeListSz = (split_table_sizes[0]*4)/s_conf.num_partitions;
                         t_conf.valueSz = GLOBAL_RECORD_SIZE;
                         t_conf.recordSize = 0;
                         init_tbl = (Table**)zmalloc(sizeof(Table*));
@@ -78,7 +78,7 @@ public:
                 uint32_t i;
                 Table ***ret;
 
-                assert(s_conf.experiment == YCSB_UPDATE);
+                //                assert(s_conf.experiment == YCSB_UPDATE);
 
                 ret = (Table***)zmalloc(sizeof(Table**)*s_conf.num_partitions);
                 for (i = 0; i < s_conf.num_partitions; ++i) 
@@ -92,7 +92,7 @@ public:
                 uint32_t partition;
                 uint64_t i, j;
                 char buf[1000];
-                assert(s_conf.experiment == YCSB_UPDATE);
+                //                assert(s_conf.experiment == YCSB_UPDATE);
                 
                 for (i = 0; i < split_table_sizes[0]; ++i) {
                         for (j = 0; j < 1000/sizeof(uint64_t); ++j)
