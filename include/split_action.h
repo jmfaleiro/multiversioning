@@ -8,6 +8,39 @@
 #include <action.h>
 #include <table.h>
 
+class split_action_queue {
+ protected:
+        split_action 	*_head;
+        split_action 	*_tail;
+        bool 		_sealed;
+
+ public:
+        split_action_queue();
+        void seal();
+        void reset();
+        bool is_empty();
+
+        virtual void enqueue(split_action *action) = 0;
+        virtual split_action* dequeue() = 0;
+};
+
+class ready_queue : public split_action_queue {
+ public:
+        ready_queue();
+        void enqueue(split_action *action);
+        split_action* dequeue();
+
+        void static merge_queues(ready_queue *merge_into, 
+                                 ready_queue *merge_from);
+};
+
+class linked_queue : public split_action_queue {
+ public:
+        linked_queue();
+        void enqueue(split_action *action);
+        split_action* dequeue();
+};
+
 struct split_key {
         big_key _record;	/* Record indexed by this key */
         void *_value;		
@@ -38,22 +71,29 @@ class split_action : public translator {
 
         friend class split_executor;
         friend class graph_test;
-
+        friend class split_action_queue;
+        friend class ready_queue;
+        friend class linked_queue;
 
  private:
         split_action::split_action_state state;
         
         /* Data for upstream nodes  */
-        rendezvous_point **rvps;
+        rendezvous_point 	**rvps;
 
         /* Data for downstream nodes */
-        split_action *rvp_sibling;
-        volatile bool dependency_flag;
+        split_action 		*rvp_sibling;
+        volatile bool 		dependency_flag;
  
         /* State for local locks */
-        uint32_t num_pending_locks;
-        void* list_ptr;
-        bool done_locking;
+        uint32_t 		num_pending_locks;
+        void 			*list_ptr;
+        split_action 		*ready_ptr;
+        split_action 		*link_ptr;
+        bool 			done_locking;
+        bool 			wait_commit;
+        bool 			committed;
+        bool 			scheduled;
 
         /* The partition on which this sub-action needs to execute. */
         uint32_t partition_id;
@@ -63,7 +103,7 @@ class split_action : public translator {
 
  public:
 
-        split_action *exec_list;
+        //        split_action *exec_list;
         std::vector<split_key> readset;
         std::vector<split_key> writeset;
         uint32_t rvp_count;
@@ -85,6 +125,8 @@ class split_action : public translator {
         bool shortcut_flag();
         void set_shortcut_flag();
         void reset_shortcut_flag();
+        bool must_wait();
+        bool can_commit();
         
         /* Rendezvous point functions */
         void set_rvp(rendezvous_point *rvp);

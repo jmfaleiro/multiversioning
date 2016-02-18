@@ -4,6 +4,7 @@
 
 void merge_queues(action_queue *merge_into, action_queue *queue);
 
+
 inline static bool queue_invariant(lock_struct_queue *queue)
 {
 
@@ -65,6 +66,7 @@ lock_struct_manager::lock_struct_manager(lock_struct *lst)
 /*
  * Add a single piece to a lock table queue.
  */
+/*
 void add_action(action_queue *queue, split_action *action)
 {
         bool ready;
@@ -81,6 +83,7 @@ void add_action(action_queue *queue, split_action *action)
                 queue->tail->exec_list = action;
         queue->tail = action;
 }
+*/
 
 /*
  * Get a single lock struct.
@@ -186,22 +189,20 @@ void lock_table::acquire_locks(split_action *action)
  * Called after action has finished executing. Use this to schedule the 
  * execution of succeeding actions.
  */
-void lock_table::release_locks(split_action *action, action_queue *queue)
+void lock_table::release_locks(split_action *action, ready_queue *queue)
 {
         assert(action->shortcut_flag() == false);
+        assert(queue->is_empty() == true);
 
-        action_queue unblocked;
+        ready_queue unblocked;
         lock_struct *locks, *cur;
         
-        queue->head = NULL;
-        queue->tail = NULL;
-
         locks = (lock_struct*)action->get_lock_list();
         while (locks != NULL) {
                 assert(locks->action == action);
                 cur = locks;
                 unblocked = release_single(cur);
-                merge_queues(queue, &unblocked);
+                ready_queue::merge_queues(queue, &unblocked);
                 locks = locks->list_ptr;
                 this->lock_allocator->return_lock(cur);
         }
@@ -375,20 +376,18 @@ lock_struct* lock_table::find_descendant(lock_struct *lock)
  * Find the set of descendant actions that are ready to run as a consequence of 
  * releasing the current lock. 
  */
-action_queue lock_table::get_runnables(lock_struct *lock)
+ready_queue lock_table::get_runnables(lock_struct *lock)
 {
         lock_struct *descendant;
-        action_queue ret;
+        ready_queue ret;
 
-        ret.head = NULL;
-        ret.tail = NULL;
         if (!can_wakeup(lock)) 
                 return ret;        
         descendant = find_descendant(lock);
         if (descendant != NULL) {
                 if (descendant->type == WRITE_LOCK) {
                         if (pass_lock(descendant)) 
-                                add_action(&ret, descendant->action);
+                                ret.enqueue(descendant->action);
                 } else {	
                         assert(false);
                         /* Descendant is a reader. Unblock a chain of readers.*/
@@ -396,7 +395,7 @@ action_queue lock_table::get_runnables(lock_struct *lock)
                         while (descendant != NULL && 
                                descendant->type == READ_LOCK) {
                                 if (pass_lock(descendant)) 
-                                        add_action(&ret, descendant->action);
+                                        ret.enqueue(descendant->action);
                                 descendant = find_descendant(descendant);
                         }
                 }
@@ -452,9 +451,9 @@ void lock_struct_queue::remove_lock(lock_struct *lock)
  * Release a partition local lock. Returns a list of actions that are ready to 
  * run as a result of lock release. 
  */
-action_queue lock_table::release_single(lock_struct *lock)
+ready_queue lock_table::release_single(lock_struct *lock)
 {
-        action_queue ret;
+        ready_queue ret;
 
         assert(lock->is_held == true);
         ret = get_runnables(lock);

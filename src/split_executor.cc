@@ -1,27 +1,5 @@
 #include <split_executor.h>
 
-void add_action(action_queue *queue, split_action *action);
-
-void merge_queues(action_queue *merge_into, action_queue *queue)
-{
-        if (queue->head == NULL) {
-                assert(queue->tail == NULL);
-                return;
-        }
-
-        if (merge_into->head == NULL) {
-                assert(merge_into->tail == NULL);
-                merge_into->head = queue->head;
-                merge_into->tail = queue->tail;
-        } else {
-                assert(merge_into->tail != NULL);
-                assert(merge_into->tail->exec_list == NULL);
-                assert(queue->tail->exec_list == NULL);
-                merge_into->tail->exec_list = queue->head;
-                merge_into->tail = queue->tail;
-        }
-}
-
 split_executor::split_executor(struct split_executor_config config)
         : Runnable((int)config.cpu)
 {
@@ -35,12 +13,15 @@ split_executor::split_executor(struct split_executor_config config)
         this->signal_queues = config.signal_queues;
 }
 
-void split_executor::run_action(split_action *action, action_queue *queue)
+/*
+ * Run an action that is ready to execute.
+ */
+void split_executor::run_action(split_action *action, ready_queue *queue)
 {
         assert(action->ready());
-        //        assert(action->state != split_action::COMPLETE);
-        queue->head = NULL;
-        queue->tail = NULL;
+        assert(action->state != split_action::COMPLETE);
+        assert(queue->is_empty() == true);
+        num_outstanding -= 1;
         action->tables = tables;
         action->run();
         num_pending -= 1;
@@ -60,30 +41,30 @@ void split_executor::process_action(split_action *action)
 {
         assert(action->get_state() == split_action::UNPROCESSED);
 
-        action_queue descendants;
+        ready_queue descendants;
 
-        descendants.head = NULL;
-        descendants.tail = NULL;
         this->lck_table->acquire_locks(action);
         if (action->ready()) 
                 run_action(action, &descendants);
-        assert(descendants.head == NULL);
+        assert(descendants.is_empty() == true);
 }
 
 void split_executor::schedule_single_rvp(rendezvous_point *rvp)
 {
         split_action *action;
+        split_message msg;
         uint32_t partition;
         assert(false);
         if (fetch_and_decrement(&rvp->counter) > 0) 
                 return;
 
-        action = rvp->to_run;
+        msg.type = READY;
+        msg.action = rvp->to_run;
         assert(action != NULL);
         while (action != NULL) {
                 partition = action->get_partition_id();
                 action->clear_dependency_flag();
-                signal_queues[partition]->EnqueueBlocking(action);
+                signal_queues[partition]->EnqueueBlocking(msg);
                 action = action->get_rvp_sibling();
         }
 }
@@ -100,79 +81,132 @@ void split_executor::schedule_downstream_pieces(split_action *action)
 }
 
 /*
- * Run an action, and (recursively) every other action that is unblocked by the 
- * root's execution.
+ * Executes all actions that are unblocked due to incoming ready/release 
+ * messages. 
  */
-/*
-void split_executor::process_pending(split_action *action, action_queue *descendants)
+void split_executor::exec_pending()
 {
-        bool is_ready;
+        split_action *action;
+        ready_queue action_queue;
         
-        is_ready = action->ready();
-        assert(is_ready == true);
-        run_action(action, descendants);
-}
-*/
-
-action_queue split_executor::exec_list(split_action *action_list)
-{
-        assert(action_list != NULL);
-        action_queue to_exec, temp;
-
-        to_exec.head = NULL;
-        to_exec.tail = NULL;
-        while (action_list != NULL) {
-                run_action(action_list, &temp);
-                merge_queues(&to_exec, &temp);
-                action_list = action_list->exec_list;
+        action_queue = check_pending();
+        if ((action = action_queue.dequeue()) != NULL) {
+                while (true) {
+                        action_queue = exec_list(action_queue);
+                        if (action_queue.is_empty() == true)
+                                break;
+                }
         }
-        
+}
+
+/*
+ * Execute a list of actions. Returns a list of actions that are ready to run as
+ * a consequence of being unblocked by an input action.
+ */
+ready_queue split_executor::exec_list(ready_queue ready)
+{
+        assert(ready.is_empty() == false);
+        ready_queue to_exec, temp;
+        split_action *action;
+
+        while ((action = ready.dequeue()) != NULL) {
+                temp.reset();
+                run_action(action, &temp);
+                ready_queue::merge_queues(&to_exec, &temp);                
+        }
+        to_exec.seal();
         return to_exec;
 }
 
 /*
- * 
+ * Inspects messages from other partitions, and determines which transactions 
+ * are ready to execute as a consequence. 
  */
-split_action* split_executor::check_pending()
+ready_queue split_executor::check_pending()
 {
+        linked_queue released, ready;
+        ready_queue to_exec;
+
+        get_new_messages(&released, &ready);
+        to_exec = process_release_msgs(released);
+        to_exec = process_ready_msgs(to_exec, ready);
+        return to_exec;
+}
+
+/* 
+ * Returns messages from message-queues. Distinguishes between "release" 
+ * messages, corresponding to commit/abort decisions, and "ready" messages whose
+ * dependencies have been satisfied. 
+ */
+void split_executor::get_new_messages(linked_queue *release_queue, 
+                                      linked_queue *ready_queue)
+{
+        /* The queues have to be empty at this point. */
+        assert(release_queue->is_empty() == true && 
+               ready_queue->is_empty() == true);
+
+        split_message msg;
         uint32_t i;
-        split_action *action;
-        action_queue queue;
         
-        /* Collect actions whose remote dependencies are satisfied. */
-        queue.head = NULL;
-        queue.tail = NULL;
         for (i = 0; i < config.num_partitions; ++i) {
-                while (ready_queues[i]->Dequeue(&action)) {
-                        if (action->get_state() == split_action::UNPROCESSED && action->ready()) {
-                                add_action(&queue, action);
-                        }
+                while (ready_queues[i]->Dequeue(&msg)) {
+                        if (msg.type == EXECUTED) 
+                                release_queue->enqueue(msg.action);
+                        else if (msg.type == READY) 
+                                ready_queue->enqueue(msg.action);
+                        else 
+                                assert(false);                        
                 }
         }
-        return queue.head;
+        release_queue->seal();
+        ready_queue->seal();
+}
+
+
+/*
+ * 
+ */
+ready_queue split_executor::process_ready_msgs(ready_queue to_exec, 
+                                               linked_queue msgs)
+{
+        split_action *action;
+        
+        while ((action = msgs.dequeue()) != NULL) 
+                if (action->get_state() == split_action::UNPROCESSED && 
+                    action->ready()) 
+                        to_exec.enqueue(action);        
+        return to_exec;
+}
+
+
+ready_queue split_executor::process_release_msgs(linked_queue release_queue)
+{
+        ready_queue accumulated, temp;
+        split_action *cur;
+        
+        while ((cur = release_queue.dequeue()) != NULL) {
+
+                /* Action be waited on */
+                assert(cur->must_wait() == true);
+                
+                /* Uncommitted actions's writes are buffered */
+                if (cur->can_commit() == true)
+                        commit_action(cur);
+
+                temp.reset();
+                lck_table->release_locks(cur, &temp);
+                ready_queue::merge_queues(&accumulated, &temp);
+        }
+        return accumulated;
+}
+
+void split_executor::commit_action(__attribute__((unused)) split_action *action)
+{
 }
 
 void split_executor::Init()
 {
 }
-
-void split_executor::do_pending() 
-{
-        action_queue temp;
-        split_action *action;
-        
-        action = check_pending();
-        if (action != NULL) 
-                while (true) {
-                        temp = exec_list(action);
-                        if (temp.head != NULL)
-                                action = temp.head;
-                        else 
-                                break;
-                }
-
-}
-
 
 /*
  * Executor threads's "main" function.
@@ -180,30 +214,25 @@ void split_executor::do_pending()
 void split_executor::StartWorking()
 {
         split_action_batch batch;
-        split_action *action;
         uint32_t i;
-        action_queue temp;
+        
+        ready_queue to_exec;
         
         while (true) {
                 batch = input_queue->DequeueBlocking();
                 num_pending = batch.num_actions;
+                num_outstanding = 0;
+
                 for (i = 0; i < batch.num_actions; ++i) {
+                        num_outstanding += 1;
                         process_action(batch.actions[i]);
                         assert(batch.actions[i]->done_locking);
-                        //                        check_pending();
+                        while (num_outstanding > config.outstanding_threshold)
+                                exec_pending();
                 }
-                while (num_pending != 0) {                                                
-                        action = check_pending();
-                        i = 0;
-                        if (action != NULL) 
-                                while (true) {
-                                        temp = exec_list(action);
-                                        if (temp.head != NULL)
-                                                action = temp.head;
-                                        else 
-                                                break;
-                                }
-                }
+                while (num_pending != 0) 
+                        exec_pending();
                 output_queue->EnqueueBlocking(batch);
         }
 }
+

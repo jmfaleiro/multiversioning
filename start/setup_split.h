@@ -490,7 +490,7 @@ public:
                 ret = (splt_comm_queue***)zmalloc(sizeof(splt_comm_queue**)*
                                                   s_conf.num_partitions);
                 for (i = 0; i < s_conf.num_partitions; ++i) 
-                        ret[i] = setup_queues<split_action*>(s_conf.num_partitions, 
+                        ret[i] = setup_queues<split_message>(s_conf.num_partitions, 
                                                              (1<<10));
                 return ret;
         }
@@ -541,6 +541,7 @@ public:
                         cpu,
                         num_partitions,
                         partition_id,
+                        s_conf.num_outstanding,
                         ready_queues,
                         comm_inputs,
                         input_queue,
@@ -639,11 +640,11 @@ public:
                                     uint32_t num_partitions)
         {
                 uint32_t i, count;
-                split_action *temp;
+                split_message msg;
 
                 count = 0;
                 for (i = 0; i < num_partitions; ++i) {
-                        while (txn_queues[i]->Dequeue(&temp))
+                        while (txn_queues[i]->Dequeue(&msg))
                                 count += 1;
                 }
                 return count;                

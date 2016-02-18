@@ -28,7 +28,8 @@ static struct option long_options[] = {
   {"read_pct", required_argument, NULL, 14},
   {"read_txn_size", required_argument, NULL, 15},
   {"num_partitions", required_argument, NULL, 16},
-  {NULL, no_argument, NULL, 17},
+  {"num_outstanding", required_argument, NULL, 17},
+  {NULL, no_argument, NULL, 18},
 };
 
 enum exp_codes {
@@ -123,6 +124,7 @@ struct split_config {
         double theta;
         int read_pct;
         int read_txn_size;
+        uint32_t num_outstanding;
 };
 
 struct MVConfig {
@@ -161,6 +163,7 @@ class ExperimentConfig {
     READ_PCT,
     READ_TXN_SIZE,
     NUM_PARTITIONS,
+    NUM_OUTSTANDING,
   };
   unordered_map<int, char*> argMap;
 
@@ -379,7 +382,8 @@ class ExperimentConfig {
           argMap.count(RECORD_SIZE) == 0 || 
           argMap.count(DISTRIBUTION) == 0 ||
           argMap.count(READ_PCT) == 0 ||
-          argMap.count(READ_TXN_SIZE) == 0) {
+          argMap.count(READ_TXN_SIZE) == 0 ||
+          argMap.count(NUM_OUTSTANDING) == 0) {
         
         std::cerr << "Missing one or more SPLIT params\n";
         std::cerr << "--" << long_options[NUM_PARTITIONS].name << "\n";
@@ -391,6 +395,7 @@ class ExperimentConfig {
         std::cerr << "--" << long_options[DISTRIBUTION].name << "\n";
         std::cerr << "--" << long_options[READ_PCT].name << "\n";
         std::cerr << "--" << long_options[READ_TXN_SIZE].name << "\n";
+        std::cerr << "--" << long_options[NUM_OUTSTANDING].name << "\n";
         exit(-1);
       }
       
@@ -404,6 +409,7 @@ class ExperimentConfig {
       split_conf.distribution = (uint32_t)atoi(argMap[DISTRIBUTION]);
       split_conf.read_pct = (int)atoi(argMap[READ_PCT]);
       split_conf.read_txn_size = (int)atoi(argMap[READ_TXN_SIZE]);
+      split_conf.num_outstanding = (uint32_t)atoi(argMap[NUM_OUTSTANDING]);
       if (argMap.count(THETA) > 0)
               split_conf.theta = (double)atof(argMap[THETA]);
       this->ccType = SPLIT;

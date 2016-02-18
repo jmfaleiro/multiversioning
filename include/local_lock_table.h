@@ -11,6 +11,7 @@ enum lock_type {
         WRITE_LOCK,
 };
 
+
 struct action_queue {
         split_action *head;
         split_action *tail;
@@ -76,10 +77,10 @@ class lock_table {
 
         void init_tables(lock_table_config config);
         //        bool acquire_single(lock_struct *lock);
-        action_queue release_single(lock_struct *lock);
+        ready_queue release_single(lock_struct *lock);
         void release_multi_partition(lock_struct *lock);
         bool can_wakeup(lock_struct *lock);
-        action_queue get_runnables(lock_struct *lock);
+        ready_queue get_runnables(lock_struct *lock);
         bool pass_lock(lock_struct *lock);
         lock_struct* find_descendant(lock_struct *lock);
 
@@ -91,7 +92,7 @@ class lock_table {
 
         lock_table(lock_table_config config);
         void acquire_locks(split_action *action);
-        void release_locks(split_action *action, action_queue *queue);
+        void release_locks(split_action *action, ready_queue *queue);
 };
 
 #endif // LOCAL_LOCK_TABLE_H_

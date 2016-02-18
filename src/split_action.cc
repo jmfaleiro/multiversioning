@@ -2,6 +2,111 @@
 #include <util.h>
 #include <cassert>
 
+split_action_queue::split_action_queue()
+{
+        _sealed = false;
+        _head = NULL;
+        _tail = NULL;
+}
+
+void split_action_queue::reset()
+{
+        _sealed = false;
+        _head = NULL;
+        _tail = NULL;
+}
+
+void split_action_queue::seal()
+{
+        assert(_sealed == false);
+        _sealed = true;
+}
+
+bool split_action_queue::is_empty()
+{
+        return (_head == NULL);
+}
+
+ready_queue::ready_queue() : split_action_queue()
+{
+}
+
+void ready_queue::enqueue(split_action *action)
+{
+        assert((_head == NULL && _tail == NULL) || 
+               (_head != NULL && _tail != NULL));
+        assert(_sealed == false);
+        
+        action->ready_ptr = NULL;
+        if (_head == NULL) 
+                _head = action;
+        else 
+                _tail->ready_ptr = action;        
+        _tail = action;
+}
+
+split_action* ready_queue::dequeue() 
+{
+        assert(_sealed == true);
+
+        split_action *ret;
+        ret = _head;
+        
+        if (_head != NULL)
+                _head = _head->ready_ptr;
+        return ret;
+}
+
+void ready_queue::merge_queues(ready_queue *merge_into,
+                               ready_queue *merge_from)
+{
+        assert((merge_into->_head == NULL && merge_into->_tail == NULL) ||
+               (merge_into->_head != NULL && merge_into->_tail != NULL));
+        assert((merge_from->_head == NULL && merge_from->_tail == NULL) ||
+               (merge_from->_head != NULL && merge_from->_tail != NULL));
+        
+        if (merge_from->is_empty() == true)
+                return;
+
+        if (merge_into->_head == NULL) {
+                merge_into->_head = merge_from->_head;
+                merge_into->_tail = merge_from->_tail;
+        } else {
+                assert(merge_into->_tail->ready_ptr == NULL);
+                merge_into->_tail->ready_ptr = merge_from->_head;
+                merge_into->_tail = merge_from->_tail;
+        }
+}
+
+linked_queue::linked_queue() : split_action_queue()
+{
+}
+
+void linked_queue::enqueue(split_action *action)
+{
+        assert((_head == NULL && _tail == NULL) || 
+               (_head != NULL && _tail != NULL));
+        assert(_sealed == false);
+        
+        action->link_ptr = NULL;
+        if (_head == NULL) 
+                _head = action;
+        else 
+                _tail->link_ptr = action;
+        _tail = action;
+}
+
+split_action* linked_queue::dequeue()
+{
+        assert(_sealed == true);
+        split_action *ret;
+        
+        ret = _head;
+        if (_head != NULL) 
+                _head = _head->link_ptr;
+        return ret;
+}
+
 txn_graph* split_txn::convert_to_graph()
 {
         throw unimplemented_exception(0);
@@ -16,7 +121,8 @@ split_action::split_action(txn *t, uint32_t partition_id,
         
         this->num_pending_locks = 0;
         this->list_ptr = NULL;
-        this->exec_list = NULL;        
+        this->ready_ptr = NULL;
+        this->link_ptr = NULL;
         this->done_locking = false;
         this->state = split_action::UNPROCESSED;
 }
@@ -191,3 +297,16 @@ void split_action::release_multi_partition()
 {
 }
 
+bool split_action::must_wait()
+{
+        assert(false);
+        return true;
+}
+
+bool split_action::can_commit()
+{
+        assert(false);
+        return true;
+}
+
+ 

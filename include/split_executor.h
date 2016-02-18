@@ -13,15 +13,26 @@ struct split_action_batch {
         uint32_t num_actions;
 };
 
+enum message_t {
+        READY,
+        EXECUTED,
+};
+
+struct split_message {
+        message_t 	type;
+        split_action 	*action;
+};
+
 typedef SimpleQueue<split_action_batch> splt_inpt_queue;
-typedef SimpleQueue<split_action*> splt_comm_queue;
+typedef SimpleQueue<split_message> splt_comm_queue;
 
 struct split_executor_config {
         uint32_t cpu;
         uint32_t num_partitions;
         uint32_t partition_id;
-        SimpleQueue<split_action*> **ready_queues;
-        SimpleQueue<split_action*> **signal_queues;
+        uint32_t outstanding_threshold;
+        SimpleQueue<split_message> **ready_queues;
+        SimpleQueue<split_message> **signal_queues;
         SimpleQueue<split_action_batch> *input_queue;
         SimpleQueue<split_action_batch> *output_queue;
         struct lock_table_config lock_table_conf;
@@ -38,16 +49,24 @@ class split_executor : public Runnable {
         splt_comm_queue **ready_queues;
         splt_comm_queue **signal_queues;
         uint32_t num_pending;
+        uint32_t num_outstanding;
 
         void schedule_single_rvp(rendezvous_point *rvp);        
         void schedule_downstream_pieces(split_action *action);
-        void run_action(split_action *action, action_queue *queue);
-        //        void process_pending(split_action *action, action_queue *descendants);
-        action_queue exec_list(split_action *action_list);
+        void run_action(split_action *action, ready_queue *queue);
+
+        /* Functions related to inter-partition communication */
+        void exec_pending();
+        ready_queue check_pending();
+        ready_queue exec_list(ready_queue ready);
+        void get_new_messages(linked_queue *release_queue, 
+                              linked_queue *ready_queue);
+        ready_queue process_release_msgs(linked_queue release_queue);
+        ready_queue process_ready_msgs(ready_queue to_exec, linked_queue msgs);
+
+        void commit_action(split_action *action);
         void process_action(split_action *action);
         void schedule_action(split_action *action);
-        split_action* check_pending();
-        void do_pending();
         
  protected:
         virtual void StartWorking();
