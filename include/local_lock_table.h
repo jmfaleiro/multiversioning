@@ -69,8 +69,8 @@ class lock_table {
 
         static bool conflicting(lock_struct *lock1, lock_struct *lock2);
         static bool check_conflict(big_key key, lock_struct_queue *queue, 
-                                   lock_type lck_tp, 
-                                   lock_struct ***tail_ptr);
+                                   lock_type lck_tp);
+                                   
         //        static bool insert_queue(lock_struct *lock, lock_struct_queue *queue);
 
         lock_struct_queue* get_slot(big_key key);

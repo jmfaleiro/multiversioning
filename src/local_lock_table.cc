@@ -116,7 +116,7 @@ void lock_table::acquire_locks(split_action *action)
 {
         uint32_t num_reads, num_writes, i, conflicts;
         lock_struct *cur_lock, *lock_list;
-        lock_struct **ptrs[action->readset.size() + action->writeset.size()];
+        bool lcks_acquired[action->readset.size() + action->writeset.size()];
         lock_struct_queue *queues[action->readset.size() + action->writeset.size()];
 
         action->set_lock_flag();
@@ -126,9 +126,8 @@ void lock_table::acquire_locks(split_action *action)
         num_reads = action->readset.size();
         for (i = 0; i < num_reads; ++i) {
                 queues[i] = get_slot(action->readset[i]._record);
-                if (!check_conflict(action->readset[i]._record, queues[i], 
-                                    READ_LOCK,
-                                    &ptrs[i])) {
+                if ((lcks_acquired[i] = check_conflict(action->readset[i]._record, queues[i], 
+                                                       READ_LOCK)) == false) {
                         conflicts += 1;
                         action->incr_pending_locks();
                 }
@@ -137,9 +136,8 @@ void lock_table::acquire_locks(split_action *action)
         num_writes = action->writeset.size();
         for (i = 0; i < num_writes; ++i) {
                 queues[num_reads+i] = get_slot(action->writeset[i]._record);
-                if (!check_conflict(action->writeset[i]._record, queues[num_reads+i], 
-                                    WRITE_LOCK,
-                                    &ptrs[i+num_reads])) {
+                if ((lcks_acquired[i+num_reads] = check_conflict(action->writeset[i]._record, queues[num_reads+i], 
+                                                                 WRITE_LOCK)) == false) {
                         conflicts += 1;
                         action->incr_pending_locks();
                 }
@@ -163,8 +161,7 @@ void lock_table::acquire_locks(split_action *action)
                 cur_lock->action = action;
                 cur_lock->list_ptr = lock_list;
                 lock_list = cur_lock;
-                cur_lock->is_held = !(*ptrs[i] != NULL && 
-                                      (*ptrs[i])->type == WRITE_LOCK);
+                cur_lock->is_held = lcks_acquired[i];
                 queues[i]->add_lock(cur_lock);
         }
 
@@ -177,7 +174,7 @@ void lock_table::acquire_locks(split_action *action)
                 cur_lock->list_ptr = lock_list;
                 cur_lock->action = action;
                 lock_list = cur_lock;
-                cur_lock->is_held = (*ptrs[num_reads+i] == NULL);
+                cur_lock->is_held = lcks_acquired[i+num_reads];
                 queues[num_reads+i]->add_lock(cur_lock);
         }
         action->set_lock_list(lock_list);
@@ -244,23 +241,26 @@ bool lock_table::conflicting(lock_struct *lock1, lock_struct *lock2)
  * Returns true if lock is acquired.
  */
 bool lock_table::check_conflict(big_key key, lock_struct_queue *queue, 
-                                lock_type lck_tp, lock_struct ***tail_ptr)
+                                lock_type lck_tp)
 {
-        bool acquired = false;
-        *tail_ptr = &queue->tail;
+        lock_struct *iter;
+        bool acquired;
+        
+        acquired = false;
+        iter = queue->tail;
 
         /* Find the first ancestor in the queue. */
-        while (**tail_ptr != NULL && (**tail_ptr)->key != key)
-                *tail_ptr = &((**tail_ptr)->left);
+        while (iter != NULL && iter->key != key)
+                iter = iter->left;
         
         /* No ancestor, ie, no prior logical locks. */
-        if (**tail_ptr == NULL) 
+        if (iter == NULL)
                 acquired = true;
         /* Ancestor's logical lock conflicts. */
-        else if (lck_tp == WRITE_LOCK || (**tail_ptr)->type == WRITE_LOCK)
+        else if (lck_tp == WRITE_LOCK || iter->type == WRITE_LOCK)
                 acquired = false;
         /* Ancestor holds logical lock and both are reads. */
-        else if ((**tail_ptr)->is_held == true) 
+        else if (iter->is_held == true) 
                 acquired = true;
         else 
                 acquired = false;
