@@ -347,7 +347,7 @@ void split_action::transition_scheduled()
 /* Call this function when an abortable piece has finished executing */
 void split_action::transition_executed()
 {
-        assert(state == split_action::LOCKED);
+        assert(state == split_action::SCHEDULED);
         assert(can_abort == true);
         assert(shortcut == false);
         state = split_action::EXECUTED;        
@@ -367,4 +367,9 @@ void split_action::transition_complete()
 commit_rvp* split_action::get_commit_rvp()
 {
         return commit_rendezvous;
+}
+
+void split_action::set_commit_rvp(commit_rvp *rvp)
+{
+        commit_rendezvous = rvp;
 }

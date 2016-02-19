@@ -145,7 +145,8 @@ void lock_table::acquire_locks(split_action *action)
                 }
         }
         
-        if (conflicts == 0 && action->remote_deps() == false) {
+        if (action->abortable() == false && conflicts == 0 && 
+            action->remote_deps() == false) {
                 action->transition_locked();
                 return;
         }

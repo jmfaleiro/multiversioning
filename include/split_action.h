@@ -168,6 +168,7 @@ class split_action : public translator {
         uint32_t num_downstream_rvps();
         rendezvous_point** get_rvps();
         void clear_dependency_flag();
+        void set_commit_rvp(commit_rvp *rvp);
         commit_rvp *get_commit_rvp();
         
         /* Translator interface functions  */

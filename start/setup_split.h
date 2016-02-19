@@ -58,7 +58,8 @@ public:
                 //                assert(s_conf.experiment == YCSB_UPDATE);
                 if (s_conf.experiment == YCSB_UPDATE || 
                     s_conf.experiment == 0 || 
-                    s_conf.experiment == 1) {
+                    s_conf.experiment == 1 ||
+                    s_conf.experiment == 2) {
                         t_conf.tableId = 0;
                         t_conf.numBuckets = (split_table_sizes[0]*4)/s_conf.num_partitions;
                         t_conf.startCpu = partition;
@@ -254,12 +255,12 @@ public:
 
                 if (node->in_links == NULL) {
                         piece = txn_to_piece(node->app, node->partition, false, 
-                                             false);
+                                             node->abortable);
                         piece->set_rvp(NULL);
                         node->t = piece;
                 } else {
                         piece = txn_to_piece(node->app, node->partition, true, 
-                                             false);
+                                             node->abortable);
                         if ((node_phase = find_phase(node->in_links, phases)) != NULL) {
                                 rvp = node_phase->rvp;
                         } else {
@@ -297,6 +298,42 @@ public:
                 for (i = 0; i < count; ++i) 
                         rvps[i] = desc_rvps[i]->rvp;
                 piece->set_rvp_wakeups(rvps, count);
+        }
+        
+        static void find_abortables(txn_graph *graph) 
+        {
+                vector<graph_node*> *nodes;
+                graph_node *cur_node;
+                commit_rvp *rvp;
+                split_action **actions;
+                uint32_t abortable_count, i, j, sz;
+                
+                nodes = graph->get_nodes();
+                sz = nodes->size();
+                abortable_count = 0;
+                for (i = 0; i < sz; ++i) {
+                        cur_node = (*nodes)[i];
+                        if (cur_node->abortable == true) 
+                                abortable_count += 1;                        
+                }                
+                
+                actions = (split_action**)zmalloc(sizeof(split_action*)*abortable_count);
+                rvp = (commit_rvp*)zmalloc(sizeof(commit_rvp));
+                rvp->num_actions = abortable_count;
+                rvp->to_notify = actions;
+                barrier();
+                rvp->num_committed = 0;
+                rvp->status = (uint64_t)ACTION_UNDECIDED;
+                barrier();
+                
+                for (i = 0, j = 0; i < sz; ++i) {
+                        cur_node = (*nodes)[i];
+                        if (cur_node->abortable == true) {
+                                actions[j] = cur_node->t;
+                                cur_node->t->set_commit_rvp(rvp);
+                                j += 1;
+                        }
+                }
         }
 
         static void traverse_graph(graph_node *node, txn_graph *graph, 
@@ -379,6 +416,7 @@ public:
                         proc_downstream_node((*nodes)[i], &phases);
                 for (i = 0; i < num_nodes; ++i)
                         proc_upstream_node((*nodes)[i], &phases);
+                find_abortables(graph);
 
                 /* Get rid of phases */
                 for (i = 0; i < phases.size(); ++i) 
@@ -676,9 +714,11 @@ public:
                 result_file << "records:" << conf.num_records << " ";
                 result_file << "read_pct:" << conf.read_pct << " ";
                 if (conf.experiment == 0) 
-                        result_file << "10rmw" << " ";
+                        result_file << "test " << " ";
                 else if (conf.experiment == 1) 
-                        result_file << "8r2rmw" << " ";
+                        result_file << "rvp test" << " ";
+                else if (conf.experiment == 2) 
+                        result_file << "abort test " << " ";
                 else if (conf.experiment == 3) 
                         result_file << "small_bank" << " ";
                 else if (conf.experiment == 4)

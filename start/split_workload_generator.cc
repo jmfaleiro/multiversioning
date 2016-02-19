@@ -95,13 +95,68 @@ txn_graph* gen_ycsb_update(RecordGenerator *gen, workload_config conf,
 
 /*
  * Generate two abortable ppieces, and one non-abortable piece that follows.
-
-txn_graph* generate_abortable_action(workload_config conf, 
+ */
+txn_graph* generate_abortable_action(RecordGenerator *gen, workload_config conf,
                                      uint32_t num_partitions)
 {
+        assert(conf.experiment == 2);
+
+        txn_graph *graph;
+        graph_node *node0, *node1, *node2;
+        uint64_t rec0, rec1, rec2;
+        uint32_t partition0, partition1, partition2;
+        simple_split *txn;
+        vector<uint64_t> records;
+        std::set<uint64_t> seen_keys;
         
+        graph = new txn_graph();
+
+        rec0 = gen_unique_key(gen, &seen_keys);
+        partition0 = get_partition(rec0, 0, num_partitions);
+        rec2 = gen_unique_key(gen, &seen_keys);
+        partition2 = get_partition(rec2, 0, num_partitions);
+        while (true) {
+                rec1 = gen_unique_key(gen, &seen_keys);
+                partition1 = get_partition(rec1, 0, num_partitions);
+                if (partition0 != partition1)
+                        break;                
+        }
+        
+        /* First piece */
+        records.clear();
+        records.push_back(rec0);
+        txn = new simple_split(records);
+        node0 = new graph_node();
+        node0->app = txn;
+        node0->partition = partition0;
+        node0->abortable = true;
+        graph->add_node(node0);
+        
+        /* Second piece */
+        records.clear();
+        records.push_back(rec1);
+        txn = new simple_split(records);
+        node1 = new graph_node();
+        node1->app = txn;
+        node1->partition = partition1;
+        node1->abortable = true;
+        graph->add_node(node1);
+
+        /* Third piece */
+        records.clear();
+        records.push_back(rec2);
+        txn = new simple_split(records);
+        node2 = new graph_node();
+        node2->app = txn;
+        node2->partition = partition2;
+        graph->add_node(node2);
+        
+        /* Add edges */
+        graph->add_edge(node0, node2);
+        graph->add_edge(node1, node2);
+        return graph;
 }
-*/
+
 
 /*
  * Generate txns with three pieces. Two pieces signal a single downstream piece.
@@ -234,6 +289,8 @@ txn_graph* generate_split_action(workload_config conf, uint32_t num_partitions)
                 return generate_simple_action(my_gen, conf, num_partitions);
         else if (conf.experiment == 1)
                 return generate_dual_rvp(my_gen, conf, num_partitions);
+        else if (conf.experiment == 2)
+                return generate_abortable_action(my_gen, conf, num_partitions);
         else if (conf.experiment == YCSB_UPDATE)
                 return gen_ycsb_update(my_gen, conf, num_partitions);
         assert(false);
