@@ -56,7 +56,9 @@ public:
                 Table **init_tbl;
                 TableConfig t_conf;
                 //                assert(s_conf.experiment == YCSB_UPDATE);
-                if (s_conf.experiment == YCSB_UPDATE || s_conf.experiment == 0) {
+                if (s_conf.experiment == YCSB_UPDATE || 
+                    s_conf.experiment == 0 || 
+                    s_conf.experiment == 1) {
                         t_conf.tableId = 0;
                         t_conf.numBuckets = (split_table_sizes[0]*4)/s_conf.num_partitions;
                         t_conf.startCpu = partition;
@@ -155,17 +157,12 @@ public:
 
         static uint32_t get_parent_count(graph_node *node)
         {
-                uint32_t i, sz, count;
                 vector<int> *edge_map;
 
                 edge_map = node->in_links;
                 if (edge_map == NULL)
                         return 0;
-                sz = edge_map->size();
-                for (i = 0, count = 0; i < sz; ++i) 
-                        if ((*edge_map)[i] == 1)
-                                ++count;
-                return count;
+                return edge_map->size();
         }
 
         static void find_desc_rvps(int index, vector<txn_phase*> *phases, 
@@ -271,7 +268,9 @@ public:
                                 node_phase->parent_nodes = node->in_links;
                                 node_phase->rvp = rvp;
                                 phases->push_back(node_phase);
+                                barrier();
                                 rvp->counter = get_parent_count(node);
+                                barrier();
                                 rvp->to_run = NULL;
                         }
                         piece->set_rvp(rvp);
