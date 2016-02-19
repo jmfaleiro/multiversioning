@@ -201,14 +201,15 @@ public:
         }
 
         static split_action* txn_to_piece(txn *txn, uint32_t partition_id, 
-                                          bool dependency_flag)
+                                          bool dependency_flag, bool can_commit)
         {
                 uint32_t num_reads, num_rmws, num_writes, max, i;
                 big_key *key_array;
                 split_action *action;
                 split_key temp_key;
 
-                action = new split_action(txn, partition_id, dependency_flag);
+                action = new split_action(txn, partition_id, dependency_flag, 
+                                          can_commit);
                 txn->set_translator(action);
                 num_reads = txn->num_reads();
                 num_writes = txn->num_writes();
@@ -255,11 +256,13 @@ public:
                 assert(node->partition != INT_MAX);
 
                 if (node->in_links == NULL) {
-                        piece = txn_to_piece(node->app, node->partition, false);
+                        piece = txn_to_piece(node->app, node->partition, false, 
+                                             false);
                         piece->set_rvp(NULL);
                         node->t = piece;
                 } else {
-                        piece = txn_to_piece(node->app, node->partition, true);
+                        piece = txn_to_piece(node->app, node->partition, true, 
+                                             false);
                         if ((node_phase = find_phase(node->in_links, phases)) != NULL) {
                                 rvp = node_phase->rvp;
                         } else {

@@ -20,7 +20,6 @@ split_executor::split_executor(struct split_executor_config config)
 void split_executor::run_action(split_action *action, ready_queue *queue)
 {
         assert(queue->is_empty() == true);
-
         num_outstanding -= 1;
         action->tables = tables;
         action->run();

@@ -133,7 +133,8 @@ class split_action : public translator {
         std::vector<split_key> writeset;
         uint32_t rvp_count;
         
-        split_action(txn *t, uint32_t partition_id, uint64_t dependency_flag);
+        split_action(txn *t, uint32_t partition_id, uint64_t dependency_flag, 
+                     bool can_abort);
         bool ready();
         bool remote_deps();
         virtual bool run();

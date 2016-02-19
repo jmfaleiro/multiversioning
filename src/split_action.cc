@@ -114,7 +114,8 @@ txn_graph* split_txn::convert_to_graph()
 }
 
 split_action::split_action(txn *t, uint32_t partition_id, 
-                           uint64_t dependency_flag) : translator(t)
+                           uint64_t dependency_flag, 
+                           bool can_abort) : translator(t)
 {
         this->t = t;
         this->partition_id = partition_id;
@@ -126,6 +127,7 @@ split_action::split_action(txn *t, uint32_t partition_id,
         this->link_ptr = NULL;
         this->done_locking = false;
         this->state = split_action::UNPROCESSED;
+        this->can_abort = can_abort;
 }
 
 split_action::split_action_state split_action::get_state()
@@ -328,7 +330,7 @@ void split_action::transition_locked()
         assert(can_abort == false || shortcut == false);
         
         /* If not abortable, should be shortcutted or have some pending locks */
-        assert(can_abort == true || shortcut == true || num_pending_locks > 0);
+        //        assert(can_abort == true || shortcut == true || num_pending_locks > 0);
         state = split_action::LOCKED;
 }
 
@@ -358,7 +360,7 @@ void split_action::transition_executed()
 void split_action::transition_complete()
 {
         assert(can_abort == false || state == split_action::EXECUTED);
-        assert(can_abort == true || state == split_action::LOCKED);
+        assert(can_abort == true || state == split_action::SCHEDULED);
         state = split_action::COMPLETE;
 }
 

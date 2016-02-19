@@ -146,7 +146,6 @@ void lock_table::acquire_locks(split_action *action)
         }
         
         if (conflicts == 0 && action->remote_deps() == false) {
-                assert(action->ready() == true);
                 action->transition_locked();
                 return;
         }
@@ -352,7 +351,7 @@ bool lock_table::pass_lock(lock_struct *lock)
         assert(lock != NULL);
         assert(lock->is_held == false);
         assert(action != NULL);
-        assert(action->get_state() == split_action::UNPROCESSED);
+        assert(action->get_state() == split_action::LOCKED);
         lock->is_held = true;
         action->decr_pending_locks();
         return action->ready();
