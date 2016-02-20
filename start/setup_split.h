@@ -37,6 +37,7 @@ public:
         static splt_comm_queue ***comm_queues;
         static uint32_t num_split_tables;
         static uint64_t *split_table_sizes;
+        static uint64_t *lock_table_sizes;
 
         /*
          * XXX Fix up this function to take different experiments into account.
@@ -48,6 +49,8 @@ public:
                 split_table_sizes = 
                         (uint64_t*)zmalloc(num_split_tables*sizeof(uint64_t));
                 split_table_sizes[0] = s_conf.num_records;
+                lock_table_sizes = (uint64_t*)zmalloc(num_split_tables*sizeof(uint64_t));
+                lock_table_sizes[0] = s_conf.num_records;
         }
 
         static void setup_single_table(int partition, split_config s_conf, 
@@ -557,7 +560,7 @@ public:
                 struct lock_table_config ret = {
                         cpu,
                         num_split_tables,
-                        split_table_sizes,
+                        lock_table_sizes,
                         num_lock_structs,
                 };
                 return ret;

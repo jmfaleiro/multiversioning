@@ -89,7 +89,7 @@ txn_graph* gen_ycsb_update(RecordGenerator *gen, workload_config conf,
                 assert(args.size() != 0);
                 cur_node->app = new ycsb_update(args, updates);
                 /* XXX REMOVE THIS */
-                cur_node->abortable = true;
+                //                cur_node->abortable = true;
         }        
         assert(write_check == conf.txn_size);
         return graph;

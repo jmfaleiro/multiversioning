@@ -23,12 +23,14 @@ void split_executor::run_action(split_action *action, ready_queue *queue)
         num_outstanding -= 1;
         action->tables = tables;
         action->run();
-        num_pending -= 1;
+
         schedule_downstream_pieces(action);
-        if (action->abortable() == true) 
+        if (action->abortable() == true) {
                 sync_commit_rvp(action, true, queue);
-        else 
+        } else {
+                num_pending -= 1;
                 lck_table->release_locks(action, queue);        
+        }
 }
 
 void split_executor::sync_commit_rvp(split_action *action, bool committed, 
@@ -80,6 +82,7 @@ void split_executor::sync_commit_rvp(split_action *action, bool committed,
                 
                 /* XXX For now, can only handle a single piece per partition */
                 assert(cur == action);
+                num_pending -= 1;
                 lck_table->release_locks(cur, queue);
         }
 }
@@ -249,6 +252,7 @@ ready_queue split_executor::process_release_msgs(linked_queue release_queue)
                         commit_action(cur);
 
                 temp.reset();
+                num_pending -= 1;
                 lck_table->release_locks(cur, &temp);
                 ready_queue::merge_queues(&accumulated, &temp);
         }
