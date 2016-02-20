@@ -5,7 +5,7 @@ import sys
 import os.path
 import clean
 
-fmt_split = "numactl --interleave=all build/db --cc_type 4 --num_partitions {0} --num_txns {1} --num_records {2} --txn_size {3} --experiment {4} --record_size {5} --distribution {6} --theta {7} --read_pct 0 --read_txn_size 10000"
+fmt_split = "numactl --interleave=all build/db --cc_type 4 --num_partitions {0} --num_txns {1} --num_records {2} --txn_size {3} --experiment {4} --record_size {5} --distribution {6} --theta {7} --read_pct 0 --read_txn_size 10000 --num_outstanding 100"
 
 fmt_locking = "numactl --interleave=all build/db --cc_type 1  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5} --read_pct {7} --read_txn_size 10000"
 
@@ -36,7 +36,7 @@ def main():
 #    test_cc()
 #    exp_0()
 #    occ_uncontended_1000()
-    new_contention()
+#    new_contention()
     test_locking()
 #    search_best()
 #    test_cc()
@@ -59,13 +59,12 @@ def new_contention():
             occ_expt(result_dir, "occ.txt", 40, 40, 3000000, 1000000, 4, 1, z, 1000, 0)
 
 def test_locking():
-    result_dir = "results/ycsb_update/"
-    high_dir = os.path.join(result_dir, "high/")
-    low_dir = os.path.join(result_dir, "low/")
+    result_dir = "results/temp/"
+#    high_dir = os.path.join(result_dir, "high/")
+#    low_dir = os.path.join(result_dir, "low/")
     
     for i in range(0, 10):
-        occ_expt(high_dir, "occ_new.txt", 4, 40, 3000000, 1000000, 4, 1, 0.9, 1000, 0)
-        occ_expt(low_dir, "occ.txt", 4, 40, 3000000, 1000000, 4, 1, 0.0, 1000, 0)
+        split_expt(result_dir, "no_msg.txt", 4, 40, 3000000, 1000000, 4, 1, 0.0, 1000, 0)
 
 
 def print_cc():

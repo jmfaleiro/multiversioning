@@ -57,7 +57,13 @@ class SimpleQueue {
     }
     
     uint64_t diff() {
-        return m_tail - m_head;
+            uint64_t tail, head;
+
+            barrier();
+            tail = m_tail;
+            head = m_head;
+            barrier();
+            return head - tail;
     }
         
     

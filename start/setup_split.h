@@ -11,9 +11,11 @@
 #include <db.h>
 #include <graph.h>
 #include <algorithm>
+#include <message_broker.h>
 
 #define LCK_TBL_SZ	(((uint64_t)1) << 29)	/* 512 M */
 #define SIMPLE_SZ 	2			/* simple action size */
+#define THREADS_PER_BROKER 	10
 
 extern uint32_t GLOBAL_RECORD_SIZE;
 extern uint32_t get_partition(uint64_t record, uint32_t table, 
@@ -37,6 +39,32 @@ public:
         static splt_comm_queue ***comm_queues;
         static uint32_t num_split_tables;
         static uint64_t *split_table_sizes;
+
+        static uint32_t num_brokers(uint32_t num_partitions)
+        {
+                uint32_t nbrokers;
+
+                nbrokers = num_partitions / THREADS_PER_BROKER;
+                if (num_partitions % THREADS_PER_BROKER != 0)
+                        nbrokers += 1;
+                return nbrokers;
+        }
+
+        static void broker_range(uint32_t num_partitions, uint32_t broker_id, 
+                                 uint32_t *low, 
+                                 uint32_t *high)
+        {
+                uint32_t nbrokers, nqueues;
+                
+                nbrokers = num_brokers(num_partitions);
+                assert(broker_id < nbrokers);
+                if (broker_id == nbrokers - 1)
+                        nqueues = num_partitions - broker_id*THREADS_PER_BROKER;
+                else
+                        nqueues = THREADS_PER_BROKER;
+                *low = broker_id*THREADS_PER_BROKER;
+                *high = *low + nqueues - 1;
+        }
 
         /*
          * XXX Fix up this function to take different experiments into account.
@@ -519,10 +547,83 @@ public:
                 return ret;
         }
 
+        static splt_comm_queue*** setup_broker_outputs(split_config s_conf, 
+                                                       splt_comm_queue **partition_inputs)
+        {
+                splt_comm_queue ***ret, **temp;
+                uint32_t i, j, nqueues, nbrokers, low, high;
+
+                nbrokers = num_brokers(s_conf.num_partitions);
+                ret = (splt_comm_queue***)zmalloc(sizeof(splt_comm_queue**)*nbrokers);
+                for (i = 0; i < nbrokers; ++i) {
+                        broker_range(s_conf.num_partitions, i, &low, &high);
+                        nqueues = high - low + 1;
+                        temp = setup_queues<split_message>(nqueues, (1<<20));
+                        ret[i] = (splt_comm_queue**)zmalloc(s_conf.num_partitions*sizeof(splt_comm_queue*));
+                        for (j = 0; j < nqueues; ++j) {
+                                ret[i][low] = temp[j];
+                                partition_inputs[low] = temp[j];
+                                low += 1;
+                        }
+                        assert(low - 1 == high);
+                        free(temp);
+                }
+                return ret;
+        }
+
+        static splt_comm_queue*** setup_broker_inputs(split_config s_conf)
+        {
+                splt_comm_queue ***ret, **temp;
+                uint32_t i, j, nbrokers, low, high;
+                
+                nbrokers = num_brokers(s_conf.num_partitions);
+                ret = (splt_comm_queue***)zmalloc(sizeof(splt_comm_queue**)*
+                                                  s_conf.num_partitions);
+                for (i = 0; i < s_conf.num_partitions; ++i) {
+                        temp = setup_queues<split_message>(nbrokers, (1<<20));
+                        ret[i] = (splt_comm_queue**)zmalloc(s_conf.num_partitions*sizeof(splt_comm_queue*));
+                        for (j = 0; j < nbrokers; ++j) {
+                                broker_range(s_conf.num_partitions, j, &low, &high);
+                                while (low <= high) {
+                                        ret[i][low] = temp[j];
+                                        low += 1;
+                                }
+                        }
+                }
+                return ret;
+        }
+
+        static message_broker** setup_brokers(split_config s_conf, 
+                                              splt_comm_queue ***inputs, 
+                                              splt_comm_queue ***outputs)
+        {
+                uint32_t nbrokers, i, j, low, high;                
+                splt_comm_queue **broker_inputs, **broker_outputs;
+                message_broker **brokers;
+                
+                nbrokers = num_brokers(s_conf.num_partitions);
+                brokers = (message_broker**)zmalloc(sizeof(message_broker*)*nbrokers);
+                for (i = 0; i < nbrokers; ++i) {
+                        broker_inputs = (splt_comm_queue**)zmalloc(s_conf.num_partitions*sizeof(splt_comm_queue*));
+                        broker_range(s_conf.num_partitions, i, &low, &high);
+                        for (j = 0; j < s_conf.num_partitions; ++j) 
+                                broker_inputs[j] = inputs[j][low];
+                        broker_outputs = outputs[i];
+                        brokers[i] = new message_broker(broker_inputs, s_conf.num_partitions, broker_outputs, 
+                                                        high - low + 1, s_conf.num_partitions + i);
+                        brokers[i]->Run();
+                        brokers[i]->WaitInit();
+                }
+                return brokers;
+        }
+
+
+        
         /*
          * Setup communication queues between executor threads.
          */
         static splt_comm_queue*** setup_comm_queues(split_config s_conf)
+
         {
                 splt_comm_queue ***ret;
                 uint32_t i;
@@ -566,7 +667,7 @@ public:
         static struct split_executor_config setup_exec_config(uint32_t cpu, 
                                                               uint32_t num_partitions, 
                                                               uint32_t partition_id,
-                                                              splt_comm_queue **ready_queues,
+                                                              splt_comm_queue *single_ready_queue,
                                                               splt_comm_queue **comm_inputs,
                                                               splt_inpt_queue *input_queue,
                                                               splt_inpt_queue *output_queue,
@@ -582,7 +683,8 @@ public:
                         num_partitions,
                         partition_id,
                         s_conf.num_outstanding,
-                        ready_queues,
+                        single_ready_queue,
+                        NULL,
                         comm_inputs,
                         input_queue,
                         output_queue,
@@ -603,18 +705,24 @@ public:
         {
                 split_executor **ret;
                 split_executor_config conf;
-                splt_comm_queue **comm_inputs;
+                //                splt_comm_queue **comm_inputs;
+                splt_comm_queue ***broker_outputs;
+                splt_comm_queue **partition_inputs;
                 uint32_t i;
 
                 ret = (split_executor**)
                         zmalloc(sizeof(split_executor*)*s_conf.num_partitions);
-                comm_queues = setup_comm_queues(s_conf);
+                partition_inputs = (splt_comm_queue**)zmalloc(sizeof(splt_comm_queue*)*s_conf.num_partitions);
+                comm_queues = setup_broker_inputs(s_conf);                
+                broker_outputs = setup_broker_outputs(s_conf, partition_inputs);
+                setup_brokers(s_conf, comm_queues, broker_outputs);
+                
                 for (i = 0; i < s_conf.num_partitions; ++i) {
                         assert(in_queues[i] != NULL && out_queues[i] != NULL);
-                        comm_inputs = setup_signal_inputs(i, s_conf);
+                        //      comm_inputs = setup_signal_inputs(i, s_conf);
                         conf = setup_exec_config(i, s_conf.num_partitions, i, 
+                                                 partition_inputs[i],
                                                  comm_queues[i],
-                                                 comm_inputs, 
                                                  in_queues[i],
                                                  out_queues[i],
                                                  s_conf,

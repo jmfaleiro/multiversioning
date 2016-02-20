@@ -11,6 +11,7 @@ split_executor::split_executor(struct split_executor_config config)
         this->output_queue = config.output_queue;
         this->ready_queues = config.ready_queues;
         this->signal_queues = config.signal_queues;
+        this->single_ready_queue = config.single_ready_queue;
         this->pending_run_count = 0;
 }
 
@@ -21,14 +22,17 @@ void split_executor::run_action(split_action *action, ready_queue *queue)
 {
         assert(queue->is_empty() == true);
         num_outstanding -= 1;
+                
         action->tables = tables;
         action->run();
-        num_pending -= 1;
+
         schedule_downstream_pieces(action);
-        if (action->abortable() == true) 
+        if (action->abortable() == true) {
                 sync_commit_rvp(action, true, queue);
-        else 
+        } else {
+                num_pending -= 1;
                 lck_table->release_locks(action, queue);        
+        }
 }
 
 void split_executor::sync_commit_rvp(split_action *action, bool committed, 
@@ -40,7 +44,7 @@ void split_executor::sync_commit_rvp(split_action *action, bool committed,
         linked_queue local_actions;
         uint32_t i, partition;
         split_message msg;
-        split_action *cur;
+        //        split_action *cur;
         split_action **to_notify;
 
         action->transition_executed();
@@ -60,7 +64,8 @@ void split_executor::sync_commit_rvp(split_action *action, bool committed,
                 prev_state = xchgq(&rvp->status, (uint64_t)ACTION_COMMITTED);
                 assert(prev_state == ACTION_UNDECIDED);
         }
-        
+
+
         if (sched_rights) {
                 to_notify = rvp->to_notify;
                 for (i = 0; i < rvp->num_actions; ++i) {
@@ -70,17 +75,15 @@ void split_executor::sync_commit_rvp(split_action *action, bool committed,
                         } else {
                                 msg.type = EXECUTED;
                                 msg.action = to_notify[i];
+                                msg.partition = partition;
                                 signal_queues[partition]->EnqueueBlocking(msg);
                         }
                 }
-        }
-        
-        local_actions.seal();
-        while ((cur = local_actions.dequeue()) != NULL) {
-                
-                /* XXX For now, can only handle a single piece per partition */
-                assert(cur == action);
-                lck_table->release_locks(cur, queue);
+
+                /* For now, can support only a single local abortable action */
+                local_actions.seal();
+                num_pending -= 1;
+                lck_table->release_locks(action, queue);
         }
 }
 
@@ -108,7 +111,6 @@ void split_executor::process_action(split_action *action)
 void split_executor::schedule_single_rvp(rendezvous_point *rvp)
 {
         split_message msg;
-        uint32_t partition;
 
         if (fetch_and_decrement(&rvp->counter) > 0) 
                 return;
@@ -117,9 +119,9 @@ void split_executor::schedule_single_rvp(rendezvous_point *rvp)
         msg.action = rvp->to_run;
         assert(msg.action != NULL);
         while (msg.action != NULL) {
-                partition = msg.action->get_partition_id();
+                msg.partition = msg.action->get_partition_id();
                 msg.action->clear_dependency_flag();
-                signal_queues[partition]->EnqueueBlocking(msg);
+                signal_queues[msg.partition]->EnqueueBlocking(msg);
                 msg.action = msg.action->get_rvp_sibling();
         }
 }
@@ -202,10 +204,27 @@ void split_executor::get_new_messages(linked_queue *release_queue,
                ready_queue->is_empty() == true);
 
         split_message msg;
-        uint32_t i;
+        uint64_t i, nmsgs;
+        bool success;
+
+        nmsgs = single_ready_queue->diff();
+        for (i = 0; i < nmsgs; ++i) {
+                success = single_ready_queue->Dequeue(&msg);
+                assert(success);
+                assert(msg.partition == config.partition_id);
+                if (msg.type == EXECUTED) {
+                        assert(msg.action->get_state() == split_action::EXECUTED);
+                        release_queue->enqueue(msg.action);
+                }
+                else if (msg.type == READY)
+                        ready_queue->enqueue(msg.action);
+                else
+                        assert(false);
+        }
         
+        /*
         for (i = 0; i < config.num_partitions; ++i) {
-                while (ready_queues[i]->Dequeue(&msg)) {
+                if (ready_queues[i]->Dequeue(&msg)) {
                         if (msg.type == EXECUTED) 
                                 release_queue->enqueue(msg.action);
                         else if (msg.type == READY) 
@@ -214,6 +233,8 @@ void split_executor::get_new_messages(linked_queue *release_queue,
                                 assert(false);                        
                 }
         }
+        */
+
         release_queue->seal();
         ready_queue->seal();
 }
@@ -249,6 +270,7 @@ ready_queue split_executor::process_release_msgs(linked_queue release_queue)
                         commit_action(cur);
 
                 temp.reset();
+                num_pending -= 1;
                 lck_table->release_locks(cur, &temp);
                 ready_queue::merge_queues(&accumulated, &temp);
         }
@@ -274,13 +296,15 @@ void split_executor::StartWorking()
         ready_queue to_exec;
         
         while (true) {
+                //                while (input_queue->Dequeue(&batch) == false)
+                //                        exec_pending();
                 batch = input_queue->DequeueBlocking();
                 num_pending = batch.num_actions;
                 num_outstanding = 0;
 
                 for (i = 0; i < batch.num_actions; ++i) {
                         num_outstanding += 1;
-                        process_action(batch.actions[i]);
+                        process_action(batch.actions[i]);      
                         assert(batch.actions[i]->done_locking);
                         while (num_outstanding > config.outstanding_threshold)
                                 exec_pending();

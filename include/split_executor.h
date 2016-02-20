@@ -19,7 +19,8 @@ enum message_t {
 };
 
 struct split_message {
-        message_t 	type;
+        uint32_t 	partition;
+        message_t 	type;        
         split_action 	*action;
 };
 
@@ -31,6 +32,7 @@ struct split_executor_config {
         uint32_t num_partitions;
         uint32_t partition_id;
         uint32_t outstanding_threshold;
+        SimpleQueue<split_message> *single_ready_queue;
         SimpleQueue<split_message> **ready_queues;
         SimpleQueue<split_message> **signal_queues;
         SimpleQueue<split_action_batch> *input_queue;
@@ -46,6 +48,7 @@ class split_executor : public Runnable {
         Table **tables;
         splt_inpt_queue *input_queue;
         splt_inpt_queue *output_queue;
+        splt_comm_queue *single_ready_queue;
         splt_comm_queue **ready_queues;
         splt_comm_queue **signal_queues;
         uint32_t num_pending;
