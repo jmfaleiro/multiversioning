@@ -531,7 +531,7 @@ public:
 
                 /* We're generating only two batches for now */
                 batches = (split_action_batch**)zmalloc(sizeof(split_action_batch*));
-                batches[0] = setup_action_batch(s_conf, w_conf, 1);
+                batches[0] = setup_action_batch(s_conf, w_conf, 10000);
                 std::cerr << "here!\n";
                 batches[1] = setup_action_batch(s_conf, w_conf, s_conf.num_txns);
                 std::cerr << "here!\n";
