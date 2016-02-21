@@ -34,7 +34,6 @@ class setup_split {
 public:
         
         static vector<uint32_t> *partitions_txns;
-        static splt_comm_queue ***comm_queues;
         static uint32_t num_split_tables;
         static uint64_t *split_table_sizes;
         static uint64_t *lock_table_sizes;
@@ -68,7 +67,8 @@ public:
                         t_conf.startCpu = partition;
                         t_conf.endCpu = partition+1;
                         t_conf.freeListSz = (split_table_sizes[0]*4)/s_conf.num_partitions;
-                        t_conf.valueSz = GLOBAL_RECORD_SIZE;
+                        //                        t_conf.valueSz = SPLIT_RECORD_SIZE(GLOBAL_RECORD_SIZE);
+                        t_conf.valueSz = sizeof(split_record);
                         t_conf.recordSize = 0;
                         init_tbl = (Table**)zmalloc(sizeof(Table*));
                         init_tbl[0] = new (partition) Table(t_conf);
@@ -97,22 +97,32 @@ public:
         {
                 uint32_t partition;
                 uint64_t i, j;
-                char buf[1000];
+                //                char buf[SPLIT_RECORD_SIZE(GLOBAL_RECORD_SIZE)];
+                
+                split_record record;
+                char *temp;
                 //                assert(s_conf.experiment == YCSB_UPDATE);
                 
+                record.key_struct = NULL;
                 for (i = 0; i < split_table_sizes[0]; ++i) {
-                        for (j = 0; j < 1000/sizeof(uint64_t); ++j)
-                                ((uint64_t*)buf)[j] = rand();
+                        //                        record->key_struct = NULL;
                         partition = get_partition(i, 0, s_conf.num_partitions);
-                        tbls[partition][0]->Put(i, buf);
+                        //                        buf = (char*)alloc_mem(GLOBAL_RECORD_SIZE, partition);
+                        temp = (char*)zmalloc(GLOBAL_RECORD_SIZE);
+                        for (j = 0; j < 1000/sizeof(uint64_t); ++j)
+                                ((uint64_t*)temp)[j] = rand();
+                        record.value = temp;
+                        tbls[partition][0]->Put(i, &record);
                 }
                 return;
         }
 
+        /*
         static uint32_t get_num_lock_structs()
         {
                 return LCK_TBL_SZ / sizeof(lock_struct);        
         }
+        */
 
         static bool edge_list_eq(vector<int> *first, vector<int> *second)
         {
@@ -228,17 +238,23 @@ public:
                 txn->get_reads(key_array);
                 for (i = 0; i < num_reads; ++i) {
                         temp_key._record = key_array[i];
-                        action->readset.push_back(temp_key);
+                        temp_key._action = action;
+                        temp_key._type = SPLIT_READ;
+                        action->_readset.push_back(temp_key);
                 }
                 txn->get_rmws(key_array);
                 for (i = 0; i < num_rmws; ++i) {
                         temp_key._record = key_array[i];
-                        action->writeset.push_back(temp_key);
+                        temp_key._action = action;
+                        temp_key._type = SPLIT_WRITE;
+                        action->_writeset.push_back(temp_key);
                 }
                 txn->get_writes(key_array);
                 for (i = 0; i < num_writes; ++i) {
                         temp_key._record = key_array[i];
-                        action->writeset.push_back(temp_key);        
+                        temp_key._action = action;
+                        temp_key._type = SPLIT_WRITE;
+                        action->_writeset.push_back(temp_key);
                 }
                 return action;
         }
@@ -499,44 +515,13 @@ public:
 
                 /* We're generating only two batches for now */
                 batches = (split_action_batch**)zmalloc(sizeof(split_action_batch*));
-                batches[0] = setup_action_batch(s_conf, w_conf, 10000);
+                batches[0] = setup_action_batch(s_conf, w_conf, 1);
                 std::cerr << "here!\n";
                 batches[1] = setup_action_batch(s_conf, w_conf, s_conf.num_txns);
                 std::cerr << "here!\n";
                 return batches;
         }
 
-        static splt_comm_queue** setup_signal_inputs(uint32_t partition, 
-                                                     split_config s_conf)
-        {
-                uint32_t i, num_partitions;
-                splt_comm_queue **ret;
-                size_t alloc_sz;
-
-                num_partitions = s_conf.num_partitions;
-                alloc_sz = sizeof(splt_comm_queue*)*num_partitions;
-                ret = (splt_comm_queue**)alloc_mem(alloc_sz, partition);
-
-                for (i = 0; i < num_partitions; ++i) 
-                        ret[i] = comm_queues[i][partition];
-                return ret;
-        }
-
-        /*
-         * Setup communication queues between executor threads.
-         */
-        static splt_comm_queue*** setup_comm_queues(split_config s_conf)
-        {
-                splt_comm_queue ***ret;
-                uint32_t i;
-        
-                ret = (splt_comm_queue***)zmalloc(sizeof(splt_comm_queue**)*
-                                                  s_conf.num_partitions);
-                for (i = 0; i < s_conf.num_partitions; ++i) 
-                        ret[i] = setup_queues<split_message>(s_conf.num_partitions, 
-                                                             (1<<10));
-                return ret;
-        }
 
         /*
          * Setup action input queues for executors.
@@ -551,6 +536,7 @@ public:
         /*
          * Setup lock table config.
          */
+        /*
         static struct lock_table_config setup_lock_table_config(uint32_t cpu, 
                                                                 __attribute__((unused)) split_config s_conf)
         {
@@ -565,31 +551,25 @@ public:
                 };
                 return ret;
         }
+        */
 
         static struct split_executor_config setup_exec_config(uint32_t cpu, 
                                                               uint32_t num_partitions, 
                                                               uint32_t partition_id,
-                                                              splt_comm_queue **ready_queues,
-                                                              splt_comm_queue **comm_inputs,
                                                               splt_inpt_queue *input_queue,
                                                               splt_inpt_queue *output_queue,
                                                               split_config s_conf, 
                                                               Table **tables)
         {
                 struct split_executor_config exec_conf;
-                struct lock_table_config lck_conf;
 
-                lck_conf = setup_lock_table_config(cpu, s_conf);
                 exec_conf = {
                         cpu,
                         num_partitions,
                         partition_id,
                         s_conf.num_outstanding,
-                        ready_queues,
-                        comm_inputs,
                         input_queue,
                         output_queue,
-                        lck_conf,
                         tables,
                 };
                 return exec_conf;
@@ -606,18 +586,13 @@ public:
         {
                 split_executor **ret;
                 split_executor_config conf;
-                splt_comm_queue **comm_inputs;
                 uint32_t i;
 
                 ret = (split_executor**)
                         zmalloc(sizeof(split_executor*)*s_conf.num_partitions);
-                comm_queues = setup_comm_queues(s_conf);
                 for (i = 0; i < s_conf.num_partitions; ++i) {
                         assert(in_queues[i] != NULL && out_queues[i] != NULL);
-                        comm_inputs = setup_signal_inputs(i, s_conf);
                         conf = setup_exec_config(i, s_conf.num_partitions, i, 
-                                                 comm_queues[i],
-                                                 comm_inputs, 
                                                  in_queues[i],
                                                  out_queues[i],
                                                  s_conf,
@@ -677,31 +652,6 @@ public:
                 barrier();
                 
                 return diff_time(end_time, start_time);
-        }
-
-        static uint32_t single_comm(splt_comm_queue **txn_queues, 
-                                    uint32_t num_partitions)
-        {
-                uint32_t i, count;
-                split_message msg;
-
-                count = 0;
-                for (i = 0; i < num_partitions; ++i) {
-                        while (txn_queues[i]->Dequeue(&msg))
-                                count += 1;
-                }
-                return count;                
-        }
-
-        static void check_comm(uint32_t expected_count, split_config s_conf)
-        {
-                uint32_t num_partitions, i;
-                uint32_t count = 0;
-                
-                num_partitions = s_conf.num_partitions;
-                for (i = 0; i < num_partitions; ++i)
-                        count += single_comm(comm_queues[i], num_partitions);
-                assert(expected_count == count);
         }
 
         static void write_output(split_config conf,

@@ -488,7 +488,6 @@ void LockingExperiment(LockingConfig config) {
 
 uint32_t setup_split::num_split_tables = 0;
 uint64_t* setup_split::split_table_sizes = NULL;
-splt_comm_queue*** setup_split::comm_queues = NULL;
 vector<uint32_t> *setup_split::partitions_txns = NULL;
 uint64_t *setup_split::lock_table_sizes = NULL;
 

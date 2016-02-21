@@ -6,49 +6,20 @@
 #include <db.h>
 #include <graph.h>
 #include <action.h>
-#include <table.h>
 
-class split_action_queue {
- protected:
-        split_action 	*_head;
-        split_action 	*_tail;
-        bool 		_sealed;
-
- public:
-        split_action_queue();
-        void seal();
-        void reset();
-        bool is_empty();
-
-        virtual void enqueue(split_action *action) = 0;
-        virtual split_action* dequeue() = 0;
-};
-
-class ready_queue : public split_action_queue {
- public:
-        ready_queue();
-        void enqueue(split_action *action);
-        split_action* dequeue();
-
-        void static merge_queues(ready_queue *merge_into, 
-                                 ready_queue *merge_from);
-};
-
-class linked_queue : public split_action_queue {
- public:
-        linked_queue();
-        void enqueue(split_action *action);
-        split_action* dequeue();
+enum access_t {
+        SPLIT_READ,
+        SPLIT_WRITE,
 };
 
 struct split_key {
-        big_key _record;	/* Record indexed by this key */
-        void *_value;		
-};
-
-class split_txn : public txn {
- public:
-        virtual txn_graph* convert_to_graph();
+        big_key 	_record;	/* Record indexed by this key */
+        void 		*_value;		
+        split_action 	*_action;
+        access_t 	_type;
+        split_action 	*_dep;
+        split_key 	*_read_dep;
+        uint32_t 	_read_count;
 };
 
 class split_action;
@@ -86,7 +57,6 @@ class split_action : public translator {
  public:
         enum split_action_state {
                 UNPROCESSED,
-                LOCKED,
                 SCHEDULED,
                 EXECUTED,
                 COMPLETE,
@@ -99,67 +69,48 @@ class split_action : public translator {
         friend class linked_queue;
 
  private:
-        split_action::split_action_state state;
+        volatile uint64_t 		_state;
         
         /* Data for abortable actions */
-        bool 			can_abort;
-        commit_rvp 		*commit_rendezvous;
+        bool 				_can_abort;
+        commit_rvp 			*_commit_rendezvous;
 
         /* Data for upstream nodes  */
-        rendezvous_point 	**rvps;
+        rendezvous_point 		**_rvps;
 
         /* Data for downstream nodes */
-        split_action 		*rvp_sibling;
-        volatile bool 		dependency_flag;
+        split_action 			*_rvp_sibling;
+        volatile uint64_t 		_dependency_flag;
  
-        /* State for local locks */
-        uint32_t 		num_pending_locks;
-        void 			*list_ptr;
-        split_action 		*ready_ptr;
-        split_action 		*link_ptr;
-        bool 			done_locking;
-        bool 			scheduled;
-
         /* The partition on which this sub-action needs to execute. */
-        uint32_t partition_id;
-        
-        Table **tables;
-        bool shortcut;
+        uint32_t 			_partition_id;
+
+        split_action 			*_left;
+        split_action 			*_right;
+
+        uint32_t 			_read_index;
+        uint32_t 			_write_index;
 
  public:
 
-        //        split_action *exec_list;
-        std::vector<split_key> readset;
-        std::vector<split_key> writeset;
-        uint32_t rvp_count;
+        std::vector<split_key> 		_readset;
+        std::vector<split_key> 		_writeset;
+        uint32_t 			_rvp_count;
         
         split_action(txn *t, uint32_t partition_id, uint64_t dependency_flag, 
                      bool can_abort);
-        bool ready();
-        bool remote_deps();
+        uint64_t remote_deps();
         virtual bool run();
-        virtual void release_multi_partition();
         uint32_t get_partition_id();
         
         /* Abstract action state machine */
         split_action::split_action_state get_state();
-        void transition_locked();
         void transition_scheduled();
         void transition_executed();
         void transition_complete();
+        void transition_complete_remote();
 
-        /* Interface used by local lock table */
-        void set_lock_list(void* list_ptr);
-        void* get_lock_list();
-        virtual void decr_pending_locks();
-        virtual void incr_pending_locks();
-        void set_lock_flag();
-        bool shortcut_flag();
-        void set_shortcut_flag();
-        void reset_shortcut_flag();
-        bool decr_abortable_count();
         bool abortable();
-        bool can_commit();
         
         /* Rendezvous point functions */
         void set_rvp(rendezvous_point *rvp);
