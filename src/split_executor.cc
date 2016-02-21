@@ -9,7 +9,7 @@ split_executor::split_executor(struct split_executor_config config)
         queue._count = 0;
 }
 
-void split_executor::sync_commit_rvp(split_action *action, bool committed)
+void split_executor::sync_commit_rvp(split_action *action, __attribute__((unused)) bool committed)
 {
         commit_rvp *rvp;
         bool sched_rights;
@@ -23,8 +23,9 @@ void split_executor::sync_commit_rvp(split_action *action, bool committed)
          * First determine whether the current action is responsible for 
          * notifying other partitions. Needed for idempotence.
          */
+        /*
         sched_rights = false;
-        rvp = action->get_commit_rvp();
+
         if (committed == false) {
                 if (cmp_and_swap(&rvp->status, (uint64_t)ACTION_UNDECIDED, 
                                  (uint64_t)ACTION_ABORTED)) 
@@ -34,11 +35,27 @@ void split_executor::sync_commit_rvp(split_action *action, bool committed)
                 prev_state = xchgq(&rvp->status, (uint64_t)ACTION_COMMITTED);
                 assert(prev_state == ACTION_UNDECIDED);
         }
-        
+        */        
+
+        sched_rights = true;
+        rvp = action->get_commit_rvp();
+        to_notify = rvp->to_notify;
+        barrier();
+        for (i = 0; i < rvp->num_actions; ++i) {
+                prev_state = to_notify[i]->_state;
+                if (prev_state != split_action::EXECUTED) {
+                        sched_rights = false;
+                        break;
+                }
+        }
+        barrier();
         if (sched_rights) {
                 to_notify = rvp->to_notify;
-                for (i = 0; i < rvp->num_actions; ++i) 
-                        to_notify[i]->transition_complete_remote();
+                for (i = 0; i < rvp->num_actions; ++i) {
+                        prev_state = xchgq(&to_notify[i]->_state, (uint64_t)split_action::COMPLETE);
+                        if (prev_state != split_action::EXECUTED)
+                                break;
+                }
         }
 }
 

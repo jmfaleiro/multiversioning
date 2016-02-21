@@ -63,10 +63,10 @@ public:
                     s_conf.experiment == 1 ||
                     s_conf.experiment == 2) {
                         t_conf.tableId = 0;
-                        t_conf.numBuckets = (split_table_sizes[0]*4)/s_conf.num_partitions;
+                        t_conf.numBuckets = (split_table_sizes[0])/s_conf.num_partitions;
                         t_conf.startCpu = partition;
                         t_conf.endCpu = partition+1;
-                        t_conf.freeListSz = (split_table_sizes[0]*4)/s_conf.num_partitions;
+                        t_conf.freeListSz = (split_table_sizes[0]*2)/s_conf.num_partitions;
                         //                        t_conf.valueSz = SPLIT_RECORD_SIZE(GLOBAL_RECORD_SIZE);
                         t_conf.valueSz = sizeof(split_record);
                         t_conf.recordSize = 0;
@@ -107,7 +107,7 @@ public:
                 for (i = 0; i < split_table_sizes[0]; ++i) {
                         //                        record->key_struct = NULL;
                         partition = get_partition(i, 0, s_conf.num_partitions);
-                        //                        buf = (char*)alloc_mem(GLOBAL_RECORD_SIZE, partition);
+                        //                        temp = (char*)alloc_mem(GLOBAL_RECORD_SIZE, partition);
                         temp = (char*)zmalloc(GLOBAL_RECORD_SIZE);
                         for (j = 0; j < 1000/sizeof(uint64_t); ++j)
                                 ((uint64_t*)temp)[j] = rand();

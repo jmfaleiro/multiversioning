@@ -137,7 +137,7 @@ void split_action::transition_executed()
 {
         assert(_state == split_action::SCHEDULED);
         assert(_can_abort == true);
-        _state = split_action::EXECUTED;        
+        xchgq(&_state, (uint64_t)split_action::EXECUTED);
 }
 
 /* 
@@ -157,7 +157,6 @@ void split_action::transition_complete_remote()
         uint64_t val;
         val = (uint64_t)split_action::COMPLETE;
         val = xchgq(&_state, val);
-        assert(val == split_action::EXECUTED);        
 }
 
 commit_rvp* split_action::get_commit_rvp()
