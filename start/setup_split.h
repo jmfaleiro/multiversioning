@@ -67,7 +67,7 @@ public:
                         t_conf.startCpu = partition;
                         t_conf.endCpu = partition+1;
                         t_conf.freeListSz = (split_table_sizes[0]*2)/s_conf.num_partitions;
-                        //                        t_conf.valueSz = SPLIT_RECORD_SIZE(GLOBAL_RECORD_SIZE);
+                        // t_conf.valueSz = SPLIT_RECORD_SIZE(GLOBAL_RECORD_SIZE);
                         t_conf.valueSz = sizeof(split_record);
                         t_conf.recordSize = 0;
                         init_tbl = (Table**)zmalloc(sizeof(Table*));
@@ -95,23 +95,39 @@ public:
         /* XXX Initializes only a single table */
         static void init_tables(split_config s_conf, Table ***tbls)
         {
-                uint32_t partition;
+                uint32_t partition, index;
+                uint32_t partition_sizes[s_conf.num_partitions];
+                uint32_t p_indices[s_conf.num_partitions];
+                char *arrays[s_conf.num_partitions], *buf;
                 uint64_t i, j;
-                //                char buf[SPLIT_RECORD_SIZE(GLOBAL_RECORD_SIZE)];
                 
                 split_record record;
-                char *temp;
+
                 //                assert(s_conf.experiment == YCSB_UPDATE);
+                for (i = 0; i < s_conf.num_partitions; ++i) 
+                        partition_sizes[i] = 0;
                 
-                record.key_struct = NULL;
+                
                 for (i = 0; i < split_table_sizes[0]; ++i) {
-                        //                        record->key_struct = NULL;
                         partition = get_partition(i, 0, s_conf.num_partitions);
-                        //                        temp = (char*)alloc_mem(GLOBAL_RECORD_SIZE, partition);
-                        temp = (char*)zmalloc(GLOBAL_RECORD_SIZE);
+                        partition_sizes[partition] += 1;
+                }
+
+                for (i = 0; i < s_conf.num_partitions; ++i) {
+                        arrays[i] = (char*)alloc_mem(partition_sizes[i]*GLOBAL_RECORD_SIZE, i);
+                        memset(arrays[i], 0x0, partition_sizes[i]*GLOBAL_RECORD_SIZE);
+                        p_indices[i] = 0;
+                }
+                
+                for (i = 0; i < split_table_sizes[0]; ++i) {
+                        record.key_struct = NULL;
+                        partition = get_partition(i, 0, s_conf.num_partitions);
+                        index = p_indices[partition];
+                        p_indices[partition] += 1;
+                        buf = (char*)&arrays[partition][GLOBAL_RECORD_SIZE*index];
+                        record.value = buf;
                         for (j = 0; j < 1000/sizeof(uint64_t); ++j)
-                                ((uint64_t*)temp)[j] = rand();
-                        record.value = temp;
+                                ((uint64_t*)buf)[j] = rand();
                         tbls[partition][0]->Put(i, &record);
                 }
                 return;
