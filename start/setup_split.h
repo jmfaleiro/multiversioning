@@ -38,6 +38,16 @@ public:
         static uint64_t *split_table_sizes;
         static uint64_t *lock_table_sizes;
 
+        static uint32_t get_num_batches(split_config s_conf)
+        {
+                uint32_t ret;
+
+                ret = s_conf.num_txns / s_conf.epoch_size;
+                if (s_conf.num_txns % s_conf.epoch_size > 0)
+                        ret += 1;
+                return ret;
+        }
+
         /*
          * XXX Fix up this function to take different experiments into account.
          */
@@ -100,7 +110,6 @@ public:
                 uint32_t p_indices[s_conf.num_partitions];
                 char *arrays[s_conf.num_partitions], *buf;
                 uint64_t i, j;
-                
                 split_record record;
 
                 //                assert(s_conf.experiment == YCSB_UPDATE);
@@ -120,6 +129,9 @@ public:
                 }
                 
                 for (i = 0; i < split_table_sizes[0]; ++i) {
+                        record.key.key = (uint64_t)i;
+                        record.key.table_id = 0;
+                        record.epoch = 0;
                         record.key_struct = NULL;
                         partition = get_partition(i, 0, s_conf.num_partitions);
                         index = p_indices[partition];
@@ -233,7 +245,6 @@ public:
                 uint32_t num_reads, num_rmws, num_writes, max, i;
                 big_key *key_array;
                 split_action *action;
-                split_key temp_key;
 
                 action = new split_action(txn, partition_id, dependency_flag, 
                                           can_commit);
@@ -241,7 +252,6 @@ public:
                 num_reads = txn->num_reads();
                 num_writes = txn->num_writes();
                 num_rmws = txn->num_rmws();
-                temp_key._value = NULL;
 
                 if (num_reads >= num_writes && num_reads >= num_rmws) 
                         max = num_reads;
@@ -252,25 +262,17 @@ public:
                 key_array = (big_key*)zmalloc(sizeof(big_key)*max);
                 
                 txn->get_reads(key_array);
-                for (i = 0; i < num_reads; ++i) {
-                        temp_key._record = key_array[i];
-                        temp_key._action = action;
-                        temp_key._type = SPLIT_READ;
-                        action->_readset.push_back(temp_key);
-                }
+                for (i = 0; i < num_reads; ++i) 
+                        action->_readset.push_back(key_array[i]);
+                
                 txn->get_rmws(key_array);
                 for (i = 0; i < num_rmws; ++i) {
-                        temp_key._record = key_array[i];
-                        temp_key._action = action;
-                        temp_key._type = SPLIT_WRITE;
-                        action->_writeset.push_back(temp_key);
+                        action->_writeset.push_back(key_array[i]);
                 }
+
                 txn->get_writes(key_array);
                 for (i = 0; i < num_writes; ++i) {
-                        temp_key._record = key_array[i];
-                        temp_key._action = action;
-                        temp_key._type = SPLIT_WRITE;
-                        action->_writeset.push_back(temp_key);
+                        action->_writeset.push_back(key_array[i]);
                 }
                 return action;
         }
@@ -306,6 +308,7 @@ public:
                                 phases->push_back(node_phase);
                                 barrier();
                                 rvp->counter = get_parent_count(node);
+                                rvp->num_actions = rvp->counter;
                                 barrier();
                                 rvp->to_run = NULL;
                         }
@@ -528,13 +531,28 @@ public:
         static split_action_batch** setup_input(split_config s_conf, workload_config w_conf)
         {
                 split_action_batch **batches;
+                uint32_t num_batches, i, remaining;
+                
+                num_batches = get_num_batches(s_conf);
 
                 /* We're generating only two batches for now */
-                batches = (split_action_batch**)zmalloc(sizeof(split_action_batch*));
-                batches[0] = setup_action_batch(s_conf, w_conf, 10000);
-                std::cerr << "here!\n";
-                batches[1] = setup_action_batch(s_conf, w_conf, s_conf.num_txns);
-                std::cerr << "here!\n";
+                batches = (split_action_batch**)zmalloc((1+num_batches)*sizeof(split_action_batch*));
+                batches[0] = setup_action_batch(s_conf, w_conf, 1);
+
+                std::cerr << num_batches << "\n";                
+                remaining = s_conf.num_txns;
+                for (i = 1; i < num_batches + 1; ++i) {
+                        if (remaining >= s_conf.epoch_size) {
+                                batches[i] = setup_action_batch(s_conf, w_conf, s_conf.epoch_size);
+                                remaining -= s_conf.epoch_size;
+                        } else if (s_conf.epoch_size - remaining > 0) {
+                                batches[i] = setup_action_batch(s_conf, w_conf, remaining);
+                                remaining -= remaining;
+                        } else {
+                                assert(false);
+                        }
+                }
+                assert(remaining == 0);
                 return batches;
         }
 
@@ -628,19 +646,12 @@ public:
         static timespec do_experiment(split_action_batch** inputs, 
                                       splt_inpt_queue **input_queues, 
                                       splt_inpt_queue **output_queues,
-                                      uint32_t num_batches,
                                       split_config s_conf)
         {
-                uint32_t i;
+                uint32_t i, j, num_batches;
                 split_action_batch *cur_batch;
                 timespec start_time, end_time;
 
-                /* One warmup, one real */
-                assert(num_batches == 2);
-
-                for (i = 0; i < s_conf.num_partitions; ++i) 
-                        std::cerr << inputs[1][i].num_actions << "\n";
-        
                 /* Do warmup */
                 cur_batch = inputs[0];
                 for (i = 0; i < s_conf.num_partitions; ++i) {
@@ -651,18 +662,20 @@ public:
                 }
                 
                 /* Do real batch */
+                num_batches = get_num_batches(s_conf);
                 barrier();
                 clock_gettime(CLOCK_REALTIME, &start_time);
                 barrier();
-
-                cur_batch = inputs[1];
-                for (i = 0; i < s_conf.num_partitions; ++i) {
-                        input_queues[i]->EnqueueBlocking(cur_batch[i]);
+                for (j = 0; j < num_batches; ++j) {
+                        for (i = 0; i < s_conf.num_partitions; ++i) 
+                                input_queues[i]->EnqueueBlocking(inputs[j+1][i]);
                 }
-                for (i = 0; i < s_conf.num_partitions; ++i) {
-                        output_queues[i]->DequeueBlocking();
+                
+                for (j = 0; j < num_batches; ++j) {
+                        for (i = 0; i < s_conf.num_partitions; ++i) 
+                                output_queues[i]->DequeueBlocking();
                 }
-
+                
                 barrier();
                 clock_gettime(CLOCK_REALTIME, &end_time);
                 barrier();
@@ -671,7 +684,8 @@ public:
         }
 
         static void write_output(split_config conf,
-                                 double elapsed_milli)
+                                 double elapsed_milli, 
+                                 workload_config w_conf)
         {
                 std::ofstream result_file;
 
@@ -690,8 +704,8 @@ public:
                         result_file << "abort test " << " ";
                 else if (conf.experiment == 3) 
                         result_file << "small_bank" << " ";
-                else if (conf.experiment == 4)
-                        result_file << "ycsb_update" << " ";
+                else if (conf.experiment == 4) 
+                        result_file << "ycsb_update" << " " << "abort_pos:" << w_conf.abort_pos << " ";
                 else
                         assert(false);
  
@@ -735,7 +749,6 @@ public:
 
                 splt_inpt_queue **input_queues, **output_queues;
                 split_action_batch **inputs;
-                uint32_t num_batches;
                 timespec exp_time;
                 double elapsed_milli;
                 Table ***tables;
@@ -744,7 +757,6 @@ public:
                 tables = setup_tables(s_conf);
                 init_tables(s_conf, tables);
 
-                num_batches = 2;
                 input_queues = setup_input_queues(s_conf);
                 output_queues = setup_input_queues(s_conf);
                 
@@ -755,11 +767,11 @@ public:
                 std::cerr << "Setup input\n";
                 setup_threads(s_conf, input_queues, output_queues, tables);
                 std::cerr << "Setup database threads\n";
-                exp_time = do_experiment(inputs, input_queues, output_queues, num_batches, s_conf);
+                exp_time = do_experiment(inputs, input_queues, output_queues, s_conf);
                 std::cerr << "Done experiment\n";
                 elapsed_milli =
                         1000.0*exp_time.tv_sec + exp_time.tv_nsec/1000000.0;
-                write_output(s_conf, elapsed_milli);
+                write_output(s_conf, elapsed_milli, w_conf);
         }
 };
 

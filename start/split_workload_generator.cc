@@ -38,16 +38,19 @@ graph_node* find_node(uint32_t partition, txn_graph *graph)
         return NULL;
 }
 
+
 txn_graph* gen_ycsb_update(RecordGenerator *gen, workload_config conf, 
-                           uint32_t num_partitions)
+                           uint32_t num_partitions,
+                           std::set<uint64_t> *seen_keys)
 {
+        //        assert(conf.txn_size == 9);
         assert(conf.experiment == YCSB_UPDATE);
-        set<uint64_t> seen;
         set<uint32_t> partitions;
         vector<uint64_t> writes, args;
         uint64_t updates[10], key;
         uint32_t i, j, write_check, partition;
-        
+        vector<graph_node*> abortables;
+
         vector<graph_node*> *nodes;
         graph_node *cur_node;
         txn_graph *graph;
@@ -58,9 +61,8 @@ txn_graph* gen_ycsb_update(RecordGenerator *gen, workload_config conf,
         for (i = 0; i < 10; ++i) 
                 updates[i] = rand();
         
-        /* Generate keys */
         for (i = 0; i < conf.txn_size; ++i) {
-                key = gen_unique_key(gen, &seen);
+                key = gen_unique_key(gen, seen_keys);
                 writes.push_back(key);
                 partition = get_partition(key, 0, num_partitions);
                 if ((cur_node = find_node(partition, graph)) == NULL) {
@@ -69,7 +71,7 @@ txn_graph* gen_ycsb_update(RecordGenerator *gen, workload_config conf,
                         graph->add_node(cur_node);
                 }                                
         }
-        assert(seen.size() == writes.size());
+        //        assert(seen->size() == writes.size());
         
         /* Create actions */
         nodes = graph->get_nodes();
@@ -89,17 +91,69 @@ txn_graph* gen_ycsb_update(RecordGenerator *gen, workload_config conf,
                 assert(args.size() != 0);
                 cur_node->app = new ycsb_update(args, updates);
                 /* XXX REMOVE THIS */
-                cur_node->abortable = true;
+                // cur_node->abortable = true;
         }        
         assert(write_check == conf.txn_size);
         return graph;
 }
+
+txn_graph* gen_ycsb_abortable(RecordGenerator *gen, workload_config conf, 
+                              uint32_t num_partitions)
+{
+        txn_graph *abort_graph, *commit_graph;
+        workload_config conf_copy;
+        vector<graph_node*> *abort_nodes, *commit_nodes, new_nodes, old_nodes;
+        graph_node *cur, *new_node;
+        uint32_t i, j, sz, abort_sz;
+        std::set<uint64_t> seen_keys;
+
+        conf_copy = conf;
+        conf_copy.txn_size = conf.abort_pos;        
+        abort_graph = gen_ycsb_update(gen, conf_copy, num_partitions, 
+                                      &seen_keys);
+        abort_nodes = abort_graph->get_nodes();
+        sz = abort_nodes->size();
+        for (i = 0; i < sz; ++i) {
+                (*abort_nodes)[i]->abortable = true;
+        }
+
+        conf_copy.txn_size = conf.txn_size - conf.abort_pos;
+        commit_graph = gen_ycsb_update(gen, conf_copy, num_partitions, 
+                                       &seen_keys);
+        commit_nodes = commit_graph->get_nodes();
+        sz = commit_nodes->size();
+        for (i = 0; i < sz; ++i) {
+                cur = (*commit_nodes)[i];
+                new_node = new graph_node();
+                new_node->app = cur->app;
+                new_node->abortable = false;
+                new_node->partition = cur->partition;
+                new_nodes.push_back(new_node);
+        }
+        delete(commit_graph);
+        
+        abort_sz = abort_nodes->size();
+        for (i = 0; i < abort_sz; ++i) {
+                old_nodes.push_back((*abort_nodes)[i]);
+        }
+        
+        for (i = 0; i < sz; ++i) {
+                abort_graph->add_node(new_nodes[i]);
+                for (j = 0; j < abort_sz; ++j) {
+                        abort_graph->add_edge(old_nodes[j], new_nodes[i]);
+                }
+        }
+        return abort_graph;
+}
+
+
 
 /*
  * Generate two abortable ppieces, and one non-abortable piece that follows.
  */
 txn_graph* generate_abortable_action(RecordGenerator *gen, workload_config conf,
                                      uint32_t num_partitions)
+
 {
         assert(conf.experiment == 2);
 
@@ -110,7 +164,7 @@ txn_graph* generate_abortable_action(RecordGenerator *gen, workload_config conf,
         simple_split *txn;
         vector<uint64_t> records;
         std::set<uint64_t> seen_keys;
-        
+
         graph = new txn_graph();
 
         rec0 = gen_unique_key(gen, &seen_keys);
@@ -294,6 +348,6 @@ txn_graph* generate_split_action(workload_config conf, uint32_t num_partitions)
         else if (conf.experiment == 2)
                 return generate_abortable_action(my_gen, conf, num_partitions);
         else if (conf.experiment == YCSB_UPDATE)
-                return gen_ycsb_update(my_gen, conf, num_partitions);
+                return gen_ycsb_abortable(my_gen, conf, num_partitions);
         assert(false);
 }

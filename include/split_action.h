@@ -12,13 +12,13 @@ enum access_t {
         SPLIT_WRITE,
 };
 
-struct split_key {
-        big_key 	_record;	/* Record indexed by this key */
+struct split_dep {
+        big_key 	_key;
         void 		*_value;		
         split_action 	*_action;
         access_t 	_type;
         split_action 	*_dep;
-        split_key 	*_read_dep;
+        split_dep 	*_read_dep;
         uint32_t 	_read_count;
 };
 
@@ -26,6 +26,7 @@ class split_action;
 
 struct rendezvous_point {
         volatile uint64_t __attribute__((__packed__, __aligned__(CACHE_LINE))) counter;
+        uint64_t num_actions;
         split_action *to_run;
 };
 
@@ -75,6 +76,7 @@ class split_action : public translator {
         bool 				_can_abort;
         commit_rvp 			*_commit_rendezvous;
 
+
         /* Data for upstream nodes  */
         rendezvous_point 		**_rvps;
 
@@ -87,14 +89,15 @@ class split_action : public translator {
 
         split_action 			*_left;
         split_action 			*_right;
-
-        uint32_t 			_read_index;
-        uint32_t 			_write_index;
+        
+        uint32_t 			_dep_index;
+        split_dep 			*_dependencies;
+        bool 				_outstanding_flag;
 
  public:
 
-        std::vector<split_key> 		_readset;
-        std::vector<split_key> 		_writeset;
+        std::vector<big_key> 		_readset;
+        std::vector<big_key> 		_writeset;
         uint32_t 			_rvp_count;
         
         split_action(txn *t, uint32_t partition_id, uint64_t dependency_flag, 

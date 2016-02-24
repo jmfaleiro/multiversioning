@@ -53,6 +53,30 @@ def compute_avg_records(input_file):
     return throughput_dict
 
 
+def compute_avg_aborts(input_file):
+    inpt = open(input_file)
+    throughput_dict = {}
+    for line in inpt:
+        splits = line.split()
+        for s in splits:
+            if s.startswith("abort_pos:"):
+                pos_str = s[len("abort_pos:"):]
+                pos = int(pos_str)
+            elif s.startswith("txns:"):
+                txns_str = s[len("txns:"):]
+                txns = float(txns_str)
+            elif s.startswith("time:"):
+                time_str = s[len("time:"):]
+                time = float(time_str)
+        throughput = (1.0*txns)/time
+        if not pos in throughput_dict:
+            throughput_dict[pos] = []
+        throughput_dict[pos].append(throughput)
+        print txns
+    for key in throughput_dict:
+        thpt_list = throughput_dict[key]
+        thpt_list.sort()
+    return throughput_dict
 
 def compute_avg_locking_theta(input_file):
     inpt = open(input_file)
@@ -191,6 +215,12 @@ def theta_fn(input_type, input_file, output_file):
     elif input_type == "mv":
         my_dict = compute_avg_mv_theta(input_file)
     write_output(my_dict, output_file)
+
+def abort_fn(input_file, output_file):
+    my_dict = compute_avg_aborts(input_file)
+    print my_dict
+    write_output(my_dict, output_file)
+
 
 def clean_fn(input_type, input_file, output_file, only_worker=False):
     if input_type == "locking":

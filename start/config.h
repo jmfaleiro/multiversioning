@@ -29,7 +29,8 @@ static struct option long_options[] = {
   {"read_txn_size", required_argument, NULL, 15},
   {"num_partitions", required_argument, NULL, 16},
   {"num_outstanding", required_argument, NULL, 17},
-  {NULL, no_argument, NULL, 18},
+  {"abort_pos", required_argument, NULL, 18},
+  {NULL, no_argument, NULL, 19},
 };
 
 enum exp_codes {
@@ -54,6 +55,7 @@ struct workload_config
         double theta;
         uint32_t read_pct;
         uint32_t read_txn_size;
+        uint32_t abort_pos;
 };
 
 enum ConcurrencyControl {
@@ -125,6 +127,7 @@ struct split_config {
         int read_pct;
         int read_txn_size;
         uint32_t num_outstanding;
+        uint32_t epoch_size;
 };
 
 struct MVConfig {
@@ -164,6 +167,7 @@ class ExperimentConfig {
     READ_TXN_SIZE,
     NUM_PARTITIONS,
     NUM_OUTSTANDING,
+    ABORT_POS,
   };
   unordered_map<int, char*> argMap;
 
@@ -383,7 +387,8 @@ class ExperimentConfig {
           argMap.count(DISTRIBUTION) == 0 ||
           argMap.count(READ_PCT) == 0 ||
           argMap.count(READ_TXN_SIZE) == 0 ||
-          argMap.count(NUM_OUTSTANDING) == 0) {
+          argMap.count(NUM_OUTSTANDING) == 0 || 
+          argMap.count(EPOCH_SIZE) == 0) {
         
         std::cerr << "Missing one or more SPLIT params\n";
         std::cerr << "--" << long_options[NUM_PARTITIONS].name << "\n";
@@ -396,6 +401,7 @@ class ExperimentConfig {
         std::cerr << "--" << long_options[READ_PCT].name << "\n";
         std::cerr << "--" << long_options[READ_TXN_SIZE].name << "\n";
         std::cerr << "--" << long_options[NUM_OUTSTANDING].name << "\n";
+        std::cerr << "--" << long_options[EPOCH_SIZE].name << "\n";
         exit(-1);
       }
       
@@ -410,8 +416,11 @@ class ExperimentConfig {
       split_conf.read_pct = (int)atoi(argMap[READ_PCT]);
       split_conf.read_txn_size = (int)atoi(argMap[READ_TXN_SIZE]);
       split_conf.num_outstanding = (uint32_t)atoi(argMap[NUM_OUTSTANDING]);
+      split_conf.epoch_size = (uint32_t)atoi(argMap[EPOCH_SIZE]);
       if (argMap.count(THETA) > 0)
               split_conf.theta = (double)atof(argMap[THETA]);
+      if (argMap.count(ABORT_POS) > 0)
+              w_conf.abort_pos = (uint32_t)atoi(argMap[ABORT_POS]);
       this->ccType = SPLIT;
     }
 

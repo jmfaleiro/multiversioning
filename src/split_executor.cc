@@ -7,6 +7,35 @@ split_executor::split_executor(struct split_executor_config config)
         queue._head = NULL;
         queue._tail = NULL;
         queue._count = 0;
+        init_dep_array();
+        epoch = 1;
+}
+
+void split_executor::init_dep_array()
+{
+        dep_array = (split_dep*)alloc_mem(DEP_ARRAY_SZ*sizeof(split_dep), config.partition_id);
+        memset(dep_array, 0x0, DEP_ARRAY_SZ*sizeof(split_dep));
+        dep_index = 0;
+}
+
+uint64_t split_executor::cur_dep()
+{
+        return dep_index;
+}
+
+split_dep* split_executor::get_dep()
+{
+        split_dep *ret;
+        
+        assert(dep_index < DEP_ARRAY_SZ);
+        ret = &dep_array[dep_index];
+        dep_index += 1;
+        return ret;
+}
+
+void split_executor::reset_dep()
+{
+        dep_index = 0;
 }
 
 void split_executor::sync_commit_rvp(split_action *action, __attribute__((unused)) bool committed)
@@ -23,20 +52,26 @@ void split_executor::sync_commit_rvp(split_action *action, __attribute__((unused
          * First determine whether the current action is responsible for 
          * notifying other partitions. Needed for idempotence.
          */
-        /*
         sched_rights = false;
-
+        rvp = action->get_commit_rvp();
+        to_notify = rvp->to_notify;
         if (committed == false) {
                 if (cmp_and_swap(&rvp->status, (uint64_t)ACTION_UNDECIDED, 
-                                 (uint64_t)ACTION_ABORTED)) 
+                                 (uint64_t)ACTION_ABORTED))
                         sched_rights = true;         
         } else if (fetch_and_increment(&rvp->num_committed) == rvp->num_actions) {
                 sched_rights = true;
                 prev_state = xchgq(&rvp->status, (uint64_t)ACTION_COMMITTED);
                 assert(prev_state == ACTION_UNDECIDED);
         }
-        */        
+        
+        if (sched_rights == true) {
+                schedule_downstream_pieces(action);
+                for (i = 0; i < rvp->num_actions; ++i) 
+                        to_notify[i]->transition_complete_remote();
+        }
 
+        /*
         sched_rights = true;
         rvp = action->get_commit_rvp();
         to_notify = rvp->to_notify;
@@ -57,19 +92,22 @@ void split_executor::sync_commit_rvp(split_action *action, __attribute__((unused
                                 break;
                 }
         }
+        */
 }
 
 void split_executor::schedule_single_rvp(rendezvous_point *rvp)
 {
         split_action *action;
 
-        if (fetch_and_decrement(&rvp->counter) > 0) 
-                return;
+        if (fetch_and_decrement(&rvp->counter) == 0) {
+
         
-        action = rvp->to_run;
-        while (action != NULL) {
-                action->clear_dependency_flag();
-                action = action->get_rvp_sibling();
+                //                assert(rvp->counter == 0);
+                action = rvp->to_run;
+                while (action != NULL) {
+                        action->clear_dependency_flag();
+                        action = action->get_rvp_sibling();
+                }
         }
 }
 
@@ -98,107 +136,127 @@ void split_executor::StartWorking()
         while (true) {
                 batch = config.input_queue->DequeueBlocking();
                 schedule_batch(batch);
+                num_outstanding = 0;
                 run_batch(batch);
+                assert(num_outstanding == 0);
                 config.output_queue->EnqueueBlocking(batch);
         }
 }
 
-void split_executor::schedule_operation(split_key *key)
+void split_executor::schedule_operation(big_key &key, split_action *action, 
+                                        access_t type)
 {
         split_record *entry;
-        split_key *prev;
+        split_dep *prev, *cur;
+
 
         /* XXX Intialize the entry some how */
-        entry = (split_record*)config.tables[key->_record.table_id]->Get(key->_record.key);
-
+        entry = (split_record*)config.tables[key.table_id]->Get(key.key);
+        assert(entry->key == key);
         prev = entry->key_struct;
-        if (prev != NULL)
-                assert(prev->_value == entry->value);
-        key->_value = entry->value;
-        key->_read_count = 1;
-        key->_read_dep = key;
+        if (entry->epoch == epoch && prev != NULL) {
+                assert(prev->_key == key);
+                assert(prev->_value == entry->value);                
+        }
 
-        if (prev == NULL) {
-                key->_dep = NULL;
-                entry->key_struct = key;
-        } else if (key->_type == SPLIT_WRITE) {
-                key->_dep = prev->_action;
-                key->_read_count = 0;
-                entry->key_struct = key;
-        } else if (key->_type == SPLIT_READ && prev->_type == SPLIT_READ) {
-                key->_dep = prev->_dep;
+        cur = get_dep();
+        cur->_key = key;
+        cur->_value = entry->value;
+        cur->_action = action;
+        cur->_type = type;
+        cur->_read_count = 1;
+        cur->_read_dep = cur;
+        
+        if (prev == NULL || entry->epoch != epoch) {
+                entry->epoch = epoch;        
+                cur->_dep = NULL;
+                entry->key_struct = cur;
+                assert(cur->_dep != action);        
+        } else if (cur->_type == SPLIT_WRITE) {
+                cur->_dep = prev->_action;
+                cur->_read_count = 0;
+                entry->key_struct = cur;
+                assert(cur->_dep != action);        
+        } else if (cur->_type == SPLIT_READ && cur->_type == SPLIT_READ) {
+                cur->_dep = prev->_dep;
                 prev->_read_count += 1;
-                key->_read_dep = prev;
+                cur->_read_dep = prev;
         } else if (prev->_type == SPLIT_WRITE) {
-                assert(key->_type == SPLIT_READ);
-                key->_dep = prev->_action;
-                key->_read_count = 1;
-                key->_read_dep = key;
-                entry->key_struct = key;
+                assert(cur->_type == SPLIT_READ);
+                cur->_dep = prev->_action;
+                cur->_read_count = 1;
+                cur->_read_dep = cur;
+                entry->key_struct = cur;
         } else {
                 assert(false);
+        }
+}
+
+void split_executor::do_check()
+{
+        split_record *temp;
+        split_dep *check;
+
+        for (uint32_t i = 0; i < 1000; ++i) {
+                temp = (split_record*)config.tables[0]->Get((uint64_t)i);
+                assert(temp->key.key == (uint64_t)i);
+                check = temp->key_struct;
+                assert(check == NULL || check->_key.key == (uint64_t)i);
         }
 }
 
 void split_executor::schedule_single(split_action *action)
 {
         uint32_t nreads, nwrites, i;
-        split_key *key;
 
         assert(action->get_state() == split_action::UNPROCESSED);
         action->transition_scheduled();
+        action->_dependencies = &dep_array[dep_index];
+        action->_dep_index = 0;
+        action->_outstanding_flag = false;
+
         nreads = action->_readset.size();
-        for (i = 0; i < nreads; ++i) {
-                key = &action->_readset[i];
-                schedule_operation(key);
-        }
+        for (i = 0; i < nreads; ++i) 
+                schedule_operation(action->_readset[i], action, SPLIT_READ);
         
         nwrites = action->_writeset.size();
-        for (i = 0; i < nwrites; ++i) {
-                key = &action->_writeset[i];
-                schedule_operation(key);
-        }
+        for (i = 0; i < nwrites; ++i) 
+                schedule_operation(action->_writeset[i], action, SPLIT_WRITE);
 }
 
 void split_executor::schedule_batch(split_action_batch batch)
 {
         uint32_t i;
-        
-        for (i = 0; i < batch.num_actions; ++i)
+        uint64_t prev, cur;
+        reset_dep();        
+        for (i = 0; i < batch.num_actions; ++i) {
+                prev = dep_index;
                 schedule_single(batch.actions[i]);
+                cur = dep_index;
+                assert(cur - prev == batch.actions[i]->_writeset.size());
+        }
+        epoch += 1;
 }
 
 bool split_executor::check_ready(split_action *action)
 {
-        uint32_t i , num_reads, num_writes, *read_index, *write_index;
+        uint32_t num_deps, *dep_index;
         bool ready;        
         split_action *dep;
-
+        
         ready = true;
-        read_index = &action->_read_index;
-        num_reads = action->_readset.size();
-        for (; *read_index < num_reads; *read_index += 1) {
-                i = *read_index;
-                dep = action->_readset[i]._dep;
+        dep_index = &action->_dep_index;
+        num_deps = action->_readset.size() + action->_writeset.size();
+        while (*dep_index != num_deps) {
+                dep = action->_dependencies[*dep_index]._dep;
+                assert(dep != action);
                 if (dep != NULL && 
                     dep->get_state() != split_action::COMPLETE && 
                     process_action(dep) == false) {
                         ready = false;
                         break;
                 }                
-        }
-
-        write_index = &action->_write_index;
-        num_writes = action->_writeset.size();
-        for (; *write_index < num_writes; *write_index += 1) {
-                i = *write_index;
-                dep = action->_writeset[i]._dep;
-                if (dep != NULL &&
-                    dep->get_state() != split_action::COMPLETE &&
-                    process_action(dep) == false) {
-                        ready = false;
-                        break;
-                }
+                *dep_index += 1;
         }
         return ready;
 }
@@ -215,7 +273,7 @@ bool split_executor::process_action(split_action *action)
                 if (state == split_action::SCHEDULED &&
                     action->remote_deps() == 0) {
                         if (try_execute(action) == true) {
-                                return true;
+                                 return true;
                         } else {
                                 /* An ancestor hasn't yet finished */
                                 return false;
@@ -241,10 +299,9 @@ bool split_executor::try_execute(split_action *action)
                 commit = action->run();
                 if (action->abortable() == true) 
                         sync_commit_rvp(action, commit);
-                else {
-                        schedule_downstream_pieces(action);
+                else 
                         action->transition_complete();
-                }
+                schedule_downstream_pieces(action);
                 return true;
         } else {
                 return false;

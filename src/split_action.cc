@@ -66,13 +66,15 @@ rendezvous_point** split_action::get_rvps()
 
 void* split_action::write_ref(uint64_t key, uint32_t table_id)
 {
-        uint32_t index, num_writes;
-        split_key *k;
+        uint32_t index, num_writes, num_reads;
+        split_dep *k;
         
         num_writes = _writeset.size();
-        for (index = 0; index < num_writes; ++index) {
-                k = &_writeset[index];
-                if (k->_record.key == key && k->_record.table_id == table_id) {
+        num_reads = _readset.size();
+        num_writes += num_reads;
+        for (index = num_reads; index < num_writes; ++index) {
+                k = &_dependencies[index];
+                if (k->_key.key == key && k->_key.table_id == table_id) {
                         return k->_value;
                 }
         }
@@ -84,12 +86,12 @@ void* split_action::write_ref(uint64_t key, uint32_t table_id)
 void* split_action::read(uint64_t key, uint32_t table_id)
 {
         uint32_t index, num_reads;
-        split_key *k;
+        split_dep *k;
 
         num_reads = _readset.size();
         for (index = 0; index < num_reads; ++index) {
-                k = &_readset[index];
-                if (k->_record.key == key && k->_record.table_id == table_id) {
+                k = &_dependencies[index];
+                if (k->_key.key == key && k->_key.table_id == table_id) {
                         return k->_value;
                 }
         }
@@ -115,6 +117,8 @@ int split_action::rand()
 /* XXX Incomplete */
 bool split_action::run()
 {
+        assert(_state == split_action::SCHEDULED);
+
         bool ret;
         ret = t->Run();
         return ret;
@@ -157,6 +161,7 @@ void split_action::transition_complete_remote()
         uint64_t val;
         val = (uint64_t)split_action::COMPLETE;
         val = xchgq(&_state, val);
+        assert(val == (uint64_t)split_action::EXECUTED);
 }
 
 commit_rvp* split_action::get_commit_rvp()

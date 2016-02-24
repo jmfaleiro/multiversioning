@@ -7,10 +7,13 @@
 #include <cpuinfo.h>
 #include <table.h>
 
+#define 	DEP_ARRAY_SZ 		(1<<20)
 #define		SPLIT_RECORD_SIZE(sz) 	(sz+sizeof(split_key*))
 
 struct split_record {
-        split_key 	*key_struct;
+        big_key 	key;
+        uint64_t 	epoch;
+        split_dep 	*key_struct;
         char		*value;
 };
 
@@ -41,6 +44,11 @@ class split_executor : public Runnable {
  private:
         struct split_executor_config 		config;
         struct split_queue 			queue;
+        
+        uint64_t 				dep_index;
+        split_dep 				*dep_array;
+        uint64_t epoch;
+        uint32_t 				num_outstanding;
 
         /* Manage cross-partition dependencies. */
         void sync_commit_rvp(split_action *action, bool committed);
@@ -61,8 +69,16 @@ class split_executor : public Runnable {
         /* Scheduling functions */
         void schedule_batch(split_action_batch batch);
         void schedule_single(split_action *action);
-        void schedule_operation(split_key *key);
-        
+        void schedule_operation(big_key &key, split_action *action, 
+                                access_t type);
+
+        /* Dep array stuff */
+        void init_dep_array();
+        uint64_t cur_dep();
+        split_dep* get_dep();
+        void reset_dep();
+        void do_check();
+
  protected:
         virtual void StartWorking();
         virtual void Init();        

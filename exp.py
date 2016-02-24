@@ -5,7 +5,7 @@ import sys
 import os.path
 import clean
 
-fmt_split = "numactl --interleave=all build/db --cc_type 4 --num_partitions {0} --num_txns {1} --num_records {2} --txn_size {3} --experiment {4} --record_size {5} --distribution {6} --theta {7} --read_pct 0 --read_txn_size 10000"
+fmt_split = "numactl --interleave=all build/db --cc_type 4 --num_partitions {0} --num_txns {1} --num_records {2} --txn_size {3} --experiment {4} --record_size {5} --distribution {6} --theta {7} --read_pct 0 --read_txn_size 10000 --num_outstanding 100 --epoch_size 25000 --abort_pos {8}"
 
 fmt_locking = "numactl --interleave=all build/db --cc_type 1  --num_lock_threads {0} --num_txns {1} --num_records {2} --num_contended 2 --txn_size 10 --experiment {3} --record_size {6} --distribution {4} --theta {5} --read_pct {7} --read_txn_size 10000"
 
@@ -37,7 +37,7 @@ def main():
 #    exp_0()
 #    occ_uncontended_1000()
     new_contention()
-    test_locking()
+#    test_locking()
 #    search_best()
 #    test_cc()
 #    ccontrol()
@@ -56,16 +56,19 @@ def new_contention():
 
     for i in range(0, 10):
         for z in zipf_vals:
-            occ_expt(result_dir, "occ.txt", 40, 40, 3000000, 1000000, 4, 1, z, 1000, 0)
+            split_expt(result_dir, "split_graph.txt", 40, 40, 3000000, 1000000, 4, 1, z, 1000, 10, 0)
+
 
 def test_locking():
     result_dir = "results/ycsb_update/"
     high_dir = os.path.join(result_dir, "high/")
     low_dir = os.path.join(result_dir, "low/")
     
+
     for i in range(0, 10):
-        occ_expt(high_dir, "occ_new.txt", 4, 40, 3000000, 1000000, 4, 1, 0.9, 1000, 0)
-        occ_expt(low_dir, "occ.txt", 4, 40, 3000000, 1000000, 4, 1, 0.0, 1000, 0)
+        split_expt(low_dir, "split_graph.txt", 4, 40, 3000000, 1000000, 4, 1, 0.0, 1000, 10, 0)
+        split_expt(high_dir, "split_graph.txt", 4, 40, 3000000, 1000000, 4, 1, 0.9, 1000, 10, 0)
+
 
 
 def print_cc():
@@ -242,7 +245,7 @@ def mv_expt(outdir, filename, ccThreads, txns, records, lowThreads, highThreads,
 
 
 
-def split_expt(outdir, filename, lowThreads, highThreads, txns, records, expt, distribution, theta, rec_size, txn_size):
+def split_expt(outdir, filename, lowThreads, highThreads, txns, records, expt, distribution, theta, rec_size, txn_size, abort_pos):
     outfile = os.path.join(outdir, filename)
     
     temp = os.path.join(outdir, filename[:filename.find(".txt")] + "_out.txt")
@@ -254,7 +257,7 @@ def split_expt(outdir, filename, lowThreads, highThreads, txns, records, expt, d
         val_range = gen_range(lowThreads, highThreads, 4)
         for i in val_range:
             os.system("rm split.txt")
-            cmd = fmt_split.format(str(i), str(txns), str(records), str(txn_size), str(expt), str(rec_size), str(distribution), str(theta))
+            cmd = fmt_split.format(str(i), str(txns), str(records), str(txn_size), str(expt), str(rec_size), str(distribution), str(theta), str(abort_pos))
             os.system(cmd)
             os.system("cat split.txt >>" + outfile)
             clean.clean_fn("locking", outfile, temp)
