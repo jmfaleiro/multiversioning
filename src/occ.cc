@@ -162,7 +162,8 @@ bool OCCWorker::RunSingle(OCCAction *action)
                 barrier();
                 epoch = *config.epoch_ptr;
                 barrier();                        
-                action->validate();
+                if (!READ_COMMITTED)
+                        action->validate();
                 this->last_tid = action->compute_tid(epoch,
                                                      this->last_tid);
                 action->install_writes();
@@ -170,6 +171,8 @@ bool OCCWorker::RunSingle(OCCAction *action)
                 fetch_and_increment(&config.num_completed);
                 validated = true;
         } catch(const occ_validation_exception &e) {
+                if (READ_COMMITTED)
+                        assert(false);
                 if (e.err == VALIDATION_ERR)
                         action->release_locks();
                 action->cleanup();

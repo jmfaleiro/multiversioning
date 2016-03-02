@@ -21,22 +21,10 @@ fmt_multi_cc = "build/db --cc_type 0 --num_cc_threads {0} --num_txns {1} --epoch
 
 
 def main():
-#    write_searches_top()
-#    small_bank_uncontended()
-#    small_bank_contended()
-#    small_bank_reads()
-#    uncontended_1000()
-#    small_bank_contended(False, True)
-#    small_bank_uncontended(False, True)
-#    contended_1000()
-#    ccontrol()
-#    vary_contention()
+    for i in range(0, 10):
+        test_locking()
+        new_contention()
 
-#    search_best()
-#    test_cc()
-#    exp_0()
-#    occ_uncontended_1000()
-    new_contention()
 #    test_locking()
 #    search_best()
 #    test_cc()
@@ -54,20 +42,16 @@ def new_contention():
     result_dir = "results/ycsb_update/vary_contention"
     zipf_vals = [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1,0.0]
 
-    for i in range(0, 10):
-        for z in zipf_vals:
-            split_expt(result_dir, "split_graph.txt", 40, 40, 3000000, 1000000, 4, 1, z, 1000, 10, 0)
-
+    for z in zipf_vals:
+        occ_expt(result_dir, "rc.txt", 40, 40, 6000000, 1000000, 4, 1, z, 1000, 0)
 
 def test_locking():
     result_dir = "results/ycsb_update/"
     high_dir = os.path.join(result_dir, "high/")
     low_dir = os.path.join(result_dir, "low/")
-    
 
-    for i in range(0, 10):
-        split_expt(low_dir, "split_graph.txt", 4, 40, 3000000, 1000000, 4, 1, 0.0, 1000, 10, 0)
-        split_expt(high_dir, "split_graph.txt", 4, 40, 3000000, 1000000, 4, 1, 0.9, 1000, 10, 0)
+    occ_expt(high_dir, "rc.txt", 4, 40, 6000000, 1000000, 4, 1, 0.9, 1000, 0)
+    occ_expt(low_dir, "rc.txt", 4, 40, 6000000, 1000000, 4, 1, 0.0, 1000, 0)
 
 
 

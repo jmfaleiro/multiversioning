@@ -66,7 +66,6 @@ void split_executor::sync_commit_rvp(split_action *action, __attribute__((unused
         }
         
         if (sched_rights == true) {
-                schedule_downstream_pieces(action);
                 for (i = 0; i < rvp->num_actions; ++i) 
                         to_notify[i]->transition_complete_remote();
         }
