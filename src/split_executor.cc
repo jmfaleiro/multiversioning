@@ -100,9 +100,6 @@ void split_executor::schedule_single_rvp(rendezvous_point *rvp)
         split_action *action;
 
         if (fetch_and_decrement(&rvp->counter) == 0) {
-
-        
-                //                assert(rvp->counter == 0);
                 action = rvp->to_run;
                 while (action != NULL) {
                         action->clear_dependency_flag();

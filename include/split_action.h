@@ -24,6 +24,11 @@ struct split_dep {
 
 class split_action;
 
+struct split_action_batch {
+        split_action **actions;
+        uint32_t num_actions;
+};
+
 struct rendezvous_point {
         volatile uint64_t __attribute__((__packed__, __aligned__(CACHE_LINE))) counter;
         uint64_t num_actions;
@@ -68,6 +73,7 @@ class split_action : public translator {
         friend class split_action_queue;
         friend class ready_queue;
         friend class linked_queue;
+        friend class shared_split_executor;
 
  private:
         volatile uint64_t 		_state;
@@ -102,9 +108,15 @@ class split_action : public translator {
         
         split_action(txn *t, uint32_t partition_id, uint64_t dependency_flag, 
                      bool can_abort);
+        
+        /* Executor functions */
         uint64_t remote_deps();
         virtual bool run();
         uint32_t get_partition_id();
+        split_dep* get_dependencies();
+        virtual bool check_ready();
+        virtual uint32_t* get_dep_index();
+
         
         /* Abstract action state machine */
         split_action::split_action_state get_state();

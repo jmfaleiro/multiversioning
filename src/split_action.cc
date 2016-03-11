@@ -173,3 +173,13 @@ void split_action::set_commit_rvp(commit_rvp *rvp)
 {
         _commit_rendezvous = rvp;
 }
+
+split_dep* split_action::get_dependencies()
+{
+        return _dependencies;
+}
+
+uint32_t* split_action::get_dep_index()
+{
+        return &_dep_index;
+}
