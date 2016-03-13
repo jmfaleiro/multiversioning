@@ -8,6 +8,7 @@
 #include <cpuinfo.h>
 #include <runnable.hh>
 #include <record_buffer.h>
+#include <mcs.h>
 
 struct locking_action_batch {
   uint32_t batchSize;
@@ -31,7 +32,7 @@ private:
   locking_action *m_queue_head;                  // Head of queue of waiting txns
   locking_action *m_queue_tail;                  // Tail of queue of waiting txns
   int         m_num_elems;                    // Number of elements in the queue
-
+  mcs_mgr *mgr;
   volatile uint32_t m_num_done;
 
   RecordBuffers *bufs;
@@ -50,6 +51,9 @@ private:
   void DoExec(locking_action *txn);
     
   uint32_t QueueCount(locking_action *txn);
+
+  void give_locks(locking_action *txn);
+  void take_locks(locking_action *txn);
 
 protected:    
   virtual void StartWorking();

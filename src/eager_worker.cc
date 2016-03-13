@@ -10,6 +10,7 @@ locking_worker::locking_worker(locking_worker_config config,
         m_num_elems = 0;
         m_num_done = 0;
         this->bufs = new(config.cpu) RecordBuffers(rb_conf);
+        this->mgr = new(config.cpu) mcs_mgr(1000000, config.cpu);
 }
 
 void locking_worker::Init()
@@ -86,6 +87,36 @@ void locking_worker::CheckReady()
         }
 }
 
+void locking_worker::give_locks(locking_action *txn)
+{
+        uint32_t num_writes, num_reads, i;
+
+        num_writes = txn->writeset.size();
+        for (i = 0; i < num_writes; ++i) 
+                txn->writeset[i].lock_entry = mgr->get_struct();
+        num_reads = txn->readset.size();
+        for (i = 0; i < num_reads; ++i) 
+                txn->readset[i].lock_entry = mgr->get_struct();
+}
+
+void locking_worker::take_locks(locking_action *txn)
+{
+        uint32_t num_writes, num_reads, i;
+        
+        num_writes = txn->writeset.size();
+        for (i = 0; i < num_writes; ++i) {
+                mgr->return_struct(txn->writeset[i].lock_entry);
+                txn->writeset[i].lock_entry = NULL;
+        }
+        
+        num_reads = txn->readset.size();
+        for (i = 0; i < num_reads; ++i) {
+                mgr->return_struct(txn->readset[i].lock_entry);
+                txn->readset[i].lock_entry = NULL;
+        }
+                
+}
+
 void locking_worker::TryExec(locking_action *txn)
 {
         txn->tables = this->config.tables;
@@ -96,6 +127,7 @@ void locking_worker::TryExec(locking_action *txn)
                 txn->worker = this;
                 txn->Run();
                 config.mgr->Unlock(txn);                
+                take_locks(txn);
                 assert(txn->finished_execution);
         } else {
                 m_num_done += 1;
@@ -111,6 +143,7 @@ void locking_worker::DoExec(locking_action *txn)
         txn->worker = this;
         txn->Run();
         config.mgr->Unlock(txn);
+        take_locks(txn);
 }
 
 void
@@ -127,11 +160,13 @@ locking_worker::WorkerFunction()
                         // Ensure we haven't exceeded threshold of max deferred
                         // txns. If we have, exec pending txns so we get below
                         // the threshold.
-                        if ((uint32_t)m_num_elems < config.maxPending) 
+                        if ((uint32_t)m_num_elems < config.maxPending) {
+                                give_locks(batch.batch[i]);
                                 TryExec(batch.batch[i]);
-                        else 
+                        } else { 
                                 while (m_num_elems >= config.maxPending) 
                                         CheckReady();
+                        }
                 }
                 
                 // Finish deferred txns

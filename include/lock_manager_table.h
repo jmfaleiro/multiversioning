@@ -7,11 +7,12 @@
 #include <machine.h>
 #include <lock_manager.h>
 #include <locking_action.h>
+#include <mcs.h>
 
 struct LockBucket {
         locking_key *head;
         locking_key *tail;
-        volatile uint64_t latch;
+        volatile uint64_t __attribute__((__packed__, __aligned__(CACHE_LINE))) latch;
 } __attribute__((__packed__, __aligned__(CACHE_LINE)));
 
 struct LockManagerConfig {
@@ -45,7 +46,7 @@ class LockManagerTable {
 
           // Get the bucket in the table
           uint64_t index = key->Hash() % tblSz;
-          char *bucketPtr = &tbl[CACHE_LINE*index];
+          char *bucketPtr = &tbl[sizeof(LockBucket)*index];
           return (LockBucket*)bucketPtr;
   }
 
@@ -231,7 +232,7 @@ class LockManagerTable {
 
           uint64_t totalSz = 0;
           for (uint32_t i = 0; i < config.numTables; ++i) {      
-                  totalSz += config.tableSizes[i]*CACHE_LINE;
+                  totalSz += config.tableSizes[i]*sizeof(LockBucket);
           }
 
           /* Allocate data for lock manager hash table */
@@ -248,7 +249,7 @@ class LockManagerTable {
           uint64_t prevSize = 0;
           for (uint32_t i = 0; i < config.numTables; ++i) {
                   this->tables[i] = &data[prevSize];
-                  prevSize += tableSizes[i]*CACHE_LINE;
+                  prevSize += tableSizes[i]*sizeof(LockBucket);
           }
   }
 
@@ -291,10 +292,13 @@ class LockManagerTable {
           LockBucket *bucket;
 
           bucket = GetBucketRef(key);
-          lock(&bucket->latch);
+          key->lock_entry->_tail_ptr = (volatile mcs_struct**)&bucket->latch;
+          mcs_mgr::lock(key->lock_entry);
+          // lock(&bucket->latch);
           AppendInfo(key, bucket);
           conflict = check_conflict(key);
-          unlock(&bucket->latch);
+          mcs_mgr::unlock(key->lock_entry);
+          //          unlock(&bucket->latch);
           return !conflict;
   }
 
@@ -305,13 +309,16 @@ class LockManagerTable {
   {
           assert(k->is_held);
           LockBucket *bucket = GetBucketRef(k);    
-          lock(&bucket->latch);
+          k->lock_entry->_tail_ptr = (volatile mcs_struct**)&bucket->latch;
+          mcs_mgr::lock(k->lock_entry);
+          //          lock(&bucket->latch);
           if (k->is_write) 
                   AdjustWrite(k);
           else 
                   AdjustRead(k, bucket);
           RemoveInfo(k, bucket);
-          unlock(&bucket->latch);
+          //          unlock(&bucket->latch);
+          mcs_mgr::unlock(k->lock_entry);
     }
 };
 

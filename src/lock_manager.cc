@@ -8,7 +8,7 @@ LockManager::LockManager(LockManagerConfig config)
         table = new LockManagerTable(config);
         tableSizes = (uint64_t*)malloc(sizeof(uint64_t)*config.numTables);
         for (i = 0; i < config.numTables; ++i) 
-                tableSizes[i] = (uint64_t)config.tableSizes[i];
+                tableSizes[i] = (uint64_t)config.tableSizes[i];        
 }
 
 bool LockManager::LockRecord(locking_action *txn, struct locking_key *k)
@@ -29,7 +29,7 @@ bool LockManager::Lock(locking_action *txn)
         uint32_t *r_index, *w_index, num_reads, num_writes;
         struct locking_key write_key, read_key;
         bool acquired = true;
-        
+
         txn->prepare();
         
         r_index = &txn->read_index;
@@ -74,7 +74,7 @@ bool LockManager::Lock(locking_action *txn)
 void LockManager::Unlock(locking_action *txn)
 {
         uint32_t i, num_writes, num_reads;
-        
+
         num_writes = txn->writeset.size();
         num_reads = txn->readset.size();
         for (i = 0; i < num_writes; ++i) 

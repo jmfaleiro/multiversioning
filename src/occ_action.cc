@@ -17,7 +17,7 @@ static bool try_acquire_single(volatile uint64_t *lock_ptr)
 
 static void acquire_single(volatile uint64_t *lock_ptr)
 {
-        uint32_t i, backoff, temp;
+        uint32_t backoff, temp;
          if (USE_BACKOFF) 
                  backoff = 1;
         while (true) {
@@ -26,18 +26,18 @@ static void acquire_single(volatile uint64_t *lock_ptr)
                         break;
                 }
                 if (USE_BACKOFF) {
-                        if (READ_COMMITTED) {
-                                barrier();
-                                for (i = 0; i < 100; ++i) 
-                                        single_work();
-                                barrier();
-                                do_pause();
-                        } else {
+//                         if (READ_COMMITTED) {
+//                                 barrier();
+//                                 for (i = 0; i < 100; ++i) 
+//                                         single_work();
+//                                 barrier();
+//                                 do_pause();
+//                         } else {
                          temp = backoff;
                          while (temp-- > 0)
                                  single_work();
                          backoff = backoff*2;
-                        }
+                         //                        }
                 }
         }
 }
@@ -152,7 +152,13 @@ void OCCAction::set_tables(Table **tables, Table **lock_tables)
         this->lock_tables = lock_tables;
 }
 
-uint64_t OCCAction::stable_copy(uint64_t key, uint32_t table_id, void *record)
+void OCCAction::set_mgr(mcs_mgr *mgr)
+{
+        this->mgr = mgr;
+}
+
+uint64_t OCCAction::stable_copy(uint64_t key, uint32_t table_id, void **rec_ptr,
+                                void *record_copy)
 {
         volatile uint64_t *tid_ptr;
         uint32_t record_size;
@@ -160,6 +166,7 @@ uint64_t OCCAction::stable_copy(uint64_t key, uint32_t table_id, void *record)
         void *value;
 
         value = this->tables[table_id]->Get(key);
+        *rec_ptr = value;
         record_size = REAL_RECORD_SIZE(this->tables[table_id]->RecordSize());
         tid_ptr = (volatile uint64_t*)value;
         while (true) {
@@ -167,7 +174,7 @@ uint64_t OCCAction::stable_copy(uint64_t key, uint32_t table_id, void *record)
                 ret = *tid_ptr;
                 barrier();
                 if (!IS_LOCKED(ret)) {
-                        memcpy(RECORD_VALUE_PTR(record),
+                        memcpy(RECORD_VALUE_PTR(record_copy),
                                RECORD_VALUE_PTR(value), record_size);
                         barrier();
                         after_read = *tid_ptr;
@@ -190,7 +197,8 @@ void OCCAction::validate_single(occ_composite_key &comp_key)
         volatile uint64_t *version_ptr;
         uint64_t cur_tid;
         
-        value = tables[comp_key.tableId]->Get(comp_key.key);
+        value = comp_key.record_ptr;
+        //        value = tables[comp_key.tableId]->Get(comp_key.key);
         version_ptr = (volatile uint64_t*)value;
         barrier();
         cur_tid = *version_ptr;
@@ -235,7 +243,8 @@ void* OCCAction::write_ref(uint64_t key, uint32_t table_id)
                 comp_key->is_initialized = true;
                 comp_key->value = record;
                 if (writeset[i].is_rmw == true) {
-                        tid = stable_copy(key, table_id, record);
+                        tid = stable_copy(key, table_id, &comp_key->record_ptr, 
+                                          record);
                         comp_key->old_tid = tid;
                 }
         } 
@@ -269,7 +278,7 @@ void* OCCAction::read(uint64_t key, uint32_t table_id)
                 record = this->record_alloc->GetRecord(table_id);
                 comp_key->is_initialized = true;
                 comp_key->value = record;
-                tid = stable_copy(key, table_id, record);
+                tid = stable_copy(key, table_id, &comp_key->record_ptr, record);
                 comp_key->old_tid = tid;
         }        
         return RECORD_VALUE_PTR(comp_key->value);
@@ -280,6 +289,7 @@ void OCCAction::acquire_locks()
         uint32_t i, num_writes, table_id;
         uint64_t key;
         void *value;
+        mcs_struct *cur_lock;
 
         num_writes = this->writeset.size();
         std::sort(this->writeset.begin(), this->writeset.end());
@@ -287,30 +297,38 @@ void OCCAction::acquire_locks()
         for (i = 0; i < num_writes; ++i) {
                 assert(this->writeset[i].is_locked == false);
                 table_id = this->writeset[i].tableId;
-                key = this->writeset[i].key;
-                if (READ_COMMITTED)
+                key = this->writeset[i].key;                
+                if (READ_COMMITTED) {
                         value = this->lock_tables[table_id]->GetAlways(key);
-                else
-                        value = this->tables[table_id]->GetAlways(key);
-                acquire_single((volatile uint64_t*)value);
+                        cur_lock = mgr->get_struct();
+                        this->writeset[i].lock = cur_lock;
+                        cur_lock->_tail_ptr = (volatile mcs_struct**)value;
+                        mcs_mgr::lock(cur_lock);
+                } else {
+                        if(this->writeset[i].is_rmw == false) {
+                                value = this->tables[table_id]->GetAlways(key);
+                                this->writeset[i].record_ptr = value;
+                        }
+                        value = this->writeset[i].record_ptr;
+                        acquire_single((volatile uint64_t*)value);
+                }
                 this->writeset[i].is_locked = true;
         }
-
 }
 
 void OCCAction::release_locks()
 {
-        uint32_t i, num_writes, table_id;
-        uint64_t key;
-        void *value;
+        uint32_t i, num_writes;//, table_id;
+        //        uint64_t key;
+        //        void *value;
 
         num_writes = this->writeset.size();
         for (i = 0; i < num_writes; ++i) {
                 assert(this->writeset[i].is_locked == true);
-                table_id = this->writeset[i].tableId;
-                key = this->writeset[i].key;
-                value = this->tables[table_id]->Get(key);
-                release_single((volatile uint64_t*)value);
+                //                table_id = this->writeset[i].tableId;
+                //                key = this->writeset[i].key;
+                //                value = this->tables[table_id]->Get(key);
+                release_single((volatile uint64_t*)writeset[i].record_ptr);
                 this->writeset[i].is_locked = false;
         }
 }
@@ -390,17 +408,21 @@ void OCCAction::install_single_write(occ_composite_key &comp_key)
         uint32_t record_size;
 
         record_size = this->tables[comp_key.tableId]->RecordSize();
-        value = this->tables[comp_key.tableId]->GetAlways(comp_key.key);
-        if (READ_COMMITTED)
+        
+        if (READ_COMMITTED) {
+                value = this->tables[comp_key.tableId]->GetAlways(comp_key.key);
                 acquire_single((volatile uint64_t*)value);
+        } else {
+                value = comp_key.record_ptr;
+        }
         old_tid = *(uint64_t*)value;
         assert(IS_LOCKED(old_tid) == true);
         memcpy(RECORD_VALUE_PTR(value), RECORD_VALUE_PTR(comp_key.value),
                record_size - sizeof(uint64_t));
         xchgq((volatile uint64_t*)value, this->tid);
         if (READ_COMMITTED) {
-                value = this->lock_tables[comp_key.tableId]->GetAlways(comp_key.key);
-                release_single((volatile uint64_t*)value);
+                mcs_mgr::unlock((mcs_struct*)comp_key.lock);
+                this->mgr->return_struct((mcs_struct*)comp_key.lock);
         }
         comp_key.is_locked = false;
 }

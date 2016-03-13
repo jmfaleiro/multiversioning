@@ -696,6 +696,7 @@ public:
                 result_file << "threads:" << conf.num_partitions << " ";
                 result_file << "records:" << conf.num_records << " ";
                 result_file << "read_pct:" << conf.read_pct << " ";
+                result_file << "txn_size:" << w_conf.txn_size << " ";
                 if (conf.experiment == 0) 
                         result_file << "test " << " ";
                 else if (conf.experiment == 1) 

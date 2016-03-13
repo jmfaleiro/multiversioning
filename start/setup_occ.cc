@@ -107,7 +107,7 @@ OCCActionBatch* setup_occ_single_input(OCCConfig config, workload_config w_conf)
 Table** setup_occ_lock_tables(int start_cpu, int end_cpu, uint32_t table_sz)
 {
         assert(READ_COMMITTED);
-        uint64_t val;
+        char val[CACHE_LINE];
         uint32_t i;
         TableConfig conf;
         Table **ret;
@@ -119,16 +119,16 @@ Table** setup_occ_lock_tables(int start_cpu, int end_cpu, uint32_t table_sz)
                 start_cpu,
                 end_cpu,
                 2*table_sz,
-                sizeof(uint64_t),
-                sizeof(uint64_t),
+                CACHE_LINE,
+                CACHE_LINE,
         };
         ret = (Table**)zmalloc(sizeof(Table*));
         ret[0] = new (0) Table(conf);
         
         /* Initialize the table */
-        val = 0;
+        memset(val, 0x0, CACHE_LINE);
         for (i = 0; i < table_sz; ++i) 
-                ret[0]->Put(i, &val);
+                ret[0]->Put(i, val);
         return ret;
 }
 
@@ -243,7 +243,8 @@ static OCCActionBatch setup_db(workload_config conf)
 }
 
 
-void write_occ_output(struct occ_result result, OCCConfig config)
+void write_occ_output(struct occ_result result, OCCConfig config, 
+                      workload_config w_conf)
 {
         double elapsed_milli;
         timespec elapsed_time;
@@ -257,6 +258,7 @@ void write_occ_output(struct occ_result result, OCCConfig config)
         result_file << " threads:" << config.numThreads << " occ ";
         result_file << "records:" << config.numRecords << " ";
         result_file << "read_pct:" << config.read_pct << " ";
+        result_file << "txn_size:" << w_conf.txn_size << " ";
         if (config.experiment == 0) 
                 result_file << "10rmw" << " ";
         else if (config.experiment == 1)
@@ -438,5 +440,5 @@ void occ_experiment(OCCConfig occ_config, workload_config w_conf)
         result = run_occ_workers(input_queues, output_queues, workers,
                                  inputs, 1+1, occ_config,
                                  setup_txns, tables, num_tables);
-        write_occ_output(result, occ_config);
+        write_occ_output(result, occ_config, w_conf);
 }

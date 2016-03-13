@@ -57,6 +57,26 @@ ycsb_readonly::ycsb_readonly(vector<uint64_t> reads)
 
 bool ycsb_readonly::Run()
 {
+        char buf[1000], *val;
+        uint32_t num_reads, i, j;
+        uint64_t *buf_ptr, total;
+
+        memset(buf, 0x0, 1000);
+        num_reads = reads.size();
+        for (i = 0; i < num_reads; ++i) {
+                val = (char*)get_read_ref(reads[i], 0);
+                for (j = 0; j < 10; ++j) {
+                        buf_ptr = (uint64_t*)&buf[j*100];
+                        *buf_ptr += *(uint64_t*)(&val[j*100]);
+                }
+        }
+        
+        total = 0;
+        for (j = 0; j < 10; ++j) {
+                buf_ptr = (uint64_t*)&buf[j*100];
+                total += *buf_ptr;
+        }
+        accumulated = total;
         return true;
 }
 

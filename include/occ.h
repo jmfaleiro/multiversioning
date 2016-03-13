@@ -8,6 +8,8 @@
 #include <exception>
 #include <record_buffer.h>
 
+#define NUM_MCS_LOCKS	1000
+
 struct OCCActionBatch {
         uint32_t batchSize;
         OCCAction **batch;
@@ -38,12 +40,13 @@ struct OCCWorkerConfig {
 
 class OCCWorker : public Runnable {
  private:        
-        OCCWorkerConfig config;
-        uint64_t incr_timestamp;
-        uint64_t last_tid;
-        uint32_t last_epoch;
-        uint32_t txn_counter;
-        RecordBuffers *bufs;
+        OCCWorkerConfig 	config;
+        uint64_t 		incr_timestamp;
+        uint64_t 		last_tid;
+        uint32_t 		last_epoch;
+        uint32_t 		txn_counter;
+        RecordBuffers 		*bufs;
+        mcs_mgr 		*mgr;
         
         virtual bool RunSingle(OCCAction *action);
         virtual uint32_t exec_pending(OCCAction **action_list);

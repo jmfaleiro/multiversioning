@@ -6,6 +6,7 @@
 #include <vector>
 #include <machine.h>
 #include <record_buffer.h>
+#include <mcs.h>
 
 class locking_action;
 class lock_manager_table;
@@ -27,6 +28,7 @@ public:
         struct locking_key *next;
         bool is_initialized;
         void *value;
+        mcs_struct *lock_entry;
 
         bool operator==(const struct locking_key &other) const
         {

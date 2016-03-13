@@ -8,6 +8,7 @@ OCCWorker::OCCWorker(OCCWorkerConfig conf, struct RecordBuffersConfig rb_conf)
 {
         this->config = conf;
         this->bufs = new(conf.cpu) RecordBuffers(rb_conf);
+        this->mgr = new(conf.cpu) mcs_mgr(NUM_MCS_LOCKS, conf.cpu);
 }
 
 void OCCWorker::Init()
@@ -154,6 +155,7 @@ bool OCCWorker::RunSingle(OCCAction *action)
 
         action->set_tables(this->config.tables, this->config.lock_tables);
         action->set_allocator(this->bufs);
+        action->set_mgr(this->mgr);
         action->worker = this;
 
         try {

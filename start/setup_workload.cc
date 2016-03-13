@@ -150,7 +150,7 @@ txn* generate_ycsb_rmw(RecordGenerator *gen, uint32_t num_reads,
 
 txn* generate_ycsb_action(RecordGenerator *gen, workload_config config)
 {
-        assert(RMW_COUNT <= config.txn_size);
+        //        assert(RMW_COUNT <= config.txn_size);
         
         uint32_t num_reads, num_rmws;
         int flip;

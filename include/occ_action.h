@@ -5,6 +5,7 @@
 #include <table.h>
 #include <db.h>
 #include <record_buffer.h>
+#include <mcs.h>
 
 #define TIMESTAMP_MASK (0xFFFFFFFFFFFFFFF0)
 #define EPOCH_MASK (0xFFFFFFFF00000000)
@@ -49,6 +50,8 @@ class occ_composite_key {
         bool is_locked;
         bool is_initialized;
         void *value;
+        void *lock;
+        void *record_ptr;
 
         occ_composite_key(uint32_t tableId, uint64_t key, bool is_rmw);
         void* GetValue() const ;
@@ -97,6 +100,7 @@ class OCCAction : public translator {
         RecordBuffers *record_alloc;
         Table **tables;
         Table **lock_tables;
+        mcs_mgr *mgr;
         uint64_t tid;
         OCCWorker *worker;
         std::vector<occ_composite_key> readset;
@@ -104,7 +108,7 @@ class OCCAction : public translator {
         std::vector<occ_composite_key> shadow_writeset;
 
         virtual uint64_t stable_copy(uint64_t key, uint32_t table_id,
-                                     void *record); 
+                                     void **rec_ptr, void *record_copy); 
         virtual void validate_single(occ_composite_key &comp_key);
         virtual void cleanup_single(occ_composite_key &comp_key);
         virtual void install_single_write(occ_composite_key &comp_key);
@@ -120,6 +124,7 @@ class OCCAction : public translator {
         
         virtual void set_allocator(RecordBuffers *buf);
         virtual void set_tables(Table **tables, Table **lock_tables);
+        virtual void set_mgr(mcs_mgr *mgr);
 
         virtual bool run();
         virtual void acquire_locks();
