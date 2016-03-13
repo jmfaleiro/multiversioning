@@ -17,11 +17,6 @@ struct split_record {
         char		*value;
 };
 
-struct split_action_batch {
-        split_action **actions;
-        uint32_t num_actions;
-};
-
 typedef SimpleQueue<split_action_batch> splt_inpt_queue;
 
 struct split_executor_config {
