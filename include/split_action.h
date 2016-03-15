@@ -114,7 +114,7 @@ class split_action : public translator {
         virtual bool run();
         uint32_t get_partition_id();
         split_dep* get_dependencies();
-        virtual bool check_ready();
+        //        virtual bool check_ready();
         virtual uint32_t* get_dep_index();
 
         
