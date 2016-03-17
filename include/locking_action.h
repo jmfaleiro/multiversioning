@@ -119,6 +119,7 @@ class locking_action : public translator {
 
         void* write_ref(uint64_t key, uint32_t table_id);
         void* read(uint64_t key, uint32_t table_id);
+        void insert(uint64_t key, uint32_t table_id, void *value);
         int rand();
         void prepare();
         bool Run();

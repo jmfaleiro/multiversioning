@@ -41,6 +41,12 @@ enum split_action_status {
         ACTION_ABORTED = 2,
 };
 
+class split_txn : public txn {
+ public:
+        virtual void pre_execution();
+        virtual void post_execution();
+};
+
 /* 
  * Rendezvous point which is used to coordinate action commit. In order to 
  * commit, num_committed must equal num_actions. 

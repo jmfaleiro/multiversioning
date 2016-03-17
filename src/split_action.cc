@@ -2,6 +2,14 @@
 #include <util.h>
 #include <cassert>
 
+void split_txn::pre_execution()
+{
+}
+
+void split_txn::post_execution()
+{
+}
+
 split_action::split_action(txn *t, uint32_t partition_id, 
                            uint64_t dependency_flag, 
                            bool can_abort) : translator(t)
@@ -120,7 +128,9 @@ bool split_action::run()
         assert(_state == split_action::SCHEDULED);
 
         bool ret;
+        t->pre_execution();
         ret = t->Run();
+        t->post_execution();
         return ret;
 }
 

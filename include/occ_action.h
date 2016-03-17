@@ -120,6 +120,7 @@ class OCCAction : public translator {
         
         virtual void *write_ref(uint64_t key, uint32_t table);
         virtual void *read(uint64_t key, uint32_t table);
+        virtual void insert(uint64_t key, uint32_t table, void *value);
         virtual int rand();
         
         virtual void set_allocator(RecordBuffers *buf);

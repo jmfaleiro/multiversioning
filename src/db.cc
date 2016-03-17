@@ -22,6 +22,11 @@ void* txn::get_read_ref(uint64_t key, uint32_t table_id)
         return trans->read(key, table_id);
 }
 
+void txn::insert_record(uint64_t key, uint32_t table_id, void *value)
+{
+        assert(false);
+}
+
 uint32_t txn::num_reads()
 {
         return 0;

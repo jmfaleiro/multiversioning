@@ -222,6 +222,13 @@ void OCCAction::validate()
                         validate_single(this->writeset[i]);
 }
 
+void OCCAction::insert(__attribute__((unused)) uint64_t key, 
+                       __attribute__((unused)) uint32_t table_id, 
+                       __attribute__((unused)) void *value)
+{
+        assert(false);
+}
+
 void* OCCAction::write_ref(uint64_t key, uint32_t table_id)
 {
         uint64_t tid;

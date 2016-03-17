@@ -3,9 +3,15 @@
 
 #include <db.h>
 
+#ifndef 	NUM_STOCK_LEVEL_ORDERS
 #define 	NUM_STOCK_LEVEL_ORDERS 		20
+#endif 
 
-class tpcc_key {
+#ifndef 	NUM_DISTRICTS
+#define 	NUM_DISTRICTS 			10
+#endif
+
+class tpcc_util {
  private:
         static const uint32_t s_customer_shift =  	24;
         static const uint32_t s_district_shift = 	16;
@@ -118,6 +124,19 @@ class tpcc_key {
                     (((uint64_t)keys[1]) << s_stock_shift)		
                     );
         }
+        
+        static void append_strings(char *dest, const char **sources, 
+                                   int dest_len, 
+                                   int num_sources) 
+        {
+            int offset = 0;
+            for (int i = 0; i < num_sources; ++i) {
+                strcpy(dest+offset, sources[i]);
+                offset += strlen(sources[i]);
+            }
+            dest[offset] = '\0';
+        }
+
 };
 
 struct warehouse_record {
