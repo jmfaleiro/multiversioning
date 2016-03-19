@@ -2,6 +2,9 @@
 #define 	TPCC_H_
 
 #include <db.h>
+#include <string.h>
+#include <vector>
+#include <cassert>
 
 #ifndef 	NUM_STOCK_LEVEL_ORDERS
 #define 	NUM_STOCK_LEVEL_ORDERS 		20
@@ -10,6 +13,25 @@
 #ifndef 	NUM_DISTRICTS
 #define 	NUM_DISTRICTS 			10
 #endif
+
+enum table_identifier {
+        WAREHOUSE_TABLE 	= 0,
+        DISTRICT_TABLE 		= 1,
+        CUSTOMER_TABLE 		= 2,
+        NEW_ORDER_TABLE 	= 3,
+        OORDER_TABLE 		= 4,
+        ORDER_LINE_TABLE 	= 5,
+        STOCK_TABLE 		= 6,
+        ITEM_TABLE 		= 7,
+        HISTORY_TABLE 		= 8,
+        DELIVERY_TABLE		= 9,	/* Index */
+        CUSTOMER_ORDER_INDEX 	= 10,	/* Index */
+};
+
+class tpcc_config {
+ public:
+        static uint32_t num_warehouses;
+};
 
 class tpcc_util {
  private:
@@ -106,35 +128,48 @@ class tpcc_util {
                     );
         }
 
-        static inline uint64_t create_order_line_key(uint32_t warehouse_id, uint32_t district_id
-                                                     uint32_t *keys) 
+        static inline uint64_t create_order_line_key(uint32_t warehouse_id, 
+                                                     uint32_t district_id,
+                                                     uint32_t order_id, 
+                                                     uint32_t ol_index)
         {            
             return (
-                    ((uint64_t)keys[0]) 				| 
-                    (((uint64_t)keys[1]) << s_district_shift) 		| 
-                    (((uint64_t)keys[2]) << s_order_shift)		|
-                    (((uint64_t)keys[3]) << s_order_line_shift)
+                    ((uint64_t)warehouse_id) 				| 
+                    (((uint64_t)district_id) << s_district_shift)	| 
+                    (((uint64_t)order_id) << s_order_shift)		|
+                    (((uint64_t)ol_index) << s_order_line_shift)
                     );
         }
 
-        static inline uint64_t create_stock_key(uint32_t *keys) 
+        static inline uint64_t create_stock_key(uint32_t warehouse_id, 
+                                                uint32_t item_id) 
         {
             return (
-                    ((uint64_t)keys[0])				|
-                    (((uint64_t)keys[1]) << s_stock_shift)		
+                    ((uint64_t)warehouse_id)				|
+                    (((uint64_t)item_id) << s_stock_shift)		
                     );
         }
         
         static void append_strings(char *dest, const char **sources, 
-                                   int dest_len, 
-                                   int num_sources) 
+                                   uint32_t dest_len, 
+                                   uint32_t num_sources) 
         {
-            int offset = 0;
-            for (int i = 0; i < num_sources; ++i) {
-                strcpy(dest+offset, sources[i]);
-                offset += strlen(sources[i]);
-            }
-            dest[offset] = '\0';
+                uint32_t total_len, i, offset;
+                
+                total_len = 0;
+
+                /* Check that we have enough space */
+                for (i = 0; i < num_sources; ++i) 
+                        total_len += strlen(sources[i]);
+                assert(dest_len <= total_len);
+
+                
+                offset = 0;
+                for (i = 0; i < num_sources; ++i) {
+                        strcpy(dest+offset, sources[i]);
+                        offset += strlen(sources[i]);
+                }
+                dest[offset] = '\0';
         }
 
 };
@@ -259,22 +294,121 @@ struct new_order_record {
 };
 
 class new_order : public txn {
-        
+ private:
         uint32_t 		_warehouse_id;
         uint32_t 		_district_id;
         uint32_t 		_customer_id;        
-        vector<uint64_t> 	_items;
-        vector<uint32_t> 	_order_quantities;
-        vector<uint64_t> 	_supplier_warehouse_ids;        
+        std::vector<uint64_t> 	_items;
+        std::vector<uint32_t> 	_order_quantities;
+        std::vector<uint64_t> 	_supplier_warehouse_ids;        
+        bool 			_all_local;
+
+        void process_item(uint32_t item_number, uint32_t order_id, float w_tax,
+                          float d_tax, float c_disc);
+        void insert_new_order(uint32_t order_id);
+        float get_customer_discount();
+        void update_district(uint32_t *order_id, float *district_tax);
+        void insert_oorder(uint32_t order_id, bool all_local);
+        float read_warehouse(uint32_t warehouse_id);
 
  public:
+
+        new_order(uint32_t warehouse_id, uint32_t district_id, 
+                  uint32_t customer_id, 
+                  uint32_t num_items,
+                  uint64_t *items, 
+                  uint32_t *quantities,
+                  uint64_t *supplier_warehouses);
 
         virtual bool Run();
         
 };
 
 class payment : public txn {
+ private:
+        uint32_t 		_warehouse_id;
+        uint32_t 		_district_id;
+        uint32_t 		_customer_id;
+        uint32_t 		_customer_warehouse_id;
+        uint32_t 		_customer_district_id;
+        float 			_h_amount;
+        uint32_t 		_time;        
 
+        void insert_history(char *warehouse_name, char *district_name);
+        char* warehouse_update();
+        char* district_update();
+        void customer_update();
+
+ public:
+        payment(uint32_t warehouse_id, uint32_t district_id, 
+                uint32_t customer_id, 
+                uint32_t customer_warehouse_id, 
+                uint32_t customer_district_id, 
+                float h_amount, 
+                uint32_t time);
+
+        bool Run();
+};
+
+class stock_level : public txn {
+ private:
+        uint32_t 	_warehouse_id;
+        uint32_t 	_district_id;
+        uint32_t 	_order_id;
+        uint32_t 	_num_stocks;
+        uint32_t 	_stock_reads;
+        uint32_t 	*_stocks;
+        uint32_t 	_threshold;
+        
+        void read_district();
+        void read_single_order_line(uint64_t order_line_key);
+        void read_order_lines();
+        void read_stock();
+        
+ public:
+        stock_level(uint32_t warehouse_id, uint32_t district_id);
+        bool Run();
+};
+
+class order_status : public txn {
+ private:
+        uint32_t 		_warehouse_id;
+        uint32_t 		_district_id;
+        uint32_t 		_customer_id;
+        uint64_t 		_customer_name_idx;
+        bool 			_use_name;
+        uint64_t 		_order_key;
+        uint32_t 		_num_order_lines;
+        volatile uint32_t 	_order_line_quantity;
+        
+        void read_open_order_index();
+        void read_open_order();
+        void read_order_lines();
+
+ public:
+        order_status(uint32_t warehouse_id, uint32_t district_id, 
+                     uint32_t customer_id, 
+                     uint64_t customer_name_idx, 
+                     bool use_name);
+        bool Run();
+};
+
+class delivery : public txn {
+ private:
+        uint32_t 	_warehouse_id;
+        bool	 	_to_deliver[NUM_DISTRICTS];
+        uint32_t 	_delivery_order_id[NUM_DISTRICTS];
+        uint32_t 	_customers[NUM_DISTRICTS];
+        uint32_t 	_amounts[NUM_DISTRICTS];
+        
+        void read_next_delivery();
+        void remove_new_orders();
+        void read_orders();
+        void update_customer();
+
+ public:
+        delivery(uint32_t warehouse_id);
+        bool Run();
 };
 
 #endif 		// TPCC_H_

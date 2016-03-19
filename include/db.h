@@ -92,6 +92,7 @@ class translator {
         virtual void *write_ref(uint64_t key, uint32_t table) = 0;
         virtual void *read(uint64_t key, uint32_t table) = 0;
         virtual void insert(uint64_t key, uint32_t table, void *record) = 0;
+        virtual void remove(uint64_t key, uint32_t table) = 0;
         virtual int rand() = 0;
 };
 
@@ -107,6 +108,7 @@ class txn {
         void* get_read_ref(uint64_t key, uint32_t table_id);
         void* get_insert_ref(uint64_t key, uint32_t table_id);
         void insert_record(uint64_t key, uint32_t table_id, void *value);
+        void remove_record(uint64_t key, uint32_t table_id);
         int txn_rand();
         
  public:

@@ -229,6 +229,13 @@ void OCCAction::insert(__attribute__((unused)) uint64_t key,
         assert(false);
 }
 
+void OCCAction::remove(__attribute__((unused)) uint64_t key, 
+                       __attribute__((unused)) uint32_t table_id)
+{
+        assert(false);
+}
+
+
 void* OCCAction::write_ref(uint64_t key, uint32_t table_id)
 {
         uint64_t tid;

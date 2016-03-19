@@ -2,14 +2,6 @@
 #include <util.h>
 #include <cassert>
 
-void split_txn::pre_execution()
-{
-}
-
-void split_txn::post_execution()
-{
-}
-
 split_action::split_action(txn *t, uint32_t partition_id, 
                            uint64_t dependency_flag, 
                            bool can_abort) : translator(t)
@@ -72,6 +64,19 @@ rendezvous_point** split_action::get_rvps()
         return _rvps;
 }
 
+void split_action::insert(__attribute__((unused)) uint64_t key, 
+                          __attribute__((unused)) uint32_t table_id, 
+                          __attribute__((unused)) void *value)
+{
+        assert(false);
+}
+
+void split_action::remove(__attribute__((unused)) uint64_t key, 
+                          __attribute__((unused)) uint32_t table_id)
+{
+        assert(false);
+}
+
 void* split_action::write_ref(uint64_t key, uint32_t table_id)
 {
         uint32_t index, num_writes, num_reads;
@@ -128,9 +133,7 @@ bool split_action::run()
         assert(_state == split_action::SCHEDULED);
 
         bool ret;
-        t->pre_execution();
         ret = t->Run();
-        t->post_execution();
         return ret;
 }
 

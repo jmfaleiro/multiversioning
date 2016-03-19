@@ -41,12 +41,6 @@ enum split_action_status {
         ACTION_ABORTED = 2,
 };
 
-class split_txn : public txn {
- public:
-        virtual void pre_execution();
-        virtual void post_execution();
-};
-
 /* 
  * Rendezvous point which is used to coordinate action commit. In order to 
  * commit, num_committed must equal num_actions. 
@@ -146,6 +140,8 @@ class split_action : public translator {
         /* Translator interface functions  */
         void* write_ref(uint64_t key, uint32_t table_id);
         void* read(uint64_t key, uint32_t table_id);
+        void insert(uint64_t key, uint32_t table_id, void *value);
+        void remove(uint64_t key, uint32_t table_id);
         int rand();
 };
 

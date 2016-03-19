@@ -17,6 +17,7 @@
 #include <common.h>
 #include <sys/mman.h>
 #include <setup_split.h>
+#include <tpcc.h>
 
 #define RECYCLE_QUEUE_SIZE 64
 #define INPUT_SIZE 1024
@@ -32,6 +33,7 @@ uint32_t NUM_CC_THREADS;
 uint64_t recordSize;
 int NumProcs;
 uint32_t numLockingRecords;
+uint32_t tpcc_config::num_warehouses = 10;
 
 /*
 readonly_eager_action* create_readonly_eager(uint64_t numRecords,

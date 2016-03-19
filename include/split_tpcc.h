@@ -1,11 +1,19 @@
 #ifndef 	SPLIT_TPCC_H_
 #define 	SPLIT_TPCC_H_
 
-#include <txn.h>
-#include <tpcc_utils.h>
+#include <db.h>
+#include <tpcc.h>
 #include <vector>
 
 namespace split_new_order {
+
+        class update_district;
+        class read_customer_last_name;
+        class read_customer;
+        class insert_new_order;
+        class insert_oorder;
+        class insert_order_lines;
+        class update_stocks;
 
         struct stock_update_data {
                 uint32_t 	_item_id;
@@ -43,13 +51,17 @@ namespace split_new_order {
                 friend class insert_order_lines;
                 friend class update_stocks;
 
+                uint32_t 		_wh_id;
+                uint32_t 		_d_id;
                 bool 			_use_name;
-                uint64_t 		_cstmr_nm_idx;
-                uint32_t 		_cstmr_id;
+                uint64_t 		_c_nm_idx;
+                uint32_t 		_c_id;
                 float 			_dscnt;		/* Need to write */
 
         public: 
-                read_customer(bool use_name, uint64_t name_index, uint32_t id);
+                read_customer(uint32_t wh_id, uint32_t d_id, bool use_name, 
+                              uint64_t name_index, 
+                              uint32_t id);
                 bool Run();
         };
 
@@ -85,13 +97,16 @@ namespace split_new_order {
                 friend class update_stocks;
                 
                 update_district 	*_dstrct_pc;	/* Read order id */
+                read_customer 		*_cust_pc;
                 uint32_t 		_wh_id;
                 uint32_t 		_dstrct_id;
                 bool 			_all_local;
                 uint32_t 		_num_items;
 
         public:
-                insert_oorder(update_distrct *dstrct_pc, uint32_t wh_id, 
+                insert_oorder(update_district *dstrct_pc, 
+                              read_customer *_cust_pc,
+                              uint32_t wh_id, 
                               uint32_t dstrct_id, 
                               bool all_local, 
                               uint32_t num_items);
@@ -114,8 +129,10 @@ namespace split_new_order {
                 std::vector<update_stocks*> 	_stock_pieces;  /* stock data */
 
         public:
-                insert_order_lines(uint32_t wh_id, uint32_t dstrct_id, 
-                                   update_stocks *stock_pieces, 
+                insert_order_lines(uint32_t wh_id, 
+                                   uint32_t dstrct_id, 
+                                   update_district *dstrct_pc,
+                                   update_stocks **stock_pieces, 
                                    uint32_t num_pieces);
                 virtual bool Run();
         };
@@ -157,9 +174,10 @@ namespace split_payment {
                 
                 uint32_t 	_wh_id;
                 char 		*_warehouse_name;
+                float 		_h_amount;
 
         public:
-                update_warehouse(uint32_t wh_id);
+                update_warehouse(uint32_t wh_id, float h_amount);
                 bool Run();
         };
 
@@ -172,9 +190,11 @@ namespace split_payment {
                 uint32_t 	_warehouse_id;
                 uint32_t 	_district_id;
                 char		*_district_name;
+                float 		_h_amount;
                 
         public: 
-                update_district(uint32_t warehouse_id, uint32_t district_id);
+                update_district(uint32_t warehouse_id, uint32_t district_id, 
+                                float h_amount);
                 bool Run();
         };
 
@@ -184,17 +204,21 @@ namespace split_payment {
                 friend class update_district;
                 friend class insert_history;
                 
-                uint32_t 	_warehoue_id;
+                uint32_t 	_warehouse_id;
                 uint32_t 	_district_id;
                 uint32_t 	_customer_id;
                 uint64_t 	_customer_name_ptr;                
+                uint32_t 	_customer_district_id;
+                uint32_t 	_customer_warehouse_id;
                 bool 		_use_name;
+                float 		_h_amount;
 
         public:
                 update_customer(uint32_t warehouse_id, uint32_t district_id, 
                                 uint32_t customer_id,
                                 uint64_t customer_name,
-                                bool use_name);
+                                bool use_name, 
+                                float h_amount);
                 bool Run();
         };
 
@@ -206,20 +230,28 @@ namespace split_payment {
                 
                 update_warehouse	*_warehouse_piece;
                 update_district 	*_district_piece;
-                uint32_t 		_warehouse_id;
-                uint32_t 		_district_id;
+                uint32_t 		_wh_id;
+                uint32_t 		_d_id;
                 uint32_t 		_customer_id;
+                uint32_t 		_customer_warehouse_id;
+                uint32_t 		_customer_district_id;
                 uint64_t 		_customer_name_ptr;
                 bool 			_use_name;
+                float 			_amount;
+                uint32_t 		_time;
 
         public:
                 insert_history(update_warehouse *warehouse_piece, 
                                update_district *district_piece, 
-                               uint32_t warehouse_id;
+                               uint32_t warehouse_id,
                                uint32_t district_id,
                                uint32_t customer_id,
+                               uint32_t customer_warehouse_id,
+                               uint32_t customer_district_id,
                                uint64_t customer_name_ptr,
-                               bool use_name);                               
+                               bool use_name, 
+                               float amount,
+                               uint32_t time);                               
                 bool Run();
         };
 };
@@ -280,7 +312,7 @@ namespace split_stock_level {
                 read_oorder 		*_oorder_piece;	/* for order id */
                 uint32_t 		_warehouse_id;
                 uint32_t 		_district_id;
-                std::vector<uint32_t>  	_item_ids;
+                uint32_t	  	*_item_ids;
                 uint32_t 		_num_items;
         public:
                 read_order_lines(read_oorder *oorder_piece, 
@@ -298,6 +330,8 @@ namespace split_stock_level {
                 read_order_lines	*_order_lines_piece;	/* for items */
                 uint32_t 		_warehouse_id;
                 uint32_t 		_district_id;
+                uint32_t 		_threshold;
+                volatile uint32_t 	_under_threshold_count;
                 
         public:
                 read_stocks(read_order_lines *order_lines, 
@@ -317,12 +351,18 @@ namespace split_order_status {
                 friend class read_order_lines;
                 
         private:               
-                uint32_t 	_warehouse_id;
-                uint32_t 	_district_id;
+                uint32_t 	_wh_id;
+                uint32_t 	_dstrct_id;
+                uint32_t 	_cust_id;
+                uint64_t 	_cust_nm_idx;
+                bool 		_use_name;
                 uint32_t 	_order_id;	/* Needs to be set */
 
         public:
-                read_oorder_index(uint32_t warehouse_id, uint32_t district_id);
+                read_oorder_index(uint32_t warehouse_id, uint32_t district_id, 
+                                  uint32_t cust_id, 
+                                  uint64_t cust_name_idx, 
+                                  bool use_name);
                 bool Run();
         };
         
@@ -334,6 +374,7 @@ namespace split_order_status {
                 read_oorder_index 	*_oorder_idx_pc;/* order id */
                 uint32_t 		_wh_id;
                 uint32_t 		_dstrct_id;
+                uint32_t 		_order_id;	/* needs to be set */
                 uint32_t 		_num_items;	/* needs to be set */
                 
         public:
@@ -350,6 +391,7 @@ namespace split_order_status {
                 read_oorder 		*_oorder_piece;	/* needed for items */
                 uint32_t 		_wh_id;
                 uint32_t 		_dstrct_id;
+                volatile uint32_t 	_ol_quantity;
 
         public:                
                 read_order_lines(read_oorder *oorder_piece, uint32_t wh_id, 
@@ -360,24 +402,24 @@ namespace split_order_status {
 
 namespace split_delivery {
         class update_last_delivery;
-        class read_oorders;
-        class read_order_lines;
-        class update_customers;
-        class remove_new_orders;
+        class read_oorder;
+        class read_order_line;
+        class update_customer;
+        class remove_new_order;
         
         class update_last_delivery : public txn {
-                friend class read_oorders;
-                friend class read_order_lines;
-                friend class update_customers;
-                friend class remove_new_orders;
+                friend class read_oorder;
+                friend class read_order_line;
+                friend class update_customer;
+                friend class remove_new_order;
                 
         private:
-                uint32_t 		_warehouse_id;
-                std::vector<uint32_t> 	_district_ids;
-                vector<uint32_t> 	_delivery_order_ids;
+                uint32_t 		_wh_id;
+                std::vector<uint32_t> 	_d_ids;
+                std::vector<uint32_t> 	_to_deliver;
 
         public:
-                split_delivery(uint32_t warehouse_id);
+                update_last_delivery(uint32_t warehouse_id);
                 bool Run();
                 
         };
@@ -385,9 +427,9 @@ namespace split_delivery {
         /* One of these txns runs per-district */
         class read_oorder : public txn {
                 friend class update_last_delivery;
-                friend class read_order_lines;
-                friend class update_customers;
-                friend class remove_new_orders;
+                friend class read_order_line;
+                friend class update_customer;
+                friend class remove_new_order;
                 
         private:
                 update_last_delivery	*_delivery_index_piece;
@@ -408,31 +450,33 @@ namespace split_delivery {
         /* One of these per-district */
         class read_order_line : public txn {
                 friend class update_last_delivery;
-                friend class read_oorders;
-                friend class update_customers;
-                friend class remove_new_orders;
+                friend class read_oorder;
+                friend class update_customer;
+                friend class remove_new_order;
                 
         private:
                 read_oorder 		*_oorder_piece;
-                uint32_t 		_warehouse_id;
-                uint32_t 		_district_id;
-                float 			_order_amount;
+                uint32_t 		_w_id;
+                uint32_t 		_d_id;
+                uint32_t 		_customer_id;
+                float 			_amount;                
 
         public:
                 read_order_line(read_oorder *oorder_piece, 
-                                uint32_t warehouse_id, 
-                                uint32_t district_id);
+                                uint32_t w_id, 
+                                uint32_t d_id);
 
                 bool Run();
         };
 
         class update_customer : public txn {
+
                 friend class update_last_delivery;
-                friend class read_oorders;
-                friend class read_order_lines;
-                friend class remove_new_orders;
-                
-        private:
+                friend class read_oorder;
+                friend class read_order_line;
+                friend class remove_new_order;
+
+        private:                
                 read_order_line		*_ordr_ln_pc;	/* Get amount due */
                 uint32_t 		_w_id;
                 uint32_t 		_d_id;
@@ -446,19 +490,19 @@ namespace split_delivery {
 
         class remove_new_order : public txn {
                 friend class update_last_delivery;
-                friend class read_oorders;
-                friend class read_order_lines;
-                friend class update_customers;
+                friend class read_oorder;
+                friend class read_order_line;
+                friend class update_customer;
 
         private:
                 update_last_delivery	*_dlvry_pc;	/* Get order id */
-                uint32_t 		_warehouse_id;
-                uint32_t 		_district_id;
+                uint32_t 		_w_id;
+                uint32_t 		_d_id;
 
         public:
                 remove_new_order(update_last_delivery *dlvry_pc, 
-                                 uint32_t warehouse_id, 
-                                 uint32_t district_id);
+                                 uint32_t w_id, 
+                                 uint32_t d_id);
                 bool Run();
         };
 };
