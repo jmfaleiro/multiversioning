@@ -31,8 +31,12 @@ struct split_action_batch {
 
 struct rendezvous_point {
         volatile uint64_t __attribute__((__packed__, __aligned__(CACHE_LINE))) counter;
+        volatile uint64_t __attribute((__packed__, __aligned__(CACHE_LINE))) done;
+        bool flattened;
         uint64_t num_actions;
         split_action *to_run;
+        split_action **actions;
+        split_action *after_txn;
 };
 
 enum split_action_status {
@@ -76,7 +80,7 @@ class split_action : public translator {
         friend class shared_split_executor;
 
  private:
-        volatile uint64_t 		_state;
+        uint64_t 		_state;
         
         /* Data for abortable actions */
         bool 				_can_abort;
@@ -88,7 +92,8 @@ class split_action : public translator {
 
         /* Data for downstream nodes */
         split_action 			*_rvp_sibling;
-        volatile uint64_t 		_dependency_flag;
+        rendezvous_point 		*_dep_rvp;
+        uint64_t	 		_dependency_flag;
  
         /* The partition on which this sub-action needs to execute. */
         uint32_t 			_partition_id;
@@ -124,7 +129,7 @@ class split_action : public translator {
         void transition_executed();
         void transition_complete();
         void transition_complete_remote();
-
+        bool check_complete();
         bool abortable();
         
         /* Rendezvous point functions */

@@ -38,6 +38,17 @@ void split_executor::reset_dep()
         dep_index = 0;
 }
 
+void split_executor::commit_remotes(split_action *action)
+{
+        assert(action->_can_abort == true);
+        commit_rvp *rvp;
+        uint64_t prev;
+
+        rvp = action->get_commit_rvp();
+        prev = xchgq(&rvp->status, ACTION_COMMITTED);
+        assert(prev == ACTION_UNDECIDED);
+}
+
 void split_executor::sync_commit_rvp(split_action *action, __attribute__((unused)) bool committed)
 {
         commit_rvp *rvp;
@@ -94,16 +105,23 @@ void split_executor::sync_commit_rvp(split_action *action, __attribute__((unused
         */
 }
 
-void split_executor::schedule_single_rvp(rendezvous_point *rvp)
+void split_executor::schedule_single_rvp(split_action *exec, 
+                                         rendezvous_point *rvp)
 {
-        split_action *action;
-
+        //        split_action *action;
         if (fetch_and_decrement(&rvp->counter) == 0) {
+                if (exec->abortable() == true)
+                        commit_remotes(exec);
+                if (rvp->after_txn != NULL)
+                        rvp->after_txn->run();
+                fetch_and_increment(&rvp->done);
+                /*
                 action = rvp->to_run;
                 while (action != NULL) {
                         action->clear_dependency_flag();
                         action = action->get_rvp_sibling();
                 }
+                */
         }
 }
 
@@ -114,8 +132,10 @@ void split_executor::schedule_downstream_pieces(split_action *action)
 
         num_rvps = action->num_downstream_rvps();
         rvps = action->get_rvps();
+        /* HACK TO GET COMMITS WORKING PROPERLY. */
+        assert(num_rvps <= 1);
         for (i = 0; i < num_rvps; ++i) 
-                schedule_single_rvp(rvps[i]);
+                schedule_single_rvp(action, rvps[i]);
 }
 
 void split_executor::Init()
@@ -166,23 +186,34 @@ void split_executor::schedule_operation(big_key &key, split_action *action,
         if (prev == NULL || entry->epoch != epoch) {
                 entry->epoch = epoch;        
                 cur->_dep = NULL;
+                if (cur->_type == SPLIT_WRITE) {
+                        cur->_read_dep = NULL;
+                        cur->_read_count = 0;
+                }
                 entry->key_struct = cur;
                 assert(cur->_dep != action);        
-        } else if (cur->_type == SPLIT_WRITE) {
-                cur->_dep = prev->_action;
+        } else if (cur->_type == SPLIT_WRITE && prev->_type == SPLIT_READ) {
+                cur->_dep = NULL;
                 cur->_read_count = 0;
                 entry->key_struct = cur;
+                cur->_read_dep = prev;
                 assert(cur->_dep != action);        
-        } else if (cur->_type == SPLIT_READ && cur->_type == SPLIT_READ) {
+        } else if (cur->_type == SPLIT_READ && prev->_type == SPLIT_READ) {
                 cur->_dep = prev->_dep;
                 prev->_read_count += 1;
                 cur->_read_dep = prev;
-        } else if (prev->_type == SPLIT_WRITE) {
+        } else if (cur->_type == SPLIT_READ && prev->_type == SPLIT_WRITE) {
                 assert(cur->_type == SPLIT_READ);
                 cur->_dep = prev->_action;
                 cur->_read_count = 1;
                 cur->_read_dep = cur;
                 entry->key_struct = cur;
+        } else if (cur->_type == SPLIT_WRITE && prev->_type == SPLIT_WRITE) {
+                cur->_dep = prev->_action;
+                cur->_read_count = 0;
+                cur->_read_dep = NULL;
+                entry->key_struct = cur;
+                assert(cur->_dep != action);
         } else {
                 assert(false);
         }
@@ -223,26 +254,70 @@ void split_executor::schedule_single(split_action *action)
 void split_executor::schedule_batch(split_action_batch batch)
 {
         uint32_t i;
-        uint64_t prev, cur;
+        //        uint64_t prev, cur;
         reset_dep();        
         for (i = 0; i < batch.num_actions; ++i) {
-                prev = dep_index;
+                //                prev = dep_index;
                 schedule_single(batch.actions[i]);
-                cur = dep_index;
-                assert(cur - prev == batch.actions[i]->_writeset.size());
+                //                cur = dep_index;
+                //                assert(cur - prev == batch.actions[i]->_writeset.size());
         }
         epoch += 1;
 }
 
 bool split_executor::check_ready(split_action *action)
 {
-        uint32_t num_deps, *dep_index;
-        bool ready;        
+        uint32_t num_deps, *dep_index, num_reads;
+        //        bool ready;        
         split_action *dep;
-        
-        ready = true;
+        //        bool incr_outstanding;
+
+        //        incr_outstanding = (action->_outstanding_flag == false);
+        //        ready = true;
         dep_index = &action->_dep_index;
         num_deps = action->_readset.size() + action->_writeset.size();
+        num_reads = action->_readset.size();
+
+        while (*dep_index < num_reads) {
+                dep = action->_dependencies[*dep_index]._dep;
+                assert(dep != action);
+                if (dep != NULL && 
+                    dep->check_complete() == false) {
+                        //                    process_action(dep) == false) {
+//                         action->_outstanding_flag = true;
+//                         if (incr_outstanding) 
+//                                 num_outstanding += 1;
+                        return false;
+                }                
+                *dep_index += 1;
+        }
+
+        while (*dep_index < num_deps) {
+                assert(action->_dependencies[*dep_index]._type == SPLIT_WRITE);
+                if (action->_dependencies[*dep_index]._read_dep != NULL) {
+                        if (action->_dependencies[*dep_index]._read_dep->_read_count != 0) {
+                                //        action->_outstanding_flag = true;
+                                //if (incr_outstanding) 
+                                //        num_outstanding += 1;
+                                return false;
+                        }
+                } else {
+                        dep = action->_dependencies[*dep_index]._dep;
+                        if (dep != NULL && 
+                            dep->check_complete() == false) {
+                                //                            process_action(dep) == false) {
+                                //action->_outstanding_flag = true;
+                                //if (incr_outstanding)
+                                //        num_outstanding += 1;
+                                return false;
+                        }                
+                }
+                *dep_index += 1;
+        }
+
+        //if (action->_outstanding_flag == true)
+        //        num_outstanding -= 1;
+        /*
         while (*dep_index != num_deps) {
                 dep = action->_dependencies[*dep_index]._dep;
                 assert(dep != action);
@@ -254,7 +329,21 @@ bool split_executor::check_ready(split_action *action)
                 }                
                 *dep_index += 1;
         }
-        return ready;
+        */
+        return true;
+}
+
+void split_executor::signal_reads(split_action *action)
+{
+        uint32_t i, nreads;
+        split_dep *deps;
+
+        nreads = action->_readset.size();
+        deps = action->_dependencies;
+        for (i = 0; i < nreads; ++i) {
+                assert(deps[i]._type == SPLIT_READ);
+                deps[i]._read_dep->_read_count -= 1;
+        }
 }
 
 bool split_executor::process_action(split_action *action)
@@ -269,7 +358,8 @@ bool split_executor::process_action(split_action *action)
                 if (state == split_action::SCHEDULED &&
                     action->remote_deps() == 0) {
                         if (try_execute(action) == true) {
-                                 return true;
+                                signal_reads(action);
+                                return true;
                         } else {
                                 /* An ancestor hasn't yet finished */
                                 return false;
@@ -289,12 +379,13 @@ bool split_executor::process_action(split_action *action)
 
 bool split_executor::try_execute(split_action *action) 
 {
-        bool commit;
+        //        bool commit;
 
         if (check_ready(action)) {
-                commit = action->run();
+                action->run();
                 if (action->abortable() == true) 
-                        sync_commit_rvp(action, commit);
+                        action->transition_executed();
+                        //sync_commit_rvp(action, commit);
                 else 
                         action->transition_complete();
                 schedule_downstream_pieces(action);
@@ -315,6 +406,9 @@ void split_executor::run_batch(split_action_batch batch)
                 if (!process_action(action)) {
                         add_pending(action);
                 }
+                
+                //                if (num_outstanding > config.outstanding_threshold)
+                //                        exec_pending();
                 
                 while (queue._count > config.outstanding_threshold) 
                         exec_pending();

@@ -27,6 +27,7 @@ uint32_t split_action::get_partition_id()
 /* RVP related functions */
 void split_action::set_rvp(rendezvous_point *rvp)
 {
+        _dep_rvp = rvp;
         if (rvp == NULL) {
                 _rvp_sibling = NULL;
         } else {
@@ -114,11 +115,18 @@ void* split_action::read(uint64_t key, uint32_t table_id)
 
 uint64_t split_action::remote_deps()
 {
-        uint64_t dep_count;
-        barrier();
-        dep_count = _dependency_flag;
-        barrier();
-        return dep_count;
+        uint64_t cnt;
+        if (_dependency_flag == 1) {
+                assert(_dep_rvp != NULL);
+                barrier();
+                cnt = _dep_rvp->done;
+                barrier();
+                if (cnt == 1)
+                        _dependency_flag = 0;
+                return (cnt == 1);
+        } else {
+                return 0;
+        }
 }
 
 /* XXX Incomplete */
@@ -195,4 +203,18 @@ split_dep* split_action::get_dependencies()
 uint32_t* split_action::get_dep_index()
 {
         return &_dep_index;
+}
+
+bool split_action::check_complete()
+{
+        if (_can_abort && _state == split_action_state::EXECUTED) {
+                if (_commit_rendezvous->status != ACTION_UNDECIDED) {
+                        _state = split_action_state::COMPLETE;
+                        return true;
+                } else {
+                        return false;
+                }
+        } else {
+                return (_state == split_action_state::COMPLETE);
+        }
 }
