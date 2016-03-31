@@ -36,6 +36,23 @@ ZipfGenerator::ZipfGenerator(uint64_t numElems, double theta) {
 }
 
 uint64_t ZipfGenerator::GenNext() {
+        /*
+        uint64_t temp = (100.0 * theta);
+        uint64_t ret = rand() % 100;
+        if (ret < temp) {
+                return (uint64_t)rand() % 200;
+        } else {
+                while (true) {
+                        ret = (uint64_t)rand() % numElems;
+                        if (ret < 200)
+                                continue;
+                        else 
+                                return ret;
+                }
+        }
+        */
+
+
   double alpha = 1 / (1 - this->theta);
   double eta = (1 - pow(2.0 / this->numElems, 1 - this->theta));
   double u = (double)rand() / ((double)RAND_MAX);
@@ -52,8 +69,9 @@ uint64_t ZipfGenerator::GenNext() {
     assert(temp > 0 && temp <= this->numElems);
     index = temp - 1;
   }
-  
+  //  return index;
   return perm[index];
+
 }
 
 ZipfGenerator::~ZipfGenerator()

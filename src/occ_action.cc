@@ -132,6 +132,7 @@ void OCCAction::add_read_key(uint32_t tableId, uint64_t key)
 
 OCCAction::OCCAction(txn *txn) : translator(txn)
 {
+        insert_ptr = 0;
 }
 
 void OCCAction::add_write_key(uint32_t tableId, uint64_t key, bool is_rmw)
@@ -222,11 +223,76 @@ void OCCAction::validate()
                         validate_single(this->writeset[i]);
 }
 
-void OCCAction::insert(__attribute__((unused)) uint64_t key, 
-                       __attribute__((unused)) uint32_t table_id, 
-                       __attribute__((unused)) void *value)
+void OCCAction::create_inserts(uint32_t n_inserts)
 {
-        assert(false);
+        uint32_t i;
+        occ_composite_key k(0, 0, false);
+
+        k.tableId = 0;
+        k.key = 0;
+        k.old_tid = 0;
+        k.is_rmw = false;
+        k.is_locked = false;
+        k.is_initialized = false;
+        k.value = NULL;
+        k.lock = NULL;
+        k.record_ptr = NULL;
+        
+        for (i = 0; i < n_inserts; ++i) 
+                inserts.push_back(k);
+}
+
+void* OCCAction::insert_ref(uint64_t key, uint32_t table_id)
+{
+        assert(insert_ptr < inserts.size());
+        void *value;
+        conc_table_record *record;
+        concurrent_table *tbl;
+        mcs_struct *lock_struct;
+        bool success;        
+
+        record = insert_mgr->get_insert_record(table_id);
+        value = record->value;
+        record->key = key;
+        record->next = NULL;
+        inserts[insert_ptr].record_ptr = record;
+        insert_ptr += 1;
+        
+        /* Do the actual insert */
+        lock_struct = mgr->get_struct();
+        acquire_single(RECORD_TID_PTR(value));
+        tbl = tbl_mgr->get_conc_table(table_id);
+        assert(tbl != NULL);
+        success = tbl->Put(record, lock_struct);
+        mgr->return_struct(lock_struct);
+        if (success == false) {
+                throw occ_validation_exception(READ_ERR);
+        } 
+
+        return RECORD_VALUE_PTR(value);
+}
+
+void OCCAction::undo_inserts()
+{
+        uint32_t i, table_id;
+        conc_table_record *record, *temp;
+        concurrent_table *tbl;
+        mcs_struct *lock_struct;
+
+        for (i = 0; i < insert_ptr; ++i) {
+                record = (conc_table_record*)inserts[i].record_ptr;
+                table_id = inserts[i].tableId;                
+                tbl = tbl_mgr->get_conc_table(table_id);
+                assert(tbl != NULL);
+                lock_struct = mgr->get_struct();
+
+                /* Remove the record from the index */
+                temp = tbl->Remove(record->key, lock_struct);
+                assert(temp == record);
+
+                /* Return the record back to the allocator */
+                insert_mgr->return_insert_record(record, table_id);
+        }
 }
 
 void OCCAction::remove(__attribute__((unused)) uint64_t key, 
@@ -366,17 +432,19 @@ uint64_t OCCAction::compute_tid(uint32_t epoch, uint64_t last_tid)
         assert(!IS_LOCKED(max_tid));
         num_reads = this->readset.size();
         num_writes = this->writeset.size();
-        for (i = 0; i < num_reads; ++i) {
-                cur_tid = GET_TIMESTAMP(this->readset[i].old_tid);
-                assert(!IS_LOCKED(cur_tid));
-                if (cur_tid > max_tid)
-                        max_tid = cur_tid;
+        if (!READ_COMMITTED) {
+                for (i = 0; i < num_reads; ++i) {
+                        cur_tid = GET_TIMESTAMP(this->readset[i].old_tid);
+                        assert(!IS_LOCKED(cur_tid));
+                        if (cur_tid > max_tid)
+                                max_tid = cur_tid;
+                }
         }
         for (i = 0; i < num_writes; ++i) {
                 table_id = this->writeset[i].tableId;
                 key = this->writeset[i].key;                
-                value = (volatile uint64_t*)this->tables[table_id]->Get(key);
-                assert(IS_LOCKED(*value));
+                value = (volatile uint64_t*)this->tables[table_id]->GetAlways(key);
+                assert(READ_COMMITTED || IS_LOCKED(*value));
                 barrier();
                 cur_tid = GET_TIMESTAMP(*value);
                 barrier();
@@ -409,12 +477,12 @@ void OCCAction::cleanup()
                 if (this->readset[i].is_initialized == true) 
                         cleanup_single(this->readset[i]);
         }
+        
+        insert_ptr = 0;
 }
 
 void OCCAction::install_single_write(occ_composite_key &comp_key)
 {
-        if (READ_COMMITTED)
-                this->tid = 0;
         assert(IS_LOCKED(this->tid) == false);
 
         void *value;

@@ -36,6 +36,8 @@ class graph_node {
         vector<int> *in_links;
         vector<int> *out_links;
 
+        txn *after;
+        split_action *after_t;
         graph_node* topo_link;
 
         uint32_t partition;
@@ -49,6 +51,8 @@ class graph_node {
                 topo_link = NULL;
                 partition = INT_MAX;
                 abortable = false;
+                after = NULL;
+                after_t = NULL;
         }
 };
 

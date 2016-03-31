@@ -175,6 +175,147 @@ bool ycsb_rmw::Run()
         return true;
 }
 
+split_ycsb_read::split_ycsb_read(uint32_t *acc_array, vector<uint64_t> reads)
+{
+        uint32_t i, sz;
+
+        _accumulated = acc_array;
+        sz = reads.size();
+        for (i = 0; i < sz; ++i) 
+                _reads.push_back(reads[i]);
+}
+
+uint32_t split_ycsb_read::num_reads()
+{
+        return _reads.size();
+}
+
+void split_ycsb_read::get_reads(big_key *array)
+{
+        uint32_t i, sz;
+        
+        sz = _reads.size();
+        //        assert(sz == 10);
+        for (i = 0; i < sz; ++i) {
+                array[i].key = _reads[i];
+                array[i].table_id = 0;
+        }                
+}
+
+bool split_ycsb_read::Run()
+{
+        uint32_t i, nreads, total;
+        char *record;
+
+        total = 0;
+        nreads = _reads.size();
+        for (i = 0; i < nreads; ++i) {
+                record = (char*)get_read_ref(_reads[i], 0);
+                total += *(uint32_t*)record;
+                  
+        }
+        *_accumulated = total;
+        return true;
+}
+
+void split_ycsb_read::process_record(uint32_t *acc, uint64_t key)
+{
+        char *val;
+        uint32_t i, nfields;
+
+        val = (char*)get_read_ref(key, 0);
+        nfields = 10;
+        for (i = 0; i < nfields; ++i) 
+                acc[i] += *(uint32_t*)&val[i*100];
+}
+
+split_ycsb_acc::split_ycsb_acc(vector<split_ycsb_read*> read_txns)
+{
+        uint32_t i, ntxns;
+        
+        _accumulated = NULL;
+        ntxns = read_txns.size();
+        for (i = 0; i < ntxns; ++i) 
+                _read_txns.push_back(read_txns[i]);        
+}
+
+bool split_ycsb_acc::Run()
+{
+        uint32_t i, j, ntxns;
+        uint32_t *temp;
+        
+        //        accumulated = &(_read_txns[0]->_accumulated);
+        ntxns = _read_txns.size();
+        for (i = 1; i < ntxns; ++i) {
+                temp = _read_txns[i]->_accumulated;
+                for (j = 0; j < 10; ++j) 
+                        _read_txns[0]->_accumulated[j] += temp[j];
+                //                        (*_accumulated)[j] += temp[j];
+        }
+        return true;
+}
+
+split_ycsb_update::split_ycsb_update(uint32_t *accumulated,
+                                     uint32_t nreads,
+                                     vector<uint64_t> writes)
+{
+        uint32_t i, nwrites;
+
+        _nreads = nreads;
+        _accumulated = accumulated;
+        nwrites = writes.size();
+        for (i = 0; i < nwrites; ++i) 
+                _writes.push_back(writes[i]);
+}
+
+uint32_t split_ycsb_update::num_rmws()
+{
+        return _writes.size();
+}
+
+void split_ycsb_update::get_rmws(big_key *arr)
+{
+        uint32_t i, nwrites;
+        
+        nwrites = _writes.size();
+        for (i = 0; i < nwrites; ++i) {
+                arr[i].key = _writes[i];
+                arr[i].table_id = 0;
+        }
+}
+
+bool split_ycsb_update::Run()
+{
+        uint32_t i, nwrites, total;
+        char *record;
+
+        total = 0;
+        for (i = 0; i < _nreads; ++i) 
+                total += _accumulated[i];
+        
+        nwrites = _writes.size();
+        for (i = 0; i < nwrites; ++i) {
+                record = (char*)get_write_ref(_writes[i], 0);
+                *(uint32_t*)record += total;
+        }
+        return true;
+}
+
+void split_ycsb_update::get_values()
+{
+        /*
+        uint32_t i, j;
+        split_ycsb_read *read_txn;
+
+        for (i = 0; i < nreads; ++i) {
+                read_txn = _reads[i];
+                for (j = 0; j < 10; ++j) 
+                        _accumulated[j] += read_txn->_accumulated[j];
+        }
+        */
+}
+
+
 ycsb_update::ycsb_update(vector<uint64_t> writes, uint64_t *updates)
 {
         uint32_t i, sz;
@@ -217,5 +358,73 @@ bool ycsb_update::Run()
                         *temp += _updates[j];
                 }
         }
+        return true;
+}
+
+ycsb_read_write::ycsb_read_write(vector<uint64_t> reads, 
+                                 vector<uint64_t> writes)
+{
+        uint32_t i, nreads, nwrites;
+        
+        memset(_accumulated, 0x0, sizeof(uint64_t)*10);
+        nreads = reads.size();
+        nwrites = writes.size();
+        for (i = 0; i < nreads; ++i) 
+                _reads.push_back(reads[i]);
+        for (i = 0; i < nwrites; ++i)
+                _writes.push_back(writes[i]);
+}
+
+uint32_t ycsb_read_write::num_reads()
+{
+        return _reads.size();
+}
+
+uint32_t ycsb_read_write::num_rmws()
+{
+        return _writes.size();
+}
+
+void ycsb_read_write::get_reads(big_key *array)
+{
+        uint32_t i, nreads;
+
+        nreads = _reads.size();
+        for (i = 0; i < nreads; ++i) {
+                array[i].key = _reads[i];
+                array[i].table_id = 0;
+        }
+}
+
+void ycsb_read_write::get_rmws(big_key *array)
+{
+        uint32_t i, nwrites; 
+        
+        nwrites = _writes.size();
+        for (i = 0; i < nwrites; ++i) {
+                array[i].key = _writes[i];
+                array[i].table_id = 0;
+        }
+}
+
+bool ycsb_read_write::Run()
+{
+        uint32_t i, nreads, nwrites, total;        
+        char *record;
+
+        total = 0;
+        nreads = _reads.size();
+        for (i = 0; i < nreads; ++i) {
+                record = (char*)get_read_ref(_reads[i], 0);
+                total += *(uint32_t*)record;
+        }
+
+        nwrites = _writes.size();
+        for (i = 0; i < nwrites; ++i) {
+                record = (char*)get_write_ref(_writes[i], 0);
+                *(uint32_t*)record += total;
+        }
+
+
         return true;
 }

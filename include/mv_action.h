@@ -202,7 +202,7 @@ class mv_action : public translator {
         void setup_reverse_index();
         void* write_ref(uint64_t key, uint32_t table_id);
         void* read(uint64_t key, uint32_t table_id);
-        void insert(uint64_t key, uint32_t table_id, void *value);
+        void* insert_ref(uint64_t key, uint32_t table_id);
         void remove(uint64_t key, uint32_t table_id);
         int rand();
         bool Run();

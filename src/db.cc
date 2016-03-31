@@ -22,9 +22,9 @@ void* txn::get_read_ref(uint64_t key, uint32_t table_id)
         return trans->read(key, table_id);
 }
 
-void txn::insert_record(uint64_t key, uint32_t table_id, void *value)
+void* txn::insert_record(uint64_t key, uint32_t table_id)
 {
-        trans->insert(key, table_id, value);
+        return trans->insert_ref(key, table_id);
 }
 
 void txn::remove_record(uint64_t key, uint32_t table_id)

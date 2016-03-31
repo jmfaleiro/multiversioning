@@ -294,7 +294,8 @@ void locking_experiment(locking_config conf, workload_config w_conf)
         } else if (w_conf.experiment == YCSB_UPDATE || 
                    w_conf.experiment == YCSB_10RMW ||
                    w_conf.experiment == YCSB_2RMW8R ||
-                   w_conf.experiment == YCSB_SINGLE_HOT) {
+                   w_conf.experiment == YCSB_SINGLE_HOT ||
+                   w_conf.experiment == YCSB_RW) {
                 num_records[0] = w_conf.num_records;
                 num_tables = 1;
         } else {

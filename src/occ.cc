@@ -157,6 +157,7 @@ bool OCCWorker::RunSingle(OCCAction *action)
         action->set_allocator(this->bufs);
         action->set_mgr(this->mgr);
         action->worker = this;
+        action->tbl_mgr = config.tbl_mgr;
 
         try {
                 action->run();
@@ -166,16 +167,16 @@ bool OCCWorker::RunSingle(OCCAction *action)
                 barrier();                        
                 if (!READ_COMMITTED) {
                         action->validate();
-                        this->last_tid = action->compute_tid(epoch,
-                                                             this->last_tid);
                 }
+                this->last_tid = action->compute_tid(epoch,
+                                                     this->last_tid);
                 action->install_writes();
                 action->cleanup();
                 fetch_and_increment(&config.num_completed);
                 validated = true;
         } catch(const occ_validation_exception &e) {
-                if (READ_COMMITTED)
-                        assert(false);
+                assert(!READ_COMMITTED || e.err == INSERT_ERR);
+                action->undo_inserts();
                 if (e.err == VALIDATION_ERR)
                         action->release_locks();
                 action->cleanup();

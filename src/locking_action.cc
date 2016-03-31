@@ -130,9 +130,8 @@ void* locking_action::read(uint64_t key, uint32_t table_id)
         return k->value;
 }
 
-void locking_action::insert(__attribute__((unused)) uint64_t key, 
-                            __attribute__((unused)) uint32_t table_id, 
-                            __attribute__((unused)) void *value)
+void* locking_action::insert_ref(__attribute__((unused)) uint64_t key, 
+                                 __attribute__((unused)) uint32_t table_id)
 {
         assert(false);
 }

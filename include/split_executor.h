@@ -47,8 +47,9 @@ class split_executor : public Runnable {
 
         /* Manage cross-partition dependencies. */
         void sync_commit_rvp(split_action *action, bool committed);
-        void schedule_single_rvp(rendezvous_point *rvp);        
+        void schedule_single_rvp(split_action *exec, rendezvous_point *rvp);
         void schedule_downstream_pieces(split_action *action);
+        void commit_remotes(split_action *action);
 
         /* Manage outstanding unexecuted transactions */
         void add_pending(split_action *action);
@@ -66,6 +67,8 @@ class split_executor : public Runnable {
         void schedule_single(split_action *action);
         void schedule_operation(big_key &key, split_action *action, 
                                 access_t type);
+        void signal_reads(split_action *action);
+
 
         /* Dep array stuff */
         void init_dep_array();

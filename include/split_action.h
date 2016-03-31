@@ -31,8 +31,12 @@ struct split_action_batch {
 
 struct rendezvous_point {
         volatile uint64_t __attribute__((__packed__, __aligned__(CACHE_LINE))) counter;
+        volatile uint64_t __attribute((__packed__, __aligned__(CACHE_LINE))) done;
+        bool flattened;
         uint64_t num_actions;
         split_action *to_run;
+        split_action **actions;
+        split_action *after_txn;
 };
 
 enum split_action_status {
@@ -76,7 +80,7 @@ class split_action : public translator {
         friend class shared_split_executor;
 
  private:
-        volatile uint64_t 		_state;
+        uint64_t 		_state;
         
         /* Data for abortable actions */
         bool 				_can_abort;
@@ -85,10 +89,12 @@ class split_action : public translator {
 
         /* Data for upstream nodes  */
         rendezvous_point 		**_rvps;
+        bool 				_is_post;
 
         /* Data for downstream nodes */
         split_action 			*_rvp_sibling;
-        volatile uint64_t 		_dependency_flag;
+        rendezvous_point 		*_dep_rvp;
+        uint64_t	 		_dependency_flag;
  
         /* The partition on which this sub-action needs to execute. */
         uint32_t 			_partition_id;
@@ -107,7 +113,7 @@ class split_action : public translator {
         uint32_t 			_rvp_count;
         
         split_action(txn *t, uint32_t partition_id, uint64_t dependency_flag, 
-                     bool can_abort);
+                     bool can_abort, bool is_post);
         
         /* Executor functions */
         uint64_t remote_deps();
@@ -124,7 +130,7 @@ class split_action : public translator {
         void transition_executed();
         void transition_complete();
         void transition_complete_remote();
-
+        bool check_complete();
         bool abortable();
         
         /* Rendezvous point functions */
@@ -140,7 +146,7 @@ class split_action : public translator {
         /* Translator interface functions  */
         void* write_ref(uint64_t key, uint32_t table_id);
         void* read(uint64_t key, uint32_t table_id);
-        void insert(uint64_t key, uint32_t table_id, void *value);
+        void *insert_ref(uint64_t key, uint32_t table_id);
         void remove(uint64_t key, uint32_t table_id);
         int rand();
 };

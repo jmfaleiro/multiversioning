@@ -15,13 +15,15 @@ extern uint64_t gen_unique_key(RecordGenerator *gen,
 uint64_t simple_record0, simple_record1;
 bool init = false;
 
-uint32_t get_partition(uint64_t record, uint32_t table, uint32_t num_partitions)
+uint32_t get_partition(uint64_t record, __attribute__((unused)) uint32_t table, 
+                       uint32_t num_partitions)
 {
-        uint64_t temp;
-        temp = table;
-        temp = (temp << 32);
-        temp = (temp | num_partitions);        
-        return Hash128to64(std::make_pair(record, temp)) % num_partitions;
+        return record % num_partitions;
+//         uint64_t temp;
+//         temp = table;
+//         temp = (temp << 32);
+//         temp = (temp | num_partitions);        
+//         return Hash128to64(std::make_pair(record, temp)) % num_partitions;
 }
 
 graph_node* find_node(uint32_t partition, txn_graph *graph)
@@ -36,6 +38,115 @@ graph_node* find_node(uint32_t partition, txn_graph *graph)
                         return (*nodes)[i];
         }
         return NULL;
+}
+
+txn_graph* gen_read_write(RecordGenerator *gen, workload_config conf, 
+                          uint32_t num_partitions)
+{
+        uint32_t i, j, key, partition, write_check;
+        uint32_t *read_array;
+        vector<uint64_t> writeset, readset, args;
+        assert(conf.txn_size % 2 == 0 && conf.experiment == YCSB_RW);
+        std::set<uint64_t> seen;
+        txn_graph *read_graph, *write_graph;
+        graph_node *cur_node, *writer;
+        vector<graph_node*> *nodes, read_nodes, write_nodes;
+        vector<split_ycsb_read*> read_txns;
+        //        split_ycsb_acc *accumulator_action;
+        split_ycsb_read *current_read;
+
+        write_graph = new txn_graph();
+        read_graph = new txn_graph();
+
+        /* Gen reads and writes */
+        for (i = 0; i < conf.txn_size; ++i) {
+                key = gen_unique_key(gen, &seen);
+                if (i % 2 == 0) {
+                        writeset.push_back(key);
+                        partition = get_partition(key, 0, num_partitions);
+                        if ((cur_node = find_node(partition, write_graph)) == NULL) {
+                                cur_node = new graph_node();
+                                cur_node->partition = partition;
+                                write_graph->add_node(cur_node);
+                        }
+                } else {
+                        readset.push_back(key);
+                        partition = get_partition(key, 0, num_partitions);
+                        if ((cur_node = find_node(partition, read_graph)) == NULL) {
+                                cur_node = new graph_node();
+                                cur_node->partition = partition;
+                                read_graph->add_node(cur_node);
+                                read_nodes.push_back(cur_node);
+                        }                                
+                }                                
+        }
+
+        /* Create read buffers */
+        read_array = (uint32_t*)zmalloc(sizeof(uint32_t)*read_nodes.size());
+        
+        /* Create read actions */        
+        nodes = read_graph->get_nodes();
+        write_check = 0;
+        for (i = 0; i < nodes->size(); ++i) {
+                args.clear();
+                cur_node = (*nodes)[i];
+                partition = cur_node->partition;
+                assert(partition != INT_MAX);
+                for (j = 0; j < conf.txn_size/2; ++j) {
+                        if (get_partition(readset[j], 0, num_partitions) == 
+                            partition) {
+                                args.push_back(readset[j]);
+                                write_check += 1;
+                        }
+                }
+                assert(args.size() != 0);
+                current_read = new split_ycsb_read(&read_array[i], args);
+                read_txns.push_back(current_read);
+                cur_node->app = current_read;
+        }        
+        assert(write_check == conf.txn_size / 2);
+        
+        /* Create accumulator */
+        //        accumulator_action = NULL;
+        //        accumulator_action = new split_ycsb_acc(read_txns);
+        //        (*nodes)[0]->after = accumulator_action;
+        
+        /* Create write actions */
+        nodes = write_graph->get_nodes();
+        write_check = 0;
+        for (i = 0; i < nodes->size(); ++i) {
+                args.clear();
+                cur_node = (*nodes)[i];
+                partition = cur_node->partition;
+                assert(partition != INT_MAX);
+                for (j = 0; j < conf.txn_size/2; ++j) {
+                        if (get_partition(writeset[j], 0, num_partitions) == 
+                            partition) {
+                                args.push_back(writeset[j]);
+                                write_check += 1;
+                        }
+                }
+                assert(args.size() != 0);
+                cur_node->app = new split_ycsb_update(read_array,
+                                                      read_nodes.size(),
+                                                      args);
+                write_nodes.push_back(cur_node);
+        }        
+        assert(write_check == conf.txn_size / 2);
+        
+        for (i = 0; i < nodes->size(); ++i) {
+                writer = new graph_node();
+                writer->partition = (*nodes)[i]->partition;
+                writer->app = (*nodes)[i]->app;
+                read_graph->add_node(writer);
+                
+                for (j = 0; j < read_nodes.size(); ++j) {
+                        cur_node = read_nodes[j];
+                        read_graph->add_edge(cur_node, writer);
+                }
+        }
+        delete(write_graph);
+        return read_graph;
 }
 
 
@@ -94,6 +205,61 @@ txn_graph* gen_ycsb_update(RecordGenerator *gen, workload_config conf,
                 // cur_node->abortable = true;
         }        
         assert(write_check == conf.txn_size);
+        return graph;
+}
+
+txn_graph* gen_ycsb_readonly(RecordGenerator *gen, workload_config conf, 
+                             uint32_t num_partitions)
+{
+        set<uint32_t> partitions;
+        vector<uint64_t> writes, args;
+        uint64_t key;
+        uint32_t i, j, write_check, partition;
+        vector<graph_node*> abortables;
+        std::set<uint64_t> seen_keys;
+
+        vector<graph_node*> *nodes;
+        graph_node *cur_node;
+        txn_graph *graph;
+        
+        graph = new txn_graph();
+
+        for (i = 0; i < conf.read_txn_size; ++i) {
+                //                key = i;
+
+                key = gen_unique_key(gen, &seen_keys);
+                writes.push_back(key);
+                partition = get_partition(key, 0, num_partitions);
+                if ((cur_node = find_node(partition, graph)) == NULL) {
+                        cur_node = new graph_node();
+                        cur_node->partition = partition;
+                        graph->add_node(cur_node);
+                } 
+                
+        }
+        //        assert(seen->size() == writes.size());
+        
+        /* Create actions */
+        nodes = graph->get_nodes();
+        write_check = 0;
+        for (i = 0; i < nodes->size(); ++i) {
+                args.clear();
+                cur_node = (*nodes)[i];
+                partition = cur_node->partition;
+                assert(partition != INT_MAX);
+                for (j = 0; j < conf.read_txn_size; ++j) {
+                        if (get_partition(writes[j], 0, num_partitions) == 
+                            partition) {
+                                args.push_back(writes[j]);
+                                write_check += 1;
+                        }
+                }
+                assert(args.size() != 0);
+                cur_node->app = new ycsb_readonly(args);
+                /* XXX REMOVE THIS */
+                // cur_node->abortable = true;
+        }        
+        assert(write_check == conf.read_txn_size);
         return graph;
 }
 
@@ -347,7 +513,13 @@ txn_graph* generate_split_action(workload_config conf, uint32_t num_partitions)
                 return generate_dual_rvp(my_gen, conf, num_partitions);
         else if (conf.experiment == 2)
                 return generate_abortable_action(my_gen, conf, num_partitions);
-        else if (conf.experiment == YCSB_UPDATE)
-                return gen_ycsb_abortable(my_gen, conf, num_partitions);
+        else if (conf.experiment == YCSB_UPDATE) {
+                if (conf.read_pct > 0 && (uint32_t)rand() % 100 < conf.read_pct)
+                        return gen_ycsb_readonly(my_gen, conf, num_partitions);
+                else
+                        return gen_ycsb_abortable(my_gen, conf, num_partitions);
+        } else if (conf.experiment == YCSB_RW) {
+                return gen_read_write(my_gen, conf, num_partitions);
+        }
         assert(false);
 }

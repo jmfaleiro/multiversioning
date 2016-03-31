@@ -147,6 +147,22 @@ txn* generate_ycsb_rmw(RecordGenerator *gen, uint32_t num_reads,
         return ret;
 }
 
+txn* generate_ycsb_read_write(RecordGenerator *gen, workload_config config)
+{
+        uint32_t i;
+        std::set<uint64_t> seen_keys;
+        vector<uint64_t> reads, writes;
+        uint64_t key;
+
+        for (i = 0; i < config.txn_size; ++i) {
+                key = gen_unique_key(gen, &seen_keys);
+                if (i % 2 == 0) 
+                        writes.push_back(key);
+                else 
+                        reads.push_back(key);                
+        }
+        return new ycsb_read_write(reads, writes);
+}
 
 txn* generate_ycsb_action(RecordGenerator *gen, workload_config config)
 {
@@ -155,6 +171,9 @@ txn* generate_ycsb_action(RecordGenerator *gen, workload_config config)
         uint32_t num_reads, num_rmws;
         int flip;
 
+        if (config.experiment == YCSB_RW)
+                return generate_ycsb_read_write(gen, config);
+        
         num_reads = 0;
         num_rmws = 0;        
         flip = (uint32_t)rand() % 100;
@@ -206,7 +225,8 @@ uint32_t generate_ycsb_input(workload_config conf, txn ***loaders)
 {
         assert(conf.experiment == YCSB_10RMW || conf.experiment == YCSB_2RMW8R ||
                conf.experiment == YCSB_SINGLE_HOT || 
-               conf.experiment == YCSB_UPDATE);
+               conf.experiment == YCSB_UPDATE ||
+               conf.experiment == YCSB_RW);
         using namespace SmallBank;
         uint32_t num_txns, i, remainder;
         uint64_t start, end;
@@ -235,7 +255,8 @@ uint32_t generate_input(workload_config conf, txn ***loaders)
         if (conf.experiment == YCSB_10RMW || 
             conf.experiment == YCSB_2RMW8R ||
             conf.experiment == YCSB_SINGLE_HOT || 
-            conf.experiment == YCSB_UPDATE)
+            conf.experiment == YCSB_UPDATE || 
+            conf.experiment == YCSB_RW)
                 return generate_ycsb_input(conf, loaders);
         else if (conf.experiment == SMALL_BANK)
                 return generate_small_bank_input(conf, loaders);
@@ -252,7 +273,8 @@ txn* generate_transaction(workload_config config)
         } else if (config.experiment == YCSB_10RMW || 
                    config.experiment == YCSB_2RMW8R ||
                    config.experiment == YCSB_SINGLE_HOT ||
-                   config.experiment == YCSB_UPDATE) {
+                   config.experiment == YCSB_UPDATE || 
+                   config.experiment == YCSB_RW) {
                 if (config.distribution == UNIFORM && my_gen == NULL) 
                         my_gen = new UniformGenerator(config.num_records);
                 else if (config.distribution == ZIPFIAN && my_gen == NULL)

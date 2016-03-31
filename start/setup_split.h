@@ -68,7 +68,8 @@ public:
                 Table **init_tbl;
                 TableConfig t_conf;
                 //                assert(s_conf.experiment == YCSB_UPDATE);
-                if (s_conf.experiment == YCSB_UPDATE || 
+                if (s_conf.experiment == YCSB_RW || 
+                    s_conf.experiment == YCSB_UPDATE || 
                     s_conf.experiment == 0 || 
                     s_conf.experiment == 1 ||
                     s_conf.experiment == 2) {
@@ -239,19 +240,68 @@ public:
                 return count;
         }
 
+        static void flatten_rvp(rendezvous_point *rvp)
+        {
+                uint32_t i, num_actions;
+                split_action *rvp_ptr;
+
+                if (rvp->flattened == true)
+                        return;
+                rvp->flattened = true;
+                
+                /* Count the number of actions */
+                rvp_ptr = rvp->to_run;
+                num_actions = 0;
+                while (rvp_ptr != NULL) {
+                        num_actions += 1;
+                        rvp_ptr = rvp_ptr->get_rvp_sibling();
+                }
+                
+                rvp->actions = (split_action**)zmalloc(sizeof(split_action*)*num_actions);
+                rvp_ptr = rvp->to_run;
+                for (i = 0; i < num_actions; ++i) {
+                        assert(rvp_ptr != NULL);
+                        rvp->actions[i] = rvp_ptr;
+                        rvp_ptr = rvp_ptr->get_rvp_sibling();
+                }
+                assert(rvp_ptr == NULL);
+        }
+
+        static void flatten_all_rvps(txn_graph *graph)
+        {
+                split_action *action;
+                rendezvous_point **rvps;
+                uint32_t i, j, num_nodes, nrvps;
+                vector<graph_node*> *nodes;
+
+                nodes = graph->get_nodes();
+                num_nodes = nodes->size();
+                for (i = 0; i < num_nodes; ++i) {
+                        action = (*nodes)[i]->t;
+                        nrvps = action->num_downstream_rvps();
+                        rvps = action->get_rvps();
+                        for (j = 0; j < nrvps; ++j) {
+                                flatten_rvp(rvps[j]);
+                        }
+                }
+        }
+        
         static split_action* txn_to_piece(txn *txn, uint32_t partition_id, 
-                                          bool dependency_flag, bool can_commit)
+                                          uint64_t dependency_flag, 
+                                          bool can_commit, 
+                                          bool is_post)
         {
                 uint32_t num_reads, num_rmws, num_writes, max, i;
                 big_key *key_array;
                 split_action *action;
 
                 action = new split_action(txn, partition_id, dependency_flag, 
-                                          can_commit);
+                                          can_commit, is_post);
                 txn->set_translator(action);
                 num_reads = txn->num_reads();
                 num_writes = txn->num_writes();
                 num_rmws = txn->num_rmws();
+                assert(is_post == false || (num_reads + num_writes + num_rmws == 0));
 
                 if (num_reads >= num_writes && num_reads >= num_rmws) 
                         max = num_reads;
@@ -274,6 +324,7 @@ public:
                 for (i = 0; i < num_writes; ++i) {
                         action->_writeset.push_back(key_array[i]);
                 }
+                free(key_array);
                 return action;
         }
 
@@ -289,15 +340,17 @@ public:
                 
                 /* Check that the partition on the node has been initialized */
                 assert(node->partition != INT_MAX);
-
+                
+                if (node->after != NULL) 
+                        node->after_t = txn_to_piece(node->after, node->partition, 0, false, true);
                 if (node->in_links == NULL) {
-                        piece = txn_to_piece(node->app, node->partition, false, 
-                                             node->abortable);
+                        piece = txn_to_piece(node->app, node->partition, 0, 
+                                             node->abortable, false);
                         piece->set_rvp(NULL);
                         node->t = piece;
                 } else {
-                        piece = txn_to_piece(node->app, node->partition, true, 
-                                             node->abortable);
+                        piece = txn_to_piece(node->app, node->partition, 1, 
+                                             node->abortable, false);
                         if ((node_phase = find_phase(node->in_links, phases)) != NULL) {
                                 rvp = node_phase->rvp;
                         } else {
@@ -309,8 +362,11 @@ public:
                                 barrier();
                                 rvp->counter = get_parent_count(node);
                                 rvp->num_actions = rvp->counter;
+                                rvp->done = 0;
                                 barrier();
                                 rvp->to_run = NULL;
+                                rvp->after_txn = NULL;
+                                rvp->flattened = false;
                         }
                         piece->set_rvp(rvp);
                         node->t = piece;                
@@ -333,8 +389,19 @@ public:
                 count = desc_rvps.size();
                 rvps = (rendezvous_point**)zmalloc(sizeof(rendezvous_point*)*count);
                 
-                for (i = 0; i < count; ++i) 
+                /* HACK: Needed for rvp's after_txn to work correctly */
+                assert(count <= 1);
+
+                for (i = 0; i < count; ++i) {
+                        assert((node->after == NULL && node->after_t == NULL) ||
+                               (node->after != NULL && node->after_t != NULL));
+                        assert(node->after == NULL || 
+                               desc_rvps[i]->rvp->after_txn == NULL);
+                        if (node->after != NULL) {
+                                desc_rvps[i]->rvp->after_txn = node->after_t;
+                        }
                         rvps[i] = desc_rvps[i]->rvp;
+                }
                 piece->set_rvp_wakeups(rvps, count);
         }
         
@@ -345,16 +412,35 @@ public:
                 commit_rvp *rvp;
                 split_action **actions;
                 uint32_t abortable_count, i, j, sz;
-                
+                bool has_rvp = true;
+                rendezvous_point *down_rvp;
+                rendezvous_point **down_array;
+
                 nodes = graph->get_nodes();
                 sz = nodes->size();
                 abortable_count = 0;
                 for (i = 0; i < sz; ++i) {
                         cur_node = (*nodes)[i];
-                        if (cur_node->abortable == true) 
-                                abortable_count += 1;                        
+                        if (cur_node->abortable == true) {
+                                
+                                abortable_count += 1;     
+                                if (cur_node->t->num_downstream_rvps() == 0)
+                                        has_rvp = false;
+                        }                   
                 }                
                 
+                down_rvp = NULL;
+                if (has_rvp == false) {
+                        down_rvp = new rendezvous_point();
+                        down_rvp->counter = abortable_count;
+                        down_rvp->done = 0;
+                        down_rvp->flattened = true;
+                        down_rvp->num_actions = 0;
+                        down_rvp->to_run = NULL;
+                        down_rvp->actions = NULL;
+                        down_rvp->after_txn = NULL;
+                }
+
                 actions = (split_action**)zmalloc(sizeof(split_action*)*abortable_count);
                 rvp = (commit_rvp*)zmalloc(sizeof(commit_rvp));
                 rvp->num_actions = abortable_count;
@@ -369,6 +455,12 @@ public:
                         if (cur_node->abortable == true) {
                                 actions[j] = cur_node->t;
                                 cur_node->t->set_commit_rvp(rvp);
+                                if (has_rvp == false) {
+                                        assert(down_rvp != NULL);
+                                        down_array = (rendezvous_point**)zmalloc(sizeof(rendezvous_point*));
+                                        down_array[0] = down_rvp;
+                                        cur_node->t->set_rvp_wakeups(down_array, 1);
+                                }
                                 j += 1;
                         }
                 }
@@ -455,6 +547,7 @@ public:
                 for (i = 0; i < num_nodes; ++i)
                         proc_upstream_node((*nodes)[i], &phases);
                 find_abortables(graph);
+                flatten_all_rvps(graph);
 
                 /* Get rid of phases */
                 for (i = 0; i < phases.size(); ++i) 
@@ -707,8 +800,9 @@ public:
                         result_file << "small_bank" << " ";
                 else if (conf.experiment == 4) 
                         result_file << "ycsb_update" << " " << "abort_pos:" << w_conf.abort_pos << " ";
-                else
-                        assert(false);
+                else if (conf.experiment == YCSB_RW)
+                        result_file << "ycsb_rw" << " ";
+                //                        assert(false);
  
                 if (conf.distribution == 0) 
                         result_file << "uniform ";

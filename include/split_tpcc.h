@@ -256,255 +256,256 @@ namespace split_payment {
         };
 };
 
-namespace split_stock_level {
-        class read_district;
-        class read_oorder;
-        class read_order_lines;
-        class read_stocks;
-
-        struct order_info {
-                uint32_t 	_order_id;
-                uint32_t 	_item_count;
-        };
-
-        class read_district : public txn {
-        private:
-                friend class read_oorder;
-                friend class read_order_lines;
-                friend class read_stocks;
-                
-                uint32_t 	_warehouse_id;
-                uint32_t 	_district_id;
-                uint32_t 	_order_id;	/* for reads */
-
-        public:
-                read_district(uint32_t warehouse_id, uint32_t district_id);
-                bool Run();
-        };
-        
-        class read_oorder : public txn {
-                friend class read_district;
-                friend class read_order_lines;
-                friend class read_stocks;
-
-        private:
-                read_district 		*_district_piece;
-                uint32_t 		_warehouse_id;
-                uint32_t		_district_id;                
-                uint32_t 		_order_id;		/* to set */
-                order_info 		*_orders;		/* to set */
-                uint32_t 		_num_orders;
-
-        public:
-                read_oorder(read_district *district_piece, 
-                            uint32_t warehouse_id, 
-                            uint32_t district_id);
-                            
-                bool Run();
-        };
-        
-        class read_order_lines : public txn {
-                friend class read_district;
-                friend class read_oorder;
-                friend class read_stocks;
-                
-        private:
-                read_oorder 		*_oorder_piece;	/* for order id */
-                uint32_t 		_warehouse_id;
-                uint32_t 		_district_id;
-                uint32_t	  	*_item_ids;
-                uint32_t 		_num_items;
-        public:
-                read_order_lines(read_oorder *oorder_piece, 
-                                 uint32_t warehouse_id, 
-                                 uint32_t district_id);
-                bool Run();
-        };
-
-        class read_stocks : public txn {
-                friend class read_district;
-                friend class read_oorder;
-                friend class read_order_lines;
-                
-        private:
-                read_order_lines	*_order_lines_piece;	/* for items */
-                uint32_t 		_warehouse_id;
-                uint32_t 		_district_id;
-                uint32_t 		_threshold;
-                volatile uint32_t 	_under_threshold_count;
-                
-        public:
-                read_stocks(read_order_lines *order_lines, 
-                            uint32_t warehouse_id, 
-                            uint32_t district_id);
-                bool Run();
-        };
-};
-
-namespace split_order_status {
-        class read_oorder_index;
-        class read_oorder;
-        class read_order_lines;
-        
-        class read_oorder_index : public txn {
-                friend class read_oorder;
-                friend class read_order_lines;
-                
-        private:               
-                uint32_t 	_wh_id;
-                uint32_t 	_dstrct_id;
-                uint32_t 	_cust_id;
-                uint64_t 	_cust_nm_idx;
-                bool 		_use_name;
-                uint32_t 	_order_id;	/* Needs to be set */
-
-        public:
-                read_oorder_index(uint32_t warehouse_id, uint32_t district_id, 
-                                  uint32_t cust_id, 
-                                  uint64_t cust_name_idx, 
-                                  bool use_name);
-                bool Run();
-        };
-        
-        class read_oorder : public txn {
-                friend class read_oorder_index;
-                friend class read_order_lines;
-                
-        private:                
-                read_oorder_index 	*_oorder_idx_pc;/* order id */
-                uint32_t 		_wh_id;
-                uint32_t 		_dstrct_id;
-                uint32_t 		_order_id;	/* needs to be set */
-                uint32_t 		_num_items;	/* needs to be set */
-                
-        public:
-                read_oorder(read_oorder_index *oorder_idx_pc, uint32_t wh_id, 
-                            uint32_t dstrct_id);
-                bool Run();                
-        };
-
-        class read_order_lines : public txn {
-                friend class read_oorder_index;
-                friend class read_oorder;
-                
-        private:
-                read_oorder 		*_oorder_piece;	/* needed for items */
-                uint32_t 		_wh_id;
-                uint32_t 		_dstrct_id;
-                volatile uint32_t 	_ol_quantity;
-
-        public:                
-                read_order_lines(read_oorder *oorder_piece, uint32_t wh_id, 
-                                 uint32_t dstrct_id);
-                bool Run();
-        };
-};
-
-namespace split_delivery {
-        class update_last_delivery;
-        class read_oorder;
-        class read_order_line;
-        class update_customer;
-        class remove_new_order;
-        
-        class update_last_delivery : public txn {
-                friend class read_oorder;
-                friend class read_order_line;
-                friend class update_customer;
-                friend class remove_new_order;
-                
-        private:
-                uint32_t 		_wh_id;
-                std::vector<uint32_t> 	_d_ids;
-                std::vector<uint32_t> 	_to_deliver;
-
-        public:
-                update_last_delivery(uint32_t warehouse_id);
-                bool Run();
-                
-        };
-
-        /* One of these txns runs per-district */
-        class read_oorder : public txn {
-                friend class update_last_delivery;
-                friend class read_order_line;
-                friend class update_customer;
-                friend class remove_new_order;
-                
-        private:
-                update_last_delivery	*_delivery_index_piece;
-                uint32_t 		_w_id;
-                uint32_t 		_d_id;
-                uint32_t		_num_items;	/* Needs to be set */
-                uint32_t 		_customer_id; 	/* Needs to be set */
-                uint32_t 		_order_id;	/* Needs to be set */
-
-        public:
-                read_oorder(update_last_delivery *delivery_piece, 
-                            uint32_t warehouse_id, 
-                            uint32_t district_id);
-
-                bool Run();
-        };
-        
-        /* One of these per-district */
-        class read_order_line : public txn {
-                friend class update_last_delivery;
-                friend class read_oorder;
-                friend class update_customer;
-                friend class remove_new_order;
-                
-        private:
-                read_oorder 		*_oorder_piece;
-                uint32_t 		_w_id;
-                uint32_t 		_d_id;
-                uint32_t 		_customer_id;
-                float 			_amount;                
-
-        public:
-                read_order_line(read_oorder *oorder_piece, 
-                                uint32_t w_id, 
-                                uint32_t d_id);
-
-                bool Run();
-        };
-
-        class update_customer : public txn {
-
-                friend class update_last_delivery;
-                friend class read_oorder;
-                friend class read_order_line;
-                friend class remove_new_order;
-
-        private:                
-                read_order_line		*_ordr_ln_pc;	/* Get amount due */
-                uint32_t 		_w_id;
-                uint32_t 		_d_id;
-
-        public:
-                update_customer(read_order_line *order_line_piece, 
-                                uint32_t w_id, 
-                                uint32_t d_id);
-                bool Run();
-        };
-
-        class remove_new_order : public txn {
-                friend class update_last_delivery;
-                friend class read_oorder;
-                friend class read_order_line;
-                friend class update_customer;
-
-        private:
-                update_last_delivery	*_dlvry_pc;	/* Get order id */
-                uint32_t 		_w_id;
-                uint32_t 		_d_id;
-
-        public:
-                remove_new_order(update_last_delivery *dlvry_pc, 
-                                 uint32_t w_id, 
-                                 uint32_t d_id);
-                bool Run();
-        };
-};
+// namespace split_stock_level {
+//         class read_district;
+//         class read_oorder;
+//         class read_order_lines;
+//         class read_stocks;
+// 
+//         struct order_info {
+//                 uint32_t 	_order_id;
+//                 uint32_t 	_item_count;
+//         };
+// 
+//         class read_district : public txn {
+//         private:
+//                 friend class read_oorder;
+//                 friend class read_order_lines;
+//                 friend class read_stocks;
+//                 
+//                 uint32_t 	_warehouse_id;
+//                 uint32_t 	_district_id;
+//                 uint32_t 	_order_id;	/* for reads */
+// 
+//         public:
+//                 read_district(uint32_t warehouse_id, uint32_t district_id);
+//                 bool Run();
+//         };
+//         
+//         class read_oorder : public txn {
+//                 friend class read_district;
+//                 friend class read_order_lines;
+//                 friend class read_stocks;
+// 
+//         private:
+//                 read_district 		*_district_piece;
+//                 uint32_t 		_warehouse_id;
+//                 uint32_t		_district_id;                
+//                 uint32_t 		_order_id;		/* to set */
+//                 order_info 		*_orders;		/* to set */
+//                 uint32_t 		_num_orders;
+// 
+//         public:
+//                 read_oorder(read_district *district_piece, 
+//                             uint32_t warehouse_id, 
+//                             uint32_t district_id);
+//                             
+//                 bool Run();
+//         };
+//         
+//         class read_order_lines : public txn {
+//                 friend class read_district;
+//                 friend class read_oorder;
+//                 friend class read_stocks;
+//                 
+//         private:
+//                 read_oorder 		*_oorder_piece;	/* for order id */
+//                 uint32_t 		_warehouse_id;
+//                 uint32_t 		_district_id;
+//                 uint32_t	  	*_item_ids;
+//                 uint32_t 		_num_items;
+//         public:
+//                 read_order_lines(read_oorder *oorder_piece, 
+//                                  uint32_t warehouse_id, 
+//                                  uint32_t district_id);
+//                 bool Run();
+//         };
+// 
+//         class read_stocks : public txn {
+//                 friend class read_district;
+//                 friend class read_oorder;
+//                 friend class read_order_lines;
+//                 
+//         private:
+//                 read_order_lines	*_order_lines_piece;	/* for items */
+//                 uint32_t 		_warehouse_id;
+//                 uint32_t 		_district_id;
+//                 uint32_t 		_threshold;
+//                 volatile uint32_t 	_under_threshold_count;
+//                 
+//         public:
+//                 read_stocks(read_order_lines *order_lines, 
+//                             uint32_t warehouse_id, 
+//                             uint32_t district_id);
+//                 bool Run();
+//         };
+// };
+// 
+// namespace split_order_status {
+//         class read_oorder_index;
+//         class read_oorder;
+//         class read_order_lines;
+//         
+//         class read_oorder_index : public txn {
+//                 friend class read_oorder;
+//                 friend class read_order_lines;
+//                 
+//         private:               
+//                 uint32_t 	_wh_id;
+//                 uint32_t 	_dstrct_id;
+//                 uint32_t 	_cust_id;
+//                 uint64_t 	_cust_nm_idx;
+//                 bool 		_use_name;
+//                 uint32_t 	_order_id;	/* Needs to be set */
+// 
+//         public:
+//                 read_oorder_index(uint32_t warehouse_id, uint32_t district_id, 
+//                                   uint32_t cust_id, 
+//                                   uint64_t cust_name_idx, 
+//                                   bool use_name);
+//                 bool Run();
+//         };
+//         
+//         class read_oorder : public txn {
+//                 friend class read_oorder_index;
+//                 friend class read_order_lines;
+//                 
+//         private:                
+//                 read_oorder_index 	*_oorder_idx_pc;/* order id */
+//                 uint32_t 		_wh_id;
+//                 uint32_t 		_dstrct_id;
+//                 uint32_t 		_order_id;	/* needs to be set */
+//                 uint32_t 		_num_items;	/* needs to be set */
+//                 
+//         public:
+//                 read_oorder(read_oorder_index *oorder_idx_pc, uint32_t wh_id, 
+//                             uint32_t dstrct_id);
+//                 bool Run();                
+//         };
+// 
+//         class read_order_lines : public txn {
+//                 friend class read_oorder_index;
+//                 friend class read_oorder;
+//                 
+//         private:
+//                 read_oorder 		*_oorder_piece;	/* needed for items */
+//                 uint32_t 		_wh_id;
+//                 uint32_t 		_dstrct_id;
+//                 volatile uint32_t 	_ol_quantity;
+// 
+//         public:                
+//                 read_order_lines(read_oorder *oorder_piece, uint32_t wh_id, 
+//                                  uint32_t dstrct_id);
+//                 bool Run();
+//         };
+// };
+// 
+// namespace split_delivery {
+//         class update_last_delivery;
+//         class read_oorder;
+//         class read_order_line;
+//         class update_customer;
+//         class remove_new_order;
+//         
+//         class update_last_delivery : public txn {
+//                 friend class read_oorder;
+//                 friend class read_order_line;
+//                 friend class update_customer;
+//                 friend class remove_new_order;
+//                 
+//         private:
+//                 uint32_t 		_wh_id;
+//                 std::vector<uint32_t> 	_d_ids;
+//                 std::vector<uint32_t> 	_to_deliver;
+// 
+//         public:
+//                 update_last_delivery(uint32_t warehouse_id);
+//                 bool Run();
+//                 
+//         };
+// 
+//         /* One of these txns runs per-district */
+//         class read_oorder : public txn {
+//                 friend class update_last_delivery;
+//                 friend class read_order_line;
+//                 friend class update_customer;
+//                 friend class remove_new_order;
+//                 
+//         private:
+//                 update_last_delivery	*_delivery_index_piece;
+//                 uint32_t 		_w_id;
+//                 uint32_t 		_d_id;
+//                 uint32_t		_num_items;	/* Needs to be set */
+//                 uint32_t 		_customer_id; 	/* Needs to be set */
+//                 uint32_t 		_order_id;	/* Needs to be set */
+// 
+//         public:
+//                 read_oorder(update_last_delivery *delivery_piece, 
+//                             uint32_t warehouse_id, 
+//                             uint32_t district_id);
+// 
+//                 bool Run();
+//         };
+//         
+//         /* One of these per-district */
+//         class read_order_line : public txn {
+//                 friend class update_last_delivery;
+//                 friend class read_oorder;
+//                 friend class update_customer;
+//                 friend class remove_new_order;
+//                 
+//         private:
+//                 read_oorder 		*_oorder_piece;
+//                 uint32_t 		_w_id;
+//                 uint32_t 		_d_id;
+//                 uint32_t 		_customer_id;
+//                 float 			_amount;                
+// 
+//         public:
+//                 read_order_line(read_oorder *oorder_piece, 
+//                                 uint32_t w_id, 
+//                                 uint32_t d_id);
+// 
+//                 bool Run();
+//         };
+// 
+//         class update_customer : public txn {
+// 
+//                 friend class update_last_delivery;
+//                 friend class read_oorder;
+//                 friend class read_order_line;
+//                 friend class remove_new_order;
+// 
+//         private:                
+//                 read_order_line		*_ordr_ln_pc;	/* Get amount due */
+//                 uint32_t 		_w_id;
+//                 uint32_t 		_d_id;
+// 
+//         public:
+//                 update_customer(read_order_line *order_line_piece, 
+//                                 uint32_t w_id, 
+//                                 uint32_t d_id);
+//                 bool Run();
+//         };
+// 
+//         class remove_new_order : public txn {
+//                 friend class update_last_delivery;
+//                 friend class read_oorder;
+//                 friend class read_order_line;
+//                 friend class update_customer;
+// 
+//         private:
+//                 update_last_delivery	*_dlvry_pc;	/* Get order id */
+//                 uint32_t 		_w_id;
+//                 uint32_t 		_d_id;
+// 
+//         public:
+//                 remove_new_order(update_last_delivery *dlvry_pc, 
+//                                  uint32_t w_id, 
+//                                  uint32_t d_id);
+//                 bool Run();
+//         };
+// };
+// 
 
 #endif 		// SPLIT_TPCC_H_

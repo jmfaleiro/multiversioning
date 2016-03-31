@@ -181,6 +181,7 @@ OCCWorker** setup_occ_workers(SimpleQueue<OCCActionBatch> **inputQueue,
                         inputQueue[i],
                         outputQueue[i],
                         i,
+                        NULL, 	/* FILL THIS IN */
                         tables_copy,
                         lock_tables_copy,
                         is_leader,
@@ -418,7 +419,7 @@ void occ_experiment(OCCConfig occ_config, workload_config w_conf)
         output_queues = setup_queues<OCCActionBatch>(occ_config.numThreads,
                                                      1024);
         setup_txns = setup_db(w_conf);
-        if (occ_config.experiment < 3) {
+        if (occ_config.experiment < 3 || occ_config.experiment == YCSB_RW) {
                 num_tables = 1;
                 num_records[0] = occ_config.numRecords;
         } else if (occ_config.experiment < 5) {

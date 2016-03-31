@@ -6,6 +6,8 @@
 #include <db.h>
 #include <record_buffer.h>
 #include <mcs.h>
+#include <insert_buf_mgr.h>
+#include <table_mgr.h>
 
 #define TIMESTAMP_MASK (0xFFFFFFFFFFFFFFF0)
 #define EPOCH_MASK (0xFFFFFFFF00000000)
@@ -23,6 +25,7 @@
 enum validation_err_t {
         READ_ERR,
         VALIDATION_ERR,
+        INSERT_ERR,
 };
 
 class OCCWorker;
@@ -103,6 +106,11 @@ class OCCAction : public translator {
         mcs_mgr *mgr;
         uint64_t tid;
         OCCWorker *worker;
+        table_mgr *tbl_mgr;
+        insert_buf_mgr *insert_mgr;
+        
+        uint32_t insert_ptr;
+        std::vector<occ_composite_key> inserts;
         std::vector<occ_composite_key> readset;
         std::vector<occ_composite_key> writeset;
         std::vector<occ_composite_key> shadow_writeset;
@@ -116,14 +124,14 @@ class OCCAction : public translator {
  public:
         
         OCCAction(txn *txn);
+        virtual void create_inserts(uint32_t n_inserts);
         OCCAction *link;
         
         virtual void *write_ref(uint64_t key, uint32_t table);
         virtual void *read(uint64_t key, uint32_t table);
-        virtual void insert(uint64_t key, uint32_t table, void *value);
+        virtual void* insert_ref(uint64_t key, uint32_t table);
         virtual void remove(uint64_t key, uint32_t table);
         virtual int rand();
-
         
         virtual void set_allocator(RecordBuffers *buf);
         virtual void set_tables(Table **tables, Table **lock_tables);
@@ -136,6 +144,7 @@ class OCCAction : public translator {
         virtual void install_writes();
         virtual void release_locks();
         virtual void cleanup();
+        virtual void undo_inserts();
         
         void add_read_key(uint32_t table_id, uint64_t key);
         void add_write_key(uint32_t table_id, uint64_t key, bool is_rmw);

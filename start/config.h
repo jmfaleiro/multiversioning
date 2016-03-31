@@ -39,6 +39,7 @@ enum exp_codes {
         YCSB_SINGLE_HOT = 2,
         SMALL_BANK = 3,
         YCSB_UPDATE = 4,
+        YCSB_RW = 5,
 };
 
 enum distribution_t {

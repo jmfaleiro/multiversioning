@@ -7,6 +7,7 @@
 #include <occ_action.h>
 #include <exception>
 #include <record_buffer.h>
+#include <table_mgr.h>
 
 #define NUM_MCS_LOCKS	1000
 
@@ -26,6 +27,7 @@ struct OCCWorkerConfig {
         SimpleQueue<OCCActionBatch> *inputQueue;
         SimpleQueue<OCCActionBatch> *outputQueue;
         int cpu;
+        table_mgr 	*tbl_mgr;
         Table **tables;
         Table **lock_tables;
         bool is_leader;
@@ -47,6 +49,7 @@ class OCCWorker : public Runnable {
         uint32_t 		txn_counter;
         RecordBuffers 		*bufs;
         mcs_mgr 		*mgr;
+        
         
         virtual bool RunSingle(OCCAction *action);
         virtual uint32_t exec_pending(OCCAction **action_list);

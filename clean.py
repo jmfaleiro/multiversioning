@@ -52,6 +52,32 @@ def compute_avg_records(input_file):
     inpt.close()
     return throughput_dict
 
+def compute_avg_reads(input_file):
+    inpt = open(input_file)
+    throughput_dict = {}
+    for line in inpt:
+        splits = line.split()
+        for s in splits:
+            if s.startswith("read_pct:"):
+                sz_str = s[len("read_pct:"):]
+                sz = int(sz_str)
+            elif s.startswith("txns:"):
+                txns_str = s[len("txns:"):]
+                txns = float(txns_str)
+            elif s.startswith("time:"):
+                time_str = s[len("time:"):]
+                time = float(time_str)
+        throughput = (1.0*txns)/time
+        if not sz in throughput_dict:
+            throughput_dict[sz] = []
+        throughput_dict[sz].append(throughput)
+
+    for key in throughput_dict:
+        thpt_list = throughput_dict[key]
+        thpt_list.sort()
+    return throughput_dict
+    
+
 def compute_avg_sz(input_file):
     inpt = open(input_file)
     throughput_dict = {}
@@ -238,6 +264,10 @@ def sz_fn(input_file, output_file):
     my_dict = compute_avg_sz(input_file)
     write_output(my_dict, output_file)
 
+def reads_fn(input_file, output_file):
+    my_dict = compute_avg_reads(input_file)
+    write_output(my_dict, output_file)
+    
 def theta_fn(input_type, input_file, output_file):
     if input_type == "locking":
         my_dict = compute_avg_locking_theta(input_file)

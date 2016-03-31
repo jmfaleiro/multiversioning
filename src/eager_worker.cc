@@ -90,31 +90,29 @@ void locking_worker::CheckReady()
 void locking_worker::give_locks(locking_action *txn)
 {
         uint32_t num_writes, num_reads, i;
+        mcs_struct *lck;
 
+        lck = mgr->get_struct();
         num_writes = txn->writeset.size();
         for (i = 0; i < num_writes; ++i) 
-                txn->writeset[i].lock_entry = mgr->get_struct();
+                txn->writeset[i].lock_entry = lck;
         num_reads = txn->readset.size();
         for (i = 0; i < num_reads; ++i) 
-                txn->readset[i].lock_entry = mgr->get_struct();
+                txn->readset[i].lock_entry = lck;
 }
 
 void locking_worker::take_locks(locking_action *txn)
 {
-        uint32_t num_writes, num_reads, i;
+        uint32_t num_writes, num_reads;
         
         num_writes = txn->writeset.size();
-        for (i = 0; i < num_writes; ++i) {
-                mgr->return_struct(txn->writeset[i].lock_entry);
-                txn->writeset[i].lock_entry = NULL;
-        }
-        
         num_reads = txn->readset.size();
-        for (i = 0; i < num_reads; ++i) {
-                mgr->return_struct(txn->readset[i].lock_entry);
-                txn->readset[i].lock_entry = NULL;
+        if (num_writes > 0) {
+                mgr->return_struct(txn->writeset[0].lock_entry);
+        } else {
+                assert(num_reads > 0);
+                mgr->return_struct(txn->readset[0].lock_entry);
         }
-                
 }
 
 void locking_worker::TryExec(locking_action *txn)

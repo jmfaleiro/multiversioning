@@ -18,19 +18,22 @@ enum table_identifier {
         WAREHOUSE_TABLE 	= 0,
         DISTRICT_TABLE 		= 1,
         CUSTOMER_TABLE 		= 2,
-        NEW_ORDER_TABLE 	= 3,
-        OORDER_TABLE 		= 4,
-        ORDER_LINE_TABLE 	= 5,
+        NEW_ORDER_TABLE 	= 3,	/* inserts & deletes */
+        OORDER_TABLE 		= 4,	/* inserts */
+        ORDER_LINE_TABLE 	= 5,	/* inserts */
         STOCK_TABLE 		= 6,
         ITEM_TABLE 		= 7,
-        HISTORY_TABLE 		= 8,
+        HISTORY_TABLE 		= 8,	/* inserts */
         DELIVERY_TABLE		= 9,	/* Index */
         CUSTOMER_ORDER_INDEX 	= 10,	/* Index */
 };
 
+extern uint32_t *tpcc_record_sizes;
+
 class tpcc_config {
  public:
         static uint32_t num_warehouses;
+        static uint32_t *tpcc_record_sizes;
 };
 
 class tpcc_util {
@@ -350,65 +353,70 @@ class payment : public txn {
         bool Run();
 };
 
-class stock_level : public txn {
- private:
-        uint32_t 	_warehouse_id;
-        uint32_t 	_district_id;
-        uint32_t 	_order_id;
-        uint32_t 	_num_stocks;
-        uint32_t 	_stock_reads;
-        uint32_t 	*_stocks;
-        uint32_t 	_threshold;
-        
-        void read_district();
-        void read_single_order_line(uint64_t order_line_key);
-        void read_order_lines();
-        void read_stock();
-        
- public:
-        stock_level(uint32_t warehouse_id, uint32_t district_id);
-        bool Run();
-};
+// class stock_level : public txn {
+//  private:
+//         uint32_t 	_warehouse_id;
+//         uint32_t 	_district_id;
+//         uint32_t 	_order_id;
+//         uint32_t 	_num_stocks;
+//         uint32_t 	_stock_reads;
+//         uint32_t 	*_stocks;
+//         uint32_t 	_threshold;
+//         
+//         void read_district();
+//         void read_single_order_line(uint64_t order_line_key);
+//         void read_order_lines();
+//         void read_stock();
+//         
+//  public:
+//         stock_level(uint32_t warehouse_id, uint32_t district_id);
+//         bool Run();
+// };
+// 
+// class order_status : public txn {
+//  private:
+//         uint32_t 		_warehouse_id;
+//         uint32_t 		_district_id;
+//         uint32_t 		_customer_id;
+//         uint64_t 		_customer_name_idx;
+//         bool 			_use_name;
+//         uint64_t 		_order_key;
+//         uint32_t 		_num_order_lines;
+//         volatile uint32_t 	_order_line_quantity;
+//         
+//         void read_open_order_index();
+//         void read_open_order();
+//         void read_order_lines();
+// 
+//  public:
+//         order_status(uint32_t warehouse_id, uint32_t district_id, 
+//                      uint32_t customer_id, 
+//                      uint64_t customer_name_idx, 
+//                      bool use_name);
+//         bool Run();
+// };
+// 
+// class delivery : public txn {
+//  private:
+//         uint32_t 	_warehouse_id;
+//         bool	 	_to_deliver[NUM_DISTRICTS];
+//         uint32_t 	_delivery_order_id[NUM_DISTRICTS];
+//         uint32_t 	_customers[NUM_DISTRICTS];
+//         uint32_t 	_amounts[NUM_DISTRICTS];
+//         
+//         void read_next_delivery();
+//         void remove_new_orders();
+//         void read_orders();
+//         void update_customer();
+// 
+//  public:
+//         delivery(uint32_t warehouse_id);
+//         bool Run();
+// };
+// 
 
-class order_status : public txn {
- private:
-        uint32_t 		_warehouse_id;
-        uint32_t 		_district_id;
-        uint32_t 		_customer_id;
-        uint64_t 		_customer_name_idx;
-        bool 			_use_name;
-        uint64_t 		_order_key;
-        uint32_t 		_num_order_lines;
-        volatile uint32_t 	_order_line_quantity;
-        
-        void read_open_order_index();
-        void read_open_order();
-        void read_order_lines();
 
- public:
-        order_status(uint32_t warehouse_id, uint32_t district_id, 
-                     uint32_t customer_id, 
-                     uint64_t customer_name_idx, 
-                     bool use_name);
-        bool Run();
-};
 
-class delivery : public txn {
- private:
-        uint32_t 	_warehouse_id;
-        bool	 	_to_deliver[NUM_DISTRICTS];
-        uint32_t 	_delivery_order_id[NUM_DISTRICTS];
-        uint32_t 	_customers[NUM_DISTRICTS];
-        uint32_t 	_amounts[NUM_DISTRICTS];
-        
-        void read_next_delivery();
-        void remove_new_orders();
-        void read_orders();
-        void update_customer();
 
- public:
-        delivery(uint32_t warehouse_id);
-        bool Run();
-};
 
 #endif 		// TPCC_H_
