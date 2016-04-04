@@ -8,14 +8,17 @@
 /* Hard code this shit */
 class insert_buf_mgr {
  private:
+        int 			_cpu;
         uint32_t 		_ntables;
         size_t	 		*_record_sizes;
         conc_table_record 	**_conc_allocs;
 
-        void init_single(uint32_t table_id);
+        void alloc_single(uint32_t table_id);
+        void alloc_entries(uint32_t table_id, size_t record_sz, uint64_t alloc_sz);
 
  public:
-        insert_buf_mgr();
+        void* operator new(std::size_t sz, int cpu);
+        insert_buf_mgr(int cpu, uint32_t ntables, size_t *record_sizes);
         conc_table_record* get_insert_record(uint32_t table_id);
         void return_insert_record(conc_table_record *record, uint32_t table_id);
 };

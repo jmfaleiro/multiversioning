@@ -9,6 +9,8 @@ OCCWorker::OCCWorker(OCCWorkerConfig conf, struct RecordBuffersConfig rb_conf)
         this->config = conf;
         this->bufs = new(conf.cpu) RecordBuffers(rb_conf);
         this->mgr = new(conf.cpu) mcs_mgr(NUM_MCS_LOCKS, conf.cpu);
+        this->insert_mgr = new(conf.cpu) insert_buf_mgr(conf.cpu, 11, 
+                                                        tpcc_record_sizes);
 }
 
 void OCCWorker::Init()

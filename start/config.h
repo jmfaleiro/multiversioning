@@ -40,6 +40,7 @@ enum exp_codes {
         SMALL_BANK = 3,
         YCSB_UPDATE = 4,
         YCSB_RW = 5,
+        TPCC_SUBSET = 6,
 };
 
 enum distribution_t {

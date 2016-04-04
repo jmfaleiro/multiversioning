@@ -16,6 +16,7 @@ class table_mgr {
 
         concurrent_table* get_conc_table(uint32_t table_id);
         Table* get_table(uint32_t table_id);
+        void set_init();
 };
 
 #endif 			// TABLE_MGR_H_

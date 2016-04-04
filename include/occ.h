@@ -11,6 +11,8 @@
 
 #define NUM_MCS_LOCKS	1000
 
+extern size_t *tpcc_record_sizes;
+
 struct OCCActionBatch {
         uint32_t batchSize;
         OCCAction **batch;
@@ -49,7 +51,7 @@ class OCCWorker : public Runnable {
         uint32_t 		txn_counter;
         RecordBuffers 		*bufs;
         mcs_mgr 		*mgr;
-        
+        insert_buf_mgr		*insert_mgr;
         
         virtual bool RunSingle(OCCAction *action);
         virtual uint32_t exec_pending(OCCAction **action_list);

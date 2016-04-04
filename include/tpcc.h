@@ -28,7 +28,7 @@ enum table_identifier {
         CUSTOMER_ORDER_INDEX 	= 10,	/* Index */
 };
 
-extern uint32_t *tpcc_record_sizes;
+extern size_t *tpcc_record_sizes;
 
 class tpcc_config {
  public:

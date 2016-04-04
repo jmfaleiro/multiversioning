@@ -9,6 +9,17 @@
 
 extern uint32_t GLOBAL_RECORD_SIZE;
 
+static bool is_ycsb_exp(workload_config w_conf)
+{
+        bool ret;
+        ret = (w_conf.experiment == YCSB_10RMW || 
+               w_conf.experiment == YCSB_2RMW8R || 
+               w_conf.experiment == YCSB_SINGLE_HOT || 
+               w_conf.experiment == YCSB_UPDATE || 
+               w_conf.experiment == YCSB_RW);
+        return ret;
+}
+
 OCCAction* setup_occ_action(txn *txn)
 {
         OCCAction *action;
@@ -132,23 +143,49 @@ Table** setup_occ_lock_tables(int start_cpu, int end_cpu, uint32_t table_sz)
         return ret;
 }
 
+RecordBuffersConfig setup_buffer_config(int cpu, workload_config w_conf)
+{
+        RecordBuffersConfig rb_conf;
+        uint32_t i;
+
+        rb_conf.cpu = cpu;
+        rb_conf.num_buffers = 500;
+        if (is_ycsb_exp(w_conf)) {
+                rb_conf.num_tables = 1;
+                rb_conf.record_sizes = (uint32_t*)zmalloc(sizeof(uint32_t));
+                rb_conf.record_sizes[0] = GLOBAL_RECORD_SIZE;
+        } else if (w_conf.experiment == SMALL_BANK) {
+                rb_conf.num_tables = 2;
+                rb_conf.record_sizes = (uint32_t*)zmalloc(sizeof(uint32_t)*2);
+                rb_conf.record_sizes[0] = GLOBAL_RECORD_SIZE;
+                rb_conf.record_sizes[1] = GLOBAL_RECORD_SIZE;
+        } else if (w_conf.experiment == TPCC_SUBSET) {
+                rb_conf.num_tables = 11;
+                rb_conf.record_sizes = (uint32_t*)zmalloc(sizeof(uint32_t)*11);
+                for (i = 0; i < 11; ++i) 
+                        rb_conf.record_sizes[i] = (uint32_t)tpcc_record_sizes[i];
+        } else {
+                assert(false);
+        }
+        
+        return rb_conf;
+}
+
 OCCWorker** setup_occ_workers(SimpleQueue<OCCActionBatch> **inputQueue,
                               SimpleQueue<OCCActionBatch> **outputQueue,
-                              Table **tables, int numThreads,
+                              table_mgr *tbls, int numThreads,
                               uint64_t epoch_threshold, uint32_t numTables, 
-                              uint32_t num_records)
+                              uint32_t num_records, 
+                              workload_config w_conf)
 {
-        uint32_t recordSizes[2];
         OCCWorker **workers;
         volatile uint32_t *epoch_ptr;
         int i;
         bool is_leader;
-        Table **tables_copy, **lock_tables, **lock_tables_copy;
+        Table **lock_tables;
 
         struct OCCWorkerConfig worker_config;
         struct RecordBuffersConfig buf_config;
-        recordSizes[0] = GLOBAL_RECORD_SIZE;
-        recordSizes[1] = GLOBAL_RECORD_SIZE;
         workers = (OCCWorker**)malloc(sizeof(OCCWorker*)*numThreads);
         assert(workers != NULL);
         epoch_ptr = (volatile uint32_t*)alloc_mem(sizeof(uint32_t), 0);
@@ -156,22 +193,26 @@ OCCWorker** setup_occ_workers(SimpleQueue<OCCActionBatch> **inputQueue,
         barrier();
         *epoch_ptr = 0;
         barrier();
-
+        
+        /* 
+         * XXX This is currently hardcoded for YCSB. Need to change it for 
+         * TPC-C. 
+         */
         if (READ_COMMITTED)
                 lock_tables = setup_occ_lock_tables(0, numThreads, num_records);
         else
                 lock_tables = NULL;
-        lock_tables_copy = NULL;
+        //        lock_tables_copy = NULL;
 
         /* Copy tables */
         for (i = 0; i < numThreads; ++i) {
-                tables_copy = (Table**)alloc_mem(sizeof(Table*)*numTables, i);
-                memcpy(tables_copy, tables, sizeof(Table*)*numTables);
+                //                tables_copy = (Table**)alloc_mem(sizeof(Table*)*numTables, i);
+                //                memcpy(tables_copy, tables, sizeof(Table*)*numTables);
                 
-                if (READ_COMMITTED) {
-                        lock_tables_copy = (Table**)alloc_mem(sizeof(Table*), i);
-                        memcpy(lock_tables_copy, lock_tables, sizeof(Table*));
-                }
+                //                if (READ_COMMITTED) {
+                //                        lock_tables_copy = (Table**)alloc_mem(sizeof(Table*), i);
+                //                        memcpy(lock_tables_copy, lock_tables, sizeof(Table*));
+                //                }
                 //                for (i = 0; i < numTables; ++i) {
                 //                        tables_copy[i] = Table::copy_table(tables[i], i);
                 //                }
@@ -180,10 +221,10 @@ OCCWorker** setup_occ_workers(SimpleQueue<OCCActionBatch> **inputQueue,
                 worker_config = {
                         inputQueue[i],
                         outputQueue[i],
-                        i,
-                        NULL, 	/* FILL THIS IN */
-                        tables_copy,
-                        lock_tables_copy,
+                        i,                        
+                        tbls,
+                        NULL,
+                        lock_tables,
                         is_leader,
                         epoch_ptr,
                         0,
@@ -192,16 +233,116 @@ OCCWorker** setup_occ_workers(SimpleQueue<OCCActionBatch> **inputQueue,
                         false,
                         numTables,
                 };
-                buf_config = {
-                        numTables,
-                        recordSizes,
-                        5000,
-                        i,
-                };                
+                buf_config = setup_buffer_config(i, w_conf);
                 workers[i] = new(i) OCCWorker(worker_config, buf_config);
         }
         std::cerr << "Done setting up occ workers\n";
         return workers;
+}
+
+
+Table* setup_single_table(uint64_t table_id, uint64_t num_buckets, 
+                          int start_cpu, 
+                          int end_cpu,
+                          uint64_t free_list_sz,
+                          uint32_t value_sz)
+{
+        TableConfig conf = {
+                table_id,
+                num_buckets,
+                start_cpu,
+                end_cpu,
+                free_list_sz,
+                value_sz,
+                value_sz,
+        };        
+        return new(0) Table(conf);
+}
+
+concurrent_table* setup_single_conc_table(uint64_t num_buckets)
+{
+        TableConfig conf = {
+                0,
+                num_buckets,
+                0,
+                0,
+                0,
+                0,
+                0,
+        };
+        
+        return new concurrent_table(conf);
+}
+
+table_mgr* setup_ycsb_tables(uint64_t* num_records, workload_config w_conf, 
+                             bool occ)
+{
+        assert(is_ycsb_exp(w_conf) == true);
+
+        table_mgr *ret;
+        Table **tables;
+        
+        tables = (Table**)zmalloc(sizeof(Table*));
+        tables[0] = setup_single_table(0, 
+                                       (uint64_t)num_records[0],
+                                       0,
+                                       71,
+                                       2*num_records[0],
+                                       occ? GLOBAL_RECORD_SIZE+8 : GLOBAL_RECORD_SIZE);
+        ret = new table_mgr(tables, NULL, 1);
+        return ret;
+}
+
+table_mgr* setup_small_bank_tables(uint64_t *num_records, 
+                                   workload_config w_conf, 
+                                   bool occ)
+{
+        assert(w_conf.experiment == SMALL_BANK);
+        assert(num_records[0] == num_records[1]);
+
+        table_mgr *ret;
+        Table **tables;
+
+        tables = (Table**)zmalloc(sizeof(Table*)*2);
+        tables[0] = setup_single_table(0, 
+                                       (uint64_t)num_records[0],
+                                       0,
+                                       71,
+                                       2*num_records[0],
+                                       occ? GLOBAL_RECORD_SIZE+8 : GLOBAL_RECORD_SIZE);
+        tables[1] = setup_single_table(1, 
+                                       (uint64_t)num_records[1],
+                                       0,
+                                       71,
+                                       2*num_records[1],
+                                       occ? GLOBAL_RECORD_SIZE+8 : GLOBAL_RECORD_SIZE);
+        ret = new table_mgr(tables, NULL, 2);
+        return ret;
+}
+
+table_mgr* setup_tpcc_tables(__attribute__((unused)) workload_config w_conf, 
+                             __attribute__((unused)) bool occ)
+{
+        assert(w_conf.experiment == TPCC_SUBSET);
+        assert(false);	/* XXX Unimplemented */
+        return NULL;
+}
+
+table_mgr* setup_hash_tables(workload_config w_conf, bool occ)
+{
+        uint64_t num_records[2];
+        num_records[0] = w_conf.num_records;
+        num_records[1] = w_conf.num_records;
+
+        if (is_ycsb_exp(w_conf) == true) 
+                return setup_ycsb_tables(num_records, w_conf, occ);
+        else if (w_conf.experiment == SMALL_BANK)
+                return setup_small_bank_tables(num_records, w_conf, occ);
+        else if (w_conf.experiment == TPCC_SUBSET) 
+                return setup_tpcc_tables(w_conf, occ);
+        else 
+                assert(false);
+        return NULL;
 }
 
 Table** setup_hash_tables(uint32_t num_tables, uint32_t *num_records, bool occ)
@@ -226,6 +367,8 @@ Table** setup_hash_tables(uint32_t num_tables, uint32_t *num_records, bool occ)
         }
         return tables;
 }
+
+
 
 static OCCActionBatch setup_db(workload_config conf)
 {
@@ -309,19 +452,14 @@ uint64_t wait_to_completion(__attribute__((unused)) SimpleQueue<OCCActionBatch> 
 }
 
 void populate_tables(SimpleQueue<OCCActionBatch> *input_queue,
-                    SimpleQueue<OCCActionBatch> *output_queue,
-                    OCCActionBatch input,
-                    Table **tables,
-                    uint32_t num_tables)
+                     SimpleQueue<OCCActionBatch> *output_queue,
+                     OCCActionBatch input,
+                     table_mgr *tbls)
 {
-        uint32_t i;
-        
         input_queue->EnqueueBlocking(input);
         barrier();
         output_queue->DequeueBlocking();
-        for (i = 0; i < num_tables; ++i)
-                tables[i]->SetInit();
-        
+        tbls->set_init();
 }
 
 void dry_run(SimpleQueue<OCCActionBatch> **input_queues, 
@@ -344,8 +482,7 @@ struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
                                  uint32_t num_batches,
                                  OCCConfig config,
                                  OCCActionBatch setup_txns,
-                                 Table **tables,
-                                 uint32_t num_tables)
+                                 table_mgr *tbls)
 {
         timespec start_time, end_time;
         uint32_t i, j;
@@ -356,8 +493,7 @@ struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
                 workers[i]->WaitInit();
         }
 
-        populate_tables(inputQueues[1], outputQueues[1], setup_txns, tables,
-                        num_tables);
+        populate_tables(inputQueues[1], outputQueues[1], setup_txns, tbls);
         dry_run(inputQueues, outputQueues, inputBatches[0], config.numThreads);
 
         std::cerr << "Done dry run\n";
@@ -387,7 +523,7 @@ struct occ_result run_occ_workers(SimpleQueue<OCCActionBatch> **inputQueues,
                                   OCCActionBatch **inputBatches,
                                   uint32_t num_batches,
                                   OCCConfig config, OCCActionBatch setup_txns,
-                                  Table **tables, uint32_t num_tables)
+                                  table_mgr *tbl_mgr)
 {
         int success;
         struct occ_result result;        
@@ -396,7 +532,7 @@ struct occ_result run_occ_workers(SimpleQueue<OCCActionBatch> **inputQueues,
         assert(success == 0);
         result = do_measurement(inputQueues, outputQueues, workers,
                                 inputBatches, num_batches, config, setup_txns,
-                                tables, num_tables);
+                                tbl_mgr);
         std::cerr << "Done experiment!\n";
         return result;
 }
@@ -404,14 +540,12 @@ struct occ_result run_occ_workers(SimpleQueue<OCCActionBatch> **inputQueues,
 void occ_experiment(OCCConfig occ_config, workload_config w_conf)
 {
         SimpleQueue<OCCActionBatch> **input_queues, **output_queues;
-        Table **tables;
+        table_mgr *tbls;
         OCCWorker **workers;
         OCCActionBatch **inputs;
         OCCActionBatch setup_txns;
         
         struct occ_result result;
-        uint32_t num_records[2];
-        uint32_t num_tables;
         
 	occ_config.occ_epoch = OCC_EPOCH_SIZE;
         input_queues = setup_queues<OCCActionBatch>(occ_config.numThreads,
@@ -419,27 +553,17 @@ void occ_experiment(OCCConfig occ_config, workload_config w_conf)
         output_queues = setup_queues<OCCActionBatch>(occ_config.numThreads,
                                                      1024);
         setup_txns = setup_db(w_conf);
-        if (occ_config.experiment < 3 || occ_config.experiment == YCSB_RW) {
-                num_tables = 1;
-                num_records[0] = occ_config.numRecords;
-        } else if (occ_config.experiment < 5) {
-                num_tables = 2;
-                num_records[0] = occ_config.numRecords;
-                num_records[1] = occ_config.numRecords;
-        } else {
-                assert(false);
-                tables = NULL;
-                num_tables = 0;
-        }
-        tables = setup_hash_tables(num_tables, num_records, true);
-        workers = setup_occ_workers(input_queues, output_queues, tables,
-                                    occ_config.numThreads, occ_config.occ_epoch,
-                                    2, num_records[0]);
-
+        tbls = setup_hash_tables(w_conf, true);
+        workers = setup_occ_workers(input_queues, output_queues, tbls,
+                                    occ_config.numThreads, 
+                                    occ_config.occ_epoch,
+                                    2, 
+                                    0, /* XXX THIS MUST BE CHANGED FOR READ COMMITTED */
+                                    w_conf);
         inputs = setup_occ_input(occ_config, w_conf, 1);
         pin_memory();
         result = run_occ_workers(input_queues, output_queues, workers,
                                  inputs, 1+1, occ_config,
-                                 setup_txns, tables, num_tables);
+                                 setup_txns, tbls);
         write_occ_output(result, occ_config, w_conf);
 }
