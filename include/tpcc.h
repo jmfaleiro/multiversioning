@@ -379,6 +379,8 @@ class setup_tpcc : public txn {
         void gen_stock(uint32_t w_id, uint32_t s_id);
         void gen_item(uint32_t i_id);
 
+        
+ public:
         static setup_tpcc* gen_wh_txn(uint32_t low, uint32_t high);
         static setup_tpcc* gen_d_txn(uint32_t wh, uint32_t low, 
                                      uint32_t high);
@@ -387,8 +389,7 @@ class setup_tpcc : public txn {
                                      uint32_t high);
         static setup_tpcc* gen_s_txn(uint32_t wh, uint32_t low, uint32_t high);
         static setup_tpcc* gen_i_txn(uint32_t low, uint32_t high);
-        
- public:
+
         bool Run();
 };
 

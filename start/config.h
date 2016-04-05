@@ -59,6 +59,7 @@ struct workload_config
         uint32_t read_pct;
         uint32_t read_txn_size;
         uint32_t abort_pos;
+        uint32_t num_warehouses;
 };
 
 enum ConcurrencyControl {
@@ -171,6 +172,7 @@ class ExperimentConfig {
     NUM_PARTITIONS,
     NUM_OUTSTANDING,
     ABORT_POS,
+    NUM_WAREHOUSES,
   };
   unordered_map<int, char*> argMap;
 
@@ -441,6 +443,11 @@ class ExperimentConfig {
     }
     this->w_conf.read_pct = (uint32_t)atoi(argMap[READ_PCT]);
     this->w_conf.read_txn_size = (uint32_t)atoi(argMap[READ_TXN_SIZE]);    
+    if (this->w_conf.experiment == TPCC_SUBSET) {
+            assert(argMap.count(NUM_WAREHOUSES) > 0);
+            this->w_conf.num_warehouses = (uint32_t)atoi(argMap[NUM_WAREHOUSES]);
+    }
+            
   }
 
   void ReadArgs(int argc, char **argv) {

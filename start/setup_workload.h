@@ -3,6 +3,8 @@
 
 #include <db.h>
 
+#define 	INIT_TXN_SZ 	400
+
 struct workload_config;
 
 txn* generate_transaction(workload_config conf);

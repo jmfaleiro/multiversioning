@@ -6,6 +6,7 @@
 #include <zipf_generator.h>
 #include <ycsb.h>
 #include <small_bank.h>
+#include <tpcc.h>
 #include <set>
 #include <common.h>
 
@@ -203,18 +204,18 @@ uint32_t generate_small_bank_input(workload_config conf, txn ***loaders)
         uint64_t start, end;
         txn **ret;
 
-        /* Each txn performs 1000 insertions. */
-        num_txns = conf.num_records / 1000;
-        remainder = conf.num_records % 1000;
+        /* Each txn performs INIT_TXN_SZ insertions. */
+        num_txns = conf.num_records / INIT_TXN_SZ;
+        remainder = conf.num_records % INIT_TXN_SZ;
         if (remainder > 0)
                 num_txns += 1;
         ret = (txn**)malloc(sizeof(txn*)*num_txns);
         for (i = 0; i < num_txns; ++i) {
-                start = 1000*i;
+                start = INIT_TXN_SZ*i;
                 if (remainder > 0 && i == num_txns - 1)
                         end = start + remainder;
                 else
-                        end = start + 1000;
+                        end = start + INIT_TXN_SZ;
                 ret[i] = new LoadCustomerRange(start, end);
         }
         *loaders = ret;
@@ -232,22 +233,143 @@ uint32_t generate_ycsb_input(workload_config conf, txn ***loaders)
         uint64_t start, end;
         txn **ret;
 
-        /* Each txn performs 1000 insertions. */
-        num_txns = conf.num_records / 1000;
-        remainder = conf.num_records % 1000;
+        /* Each txn performs INIT_TXN_SZ insertions. */
+        num_txns = conf.num_records / INIT_TXN_SZ;
+        remainder = conf.num_records % INIT_TXN_SZ;
         if (remainder > 0)
                 num_txns += 1;
         ret = (txn**)malloc(sizeof(txn*)*num_txns);
         for (i = 0; i < num_txns; ++i) {
-                start = 1000*i;
+                start = INIT_TXN_SZ*i;
                 if (remainder > 0 && i == num_txns - 1)
                         end = start + remainder;
                 else 
-                        end = start + 1000;
+                        end = start + INIT_TXN_SZ;
                 ret[i] = new ycsb_insert(start, end);
         }
         *loaders = ret;
         return num_txns;
+}
+
+uint32_t divide_round_up(uint32_t total, uint32_t div)
+{
+        uint32_t ret;
+        
+        ret = total / div;
+        if (total % div != 0)
+                ret += 1;
+        return ret;                               
+}
+
+void generate_tpcc_customers(uint32_t wh_id, uint32_t d_id, txn **t_ptrs)
+{
+        uint32_t i, ntxns;        
+
+        ntxns = divide_round_up(3000, INIT_TXN_SZ);
+        for (i = 0; i < ntxns; ++i) {
+                if (i == ntxns - 1) {
+                        t_ptrs[i] = setup_tpcc::gen_c_txn(wh_id, d_id, 
+                                                          i*INIT_TXN_SZ, 
+                                                          2999);
+
+                } else {
+                        t_ptrs[i] = setup_tpcc::gen_c_txn(wh_id, d_id, 
+                                                          i*INIT_TXN_SZ, 
+                                                          (i+1)*INIT_TXN_SZ-1);
+
+                }
+        }
+}
+
+void generate_tpcc_stocks(uint32_t wh_id, txn **t_ptrs)
+{
+        uint32_t i, ntxns, n_i;
+        
+        n_i = 100000;
+        ntxns = divide_round_up(n_i, INIT_TXN_SZ);
+        for (i = 0; i < ntxns; ++i) {
+                if (i == ntxns - 1) 
+                        t_ptrs[i] = setup_tpcc::gen_s_txn(wh_id, 
+                                                          i*INIT_TXN_SZ,
+                                                          n_i - 1);
+                else 
+                        t_ptrs[i] = setup_tpcc::gen_s_txn(wh_id, 
+                                                          i*INIT_TXN_SZ,
+                                                          (i+1)*INIT_TXN_SZ-1);
+        }
+}
+
+uint32_t generate_tpcc_input(workload_config conf, txn ***loaders)
+{
+        uint32_t n_wh, n_d, n_i, total, i, j, t_ptr;
+        txn **ret;
+
+        n_wh = conf.num_warehouses;
+        n_d = 10*conf.num_warehouses;
+        n_i = 100000;
+        
+        total = 0;
+        total += divide_round_up(n_wh, INIT_TXN_SZ); 
+        total += n_wh*divide_round_up(10, INIT_TXN_SZ); 
+        total += n_d*divide_round_up(3000, INIT_TXN_SZ); 
+        total += divide_round_up(n_i, INIT_TXN_SZ); 
+        total += n_wh*divide_round_up(n_i, INIT_TXN_SZ); 
+
+        ret = (txn**)zmalloc(sizeof(txn*)*total);
+        t_ptr = 0;
+
+        /* Warehouses */
+        for (i = 0; i < divide_round_up(n_wh, INIT_TXN_SZ); ++i) {
+                if (i == divide_round_up(n_wh, INIT_TXN_SZ) - 1) {
+                        ret[t_ptr] = setup_tpcc::gen_wh_txn(i*INIT_TXN_SZ, n_wh-1);
+                        t_ptr += 1;
+                } else {
+                        ret[t_ptr] = setup_tpcc::gen_wh_txn(i*INIT_TXN_SZ, 
+                                                            (i+1)*INIT_TXN_SZ-1);
+                        t_ptr += 1;
+                }                
+        }
+
+        /* Districts */
+        for (i = 0; i < n_wh; ++i) {
+                assert(10 % INIT_TXN_SZ == 10);
+                ret[t_ptr] = setup_tpcc::gen_d_txn(i, 0, 9);
+                t_ptr += 1;
+        }
+        
+        /* Customers */
+        for (i = 0; i < n_wh; ++i) {
+                for (j = 0; j < 10; ++j) {
+                        generate_tpcc_customers(i, j, &ret[t_ptr]);
+                        t_ptr += divide_round_up(3000, INIT_TXN_SZ);
+                        assert(ret[t_ptr-1] != NULL);
+                        assert(ret[t_ptr] == NULL);
+                }
+        }
+        
+        /* Items */
+        for (i = 0; i < divide_round_up(n_i, INIT_TXN_SZ); ++i) {
+                if (i == divide_round_up(n_i, INIT_TXN_SZ) - 1) {
+                        ret[t_ptr] = setup_tpcc::gen_i_txn(i*INIT_TXN_SZ, 
+                                                           n_i - 1);
+                        t_ptr += 1;
+                } else {
+                        ret[t_ptr] = setup_tpcc::gen_i_txn(i*INIT_TXN_SZ, 
+                                                           (i+1)*INIT_TXN_SZ - 1);
+                        t_ptr += 1;
+                }
+        }
+        
+        /* Stocks */
+        for (i = 0; i < n_wh; ++i) {
+                generate_tpcc_stocks(i, &ret[t_ptr]);
+                t_ptr += divide_round_up(n_i, INIT_TXN_SZ);
+                assert(ret[t_ptr-1] != NULL);
+        }
+
+        assert(t_ptr == total);
+        *loaders = ret;
+        return total;
 }
 
 uint32_t generate_input(workload_config conf, txn ***loaders)
@@ -260,6 +382,8 @@ uint32_t generate_input(workload_config conf, txn ***loaders)
                 return generate_ycsb_input(conf, loaders);
         else if (conf.experiment == SMALL_BANK)
                 return generate_small_bank_input(conf, loaders);
+        else if (conf.experiment == TPCC_SUBSET)
+                return generate_tpcc_input(conf, loaders);
         else
                 assert(false);
 }
