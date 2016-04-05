@@ -33,11 +33,11 @@ class concurrent_table {
         
  public:
         
-        concurrent_table(TableConfig conf)
+        concurrent_table(uint64_t num_buckets)
         {
-                _buckets = (concurrent_table_bckt*)zmalloc(sizeof(concurrent_table_bckt)*conf.numBuckets);
+                _buckets = (concurrent_table_bckt*)zmalloc(sizeof(concurrent_table_bckt)*num_buckets);
                 _salt = (uint64_t)rand();
-                _tbl_sz = conf.numBuckets;
+                _tbl_sz = num_buckets;
         }
 
         virtual void* LockedGet(uint64_t key, mcs_struct *lock_struct) 

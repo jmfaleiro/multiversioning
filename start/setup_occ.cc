@@ -6,6 +6,7 @@
 #include <fstream>
 #include <setup_workload.h>
 #include <unistd.h>
+#include <tpcc.h>
 
 extern uint32_t GLOBAL_RECORD_SIZE;
 
@@ -259,6 +260,7 @@ Table* setup_single_table(uint64_t table_id, uint64_t num_buckets,
         return new(0) Table(conf);
 }
 
+/*
 concurrent_table* setup_single_conc_table(uint64_t num_buckets)
 {
         TableConfig conf = {
@@ -273,6 +275,7 @@ concurrent_table* setup_single_conc_table(uint64_t num_buckets)
         
         return new concurrent_table(conf);
 }
+*/
 
 table_mgr* setup_ycsb_tables(uint64_t* num_records, workload_config w_conf, 
                              bool occ)
@@ -320,12 +323,95 @@ table_mgr* setup_small_bank_tables(uint64_t *num_records,
         return ret;
 }
 
-table_mgr* setup_tpcc_tables(__attribute__((unused)) workload_config w_conf, 
-                             __attribute__((unused)) bool occ)
+table_mgr* setup_tpcc_tables(workload_config w_conf, bool occ)
 {
         assert(w_conf.experiment == TPCC_SUBSET);
-        assert(false);	/* XXX Unimplemented */
-        return NULL;
+        
+        table_mgr *ret;
+        Table **rw_tbls;
+        concurrent_table **ins_tbls;
+        uint32_t i;
+        
+        rw_tbls = (Table**)zmalloc(sizeof(Table*)*11);
+        ins_tbls = (concurrent_table**)zmalloc(sizeof(concurrent_table*)*11);
+
+        for (i = 0; i < 11; ++i) {
+                switch (i) {
+                case WAREHOUSE_TABLE:
+                        rw_tbls[i] = setup_single_table((uint64_t)i,
+                                                        w_conf.num_warehouses,
+                                                        0,
+                                                        71,
+                                                        2*w_conf.num_warehouses,
+                                                        occ? sizeof(warehouse_record)+8 : sizeof(warehouse_record));
+                        break;
+                case DISTRICT_TABLE:
+                        rw_tbls[i] = setup_single_table((uint64_t)i,
+                                                        10*w_conf.num_warehouses,
+                                                        0,
+                                                        71,
+                                                        20*w_conf.num_warehouses, 
+                                                        occ? sizeof(district_record)+8:sizeof(district_record));
+                        break;
+                case CUSTOMER_TABLE:
+                         rw_tbls[i] = setup_single_table((uint64_t)i,
+                                                         3000*10*w_conf.num_warehouses,
+                                                         0,
+                                                         71,
+                                                         6000*10*w_conf.num_warehouses,
+                                                         occ? sizeof(customer_record)+8:sizeof(customer_record));
+                        break;
+                case NEW_ORDER_TABLE:
+                        ins_tbls[i] = new concurrent_table(1000000);
+                        break;
+                case OORDER_TABLE:
+                        ins_tbls[i] = new concurrent_table(1000000);
+                        break;
+                case ORDER_LINE_TABLE:
+                        ins_tbls[i] = new concurrent_table(1000000);
+                        break;
+                case STOCK_TABLE:
+                         rw_tbls[i] = setup_single_table((uint64_t)i,
+                                                         100000*w_conf.num_warehouses,
+                                                         0,
+                                                         71,
+                                                         200000*w_conf.num_warehouses,
+                                                         occ? sizeof(stock_record)+8:sizeof(stock_record));
+                        break;
+                case ITEM_TABLE: 
+                         rw_tbls[i] = setup_single_table((uint64_t)i,
+                                                         100000,
+                                                         0,
+                                                         71,
+                                                         200000,
+                                                         occ? sizeof(item_record)+8:sizeof(item_record));
+                        break;
+                case HISTORY_TABLE:
+                        ins_tbls[i] = new concurrent_table(1000000);
+                        break;
+                case DELIVERY_TABLE:
+                         rw_tbls[i] = setup_single_table((uint64_t)i,
+                                                         10*w_conf.num_warehouses,
+                                                         0,
+                                                         71,
+                                                         20*w_conf.num_warehouses,
+                                                         occ? sizeof(uint64_t)+8:sizeof(uint64_t));
+                        break;
+                case CUSTOMER_ORDER_INDEX:
+                         rw_tbls[i] = setup_single_table((uint64_t)i,
+                                                         3000*10*w_conf.num_warehouses,
+                                                         0,
+                                                         71,
+                                                         6000*10*w_conf.num_warehouses,
+                                                         occ? sizeof(uint64_t)+8:sizeof(uint64_t));
+                        break;
+                default:
+                        assert(false);
+                }
+        }        
+        
+        ret = new table_mgr(rw_tbls, ins_tbls, 11);
+        return ret;
 }
 
 table_mgr* setup_hash_tables(workload_config w_conf, bool occ)
