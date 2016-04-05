@@ -178,7 +178,7 @@ class tpcc_util {
 };
 
 struct warehouse_record {
-        uint32_t 	_w_id;
+        uint32_t 	w_id;
         float 		w_ytd;
         float 		w_tax;
         char 		w_name[11];
@@ -350,6 +350,45 @@ class payment : public txn {
                 float h_amount, 
                 uint32_t time);
 
+        bool Run();
+};
+
+class setup_tpcc : public txn {
+ private:
+
+        enum type {
+                WAREHOUSE,
+                DISTRICT,
+                CUSTOMER,
+                ITEM,
+                STOCK,
+        };
+
+        uint32_t 		_wh;
+        uint32_t 		_dstrct;
+        uint32_t 		_low;
+        uint32_t 		_high;
+        setup_tpcc::type 	_typ;
+
+        int gen_rand_range(int min, int max);
+        void gen_rand_string(int min, int max, char *buf);
+
+        void gen_warehouse(uint32_t w_id);
+        void gen_district(uint32_t w_id, uint32_t d_id);
+        void gen_customer(uint32_t w_id, uint32_t d_id, uint32_t c_id);
+        void gen_stock(uint32_t w_id, uint32_t s_id);
+        void gen_item(uint32_t i_id);
+
+        static setup_tpcc* gen_wh_txn(uint32_t low, uint32_t high);
+        static setup_tpcc* gen_d_txn(uint32_t wh, uint32_t low, 
+                                     uint32_t high);
+        static setup_tpcc* gen_c_txn(uint32_t wh, uint32_t dstrct, 
+                                     uint32_t low, 
+                                     uint32_t high);
+        static setup_tpcc* gen_s_txn(uint32_t wh, uint32_t low, uint32_t high);
+        static setup_tpcc* gen_i_txn(uint32_t low, uint32_t high);
+        
+ public:
         bool Run();
 };
 

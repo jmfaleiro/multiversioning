@@ -30,7 +30,8 @@ static struct option long_options[] = {
   {"num_partitions", required_argument, NULL, 16},
   {"num_outstanding", required_argument, NULL, 17},
   {"abort_pos", required_argument, NULL, 18},
-  {NULL, no_argument, NULL, 19},
+  {"num_warehouses", required_argument, NULL, 19},
+  {NULL, no_argument, NULL, 20},
 };
 
 enum exp_codes {

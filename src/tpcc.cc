@@ -1,6 +1,300 @@
 #include <tpcc.h>
 #include <cpuinfo.h>
 
+setup_tpcc* setup_tpcc::gen_wh_txn(uint32_t low, uint32_t high)
+{
+        setup_tpcc *ret;
+        
+        ret = new setup_tpcc();
+        ret->_typ = setup_tpcc::WAREHOUSE;
+        ret->_low = low;
+        ret->_high = high;
+        
+        return ret;
+}
+
+setup_tpcc* setup_tpcc::gen_d_txn(uint32_t wh, uint32_t low, uint32_t high)
+{
+        setup_tpcc *ret;
+        
+        ret = new setup_tpcc();
+        ret->_typ = setup_tpcc::DISTRICT;
+        ret->_wh = wh;
+        ret->_low = low;
+        ret->_high = high;
+
+        return ret;
+}
+
+setup_tpcc* setup_tpcc::gen_c_txn(uint32_t wh, uint32_t dstrct, 
+                                  uint32_t low, 
+                                  uint32_t high)
+{
+        setup_tpcc *ret;
+        
+        ret = new setup_tpcc();
+        ret->_typ = setup_tpcc::CUSTOMER;
+        ret->_wh = wh;
+        ret->_dstrct = dstrct;
+        ret->_low = low;
+        ret->_high = high;
+
+        return ret;
+}
+
+setup_tpcc* setup_tpcc::gen_i_txn(uint32_t low, uint32_t high)
+{
+        setup_tpcc *ret;
+        
+        ret = new setup_tpcc();
+        ret->_typ = setup_tpcc::ITEM;
+        ret->_low = low;
+        ret->_high = high;
+        return ret;
+}
+
+setup_tpcc* setup_tpcc::gen_s_txn(uint32_t wh, uint32_t low, uint32_t high)
+{
+        setup_tpcc *ret;
+        
+        ret = new setup_tpcc();
+        ret->_typ = setup_tpcc::STOCK;
+        ret->_wh = wh;
+        ret->_low = low;
+        ret->_high = high;
+        return ret;
+}
+
+int setup_tpcc::gen_rand_range(int min, int max)
+{
+        int range;
+        
+        range = max - min + 1;
+        return min + (txn_rand() % range);
+}
+
+void setup_tpcc::gen_rand_string(int min, int max, char *buf)
+{
+        int ch_first, ch_last, length, i;
+        
+        ch_first = 'a';
+        ch_last = 'z';
+        length = gen_rand_range(min, max);
+        for (i = 0; i < length; ++i) 
+                buf[i] = (char)gen_rand_range(ch_first, ch_last);
+        buf[length] = '\0';
+}
+
+void setup_tpcc::gen_warehouse(uint32_t wh_id)
+{
+        warehouse_record wh;
+        char zip[] = "123456789", *record;
+
+        wh.w_id = wh_id;
+        wh.w_ytd = 3000;
+        wh.w_tax = (txn_rand() % 2001) / 1000.0;
+                
+        gen_rand_string(6, 10, wh.w_name);
+        gen_rand_string(10, 20, wh.w_street_1);
+        gen_rand_string(10, 20, wh.w_street_2);
+        gen_rand_string(10, 20, wh.w_city);
+        gen_rand_string(3, 3, wh.w_state);
+        strcpy(wh.w_zip, zip);
+                
+        record = (char*)get_write_ref((uint64_t)wh_id, WAREHOUSE_TABLE);
+        memcpy(record, &wh, sizeof(warehouse_record));
+}
+
+void setup_tpcc::gen_district(uint32_t wh_id, uint32_t d_id)
+{
+        uint64_t key;
+        district_record d;
+        char contiguous_zip[] = "123456789", *record;        
+        
+        d.d_id = d_id;
+        d.d_w_id = wh_id;
+        d.d_ytd = 3000;
+        d.d_tax = (txn_rand() % 2001) / 1000.0;
+        d.d_next_o_id = 3000;
+
+        gen_rand_string(6, 10, d.d_name);
+        gen_rand_string(10, 20, d.d_street_1);
+        gen_rand_string(10, 20, d.d_street_2);
+        gen_rand_string(10, 20, d.d_city);
+        gen_rand_string(3, 3, d.d_state);
+
+        strcpy(d.d_zip, contiguous_zip);
+        key = tpcc_util::create_district_key(wh_id, d_id);
+        record = (char*)get_write_ref(key, DISTRICT_TABLE);
+        memcpy(record, &d, sizeof(district_record));
+}
+
+void setup_tpcc::gen_item(uint32_t item_id)
+{
+        item_record itm;
+        int rand_pct, len, original_start;
+        char *record;
+
+        itm.i_id = item_id;
+        gen_rand_string(14, 24, itm.i_name);
+        itm.i_price = (100 + (rand() % 9900)) / 100.0;
+        rand_pct = gen_rand_range(0, 99);
+        len = gen_rand_range(26, 50);
+
+        gen_rand_string(len, len, itm.i_data);
+        if (rand_pct <= 10) {
+
+                // 10% of the time i_data has "ORIGINAL" crammed somewhere in the
+                // middle. 
+                original_start = gen_rand_range(2, len-8);
+                itm.i_data[original_start] = 'O';
+                itm.i_data[original_start+1] = 'R';
+                itm.i_data[original_start+2] = 'I';
+                itm.i_data[original_start+3] = 'G';
+                itm.i_data[original_start+4] = 'I';
+                itm.i_data[original_start+5] = 'N';
+                itm.i_data[original_start+6] = 'A';
+                itm.i_data[original_start+7] = 'L';
+        }
+
+        itm.i_im_id = 1 + (rand() % 10000);
+        record = (char*)get_write_ref((uint64_t)item_id, ITEM_TABLE);
+        memcpy(record, &itm, sizeof(item_record));
+}
+
+void setup_tpcc::gen_stock(uint32_t wh_id, uint32_t item_id)
+{
+        stock_record stck;
+        int rand_pct, len, start_original;
+        uint64_t key;
+        char *record;
+
+        stck.s_i_id = item_id;
+        stck.s_w_id = wh_id;
+        stck.s_quantity = 10 + txn_rand() % 90;
+        stck.s_ytd = 0;
+        stck.s_order_cnt = 0;
+        stck.s_remote_cnt = 0;
+
+        /* s_data */
+        rand_pct = gen_rand_range(1, 100);
+        len = gen_rand_range(26, 50);
+
+        gen_rand_string(len, len, stck.s_data);
+        if (rand_pct <= 10) {
+
+                // 10% of the time, i_data has the string "ORIGINAL" crammed 
+                // somewhere in the middle.
+                start_original = gen_rand_range(2, len-8);
+                stck.s_data[start_original] = 'O';
+                stck.s_data[start_original+1] = 'R';
+                stck.s_data[start_original+2] = 'I';
+                stck.s_data[start_original+3] = 'G';
+                stck.s_data[start_original+4] = 'I';
+                stck.s_data[start_original+5] = 'N';
+                stck.s_data[start_original+6] = 'A';
+                stck.s_data[start_original+7] = 'L';            
+        }
+
+        gen_rand_string(24, 24, stck.s_dist_01);
+        gen_rand_string(24, 24, stck.s_dist_02);
+        gen_rand_string(24, 24, stck.s_dist_03);
+        gen_rand_string(24, 24, stck.s_dist_04);
+        gen_rand_string(24, 24, stck.s_dist_05);
+        gen_rand_string(24, 24, stck.s_dist_06);
+        gen_rand_string(24, 24, stck.s_dist_07);
+        gen_rand_string(24, 24, stck.s_dist_08);
+        gen_rand_string(24, 24, stck.s_dist_09);
+        gen_rand_string(24, 24, stck.s_dist_10);
+
+        key = tpcc_util::create_stock_key(wh_id, item_id);
+        record = (char*)get_write_ref(key, STOCK_TABLE);
+        memcpy(record, &stck, sizeof(stock_record));
+}
+
+void setup_tpcc::gen_customer(uint32_t wh_id, uint32_t d_id, uint32_t c_id)
+{
+        uint64_t key;
+        customer_record c;
+        uint32_t i;
+        char *record;
+        
+        c.c_id = c_id;
+        c.c_d_id = d_id;
+        c.c_w_id = wh_id;
+        c.c_discount = (rand() % 5001) / 10000.0;        
+
+        if (txn_rand() % 101 <= 10) {		// 10% Bad Credit
+                c.c_credit[0] = 'B';
+                c.c_credit[1] = 'C';
+                c.c_credit[2] = '\0';
+        }
+        else {		// 90% Good Credit
+                c.c_credit[0] = 'G';
+                c.c_credit[1] = 'C';
+                c.c_credit[2] = '\0';
+        }                
+        gen_rand_string(8, 16, c.c_first);
+        
+        /* XXX NEED THIS TO LOOKUP CUSTOMERS BY LAST NAME */
+        //        random.gen_last_name_load(c.c_last);
+        //        s_last_name_index->Put(customer.c_last, &customer);
+
+        c.c_credit_lim = 50000;
+        c.c_balance = -10;
+        c.c_ytd_payment = 10;
+        c.c_payment_cnt = 1;
+        c.c_delivery_cnt = 0;        
+
+        gen_rand_string(10, 20, c.c_street_1);
+        gen_rand_string(10, 20, c.c_street_2);
+        gen_rand_string(10, 20, c.c_city);
+        gen_rand_string(3, 3, c.c_state);
+        gen_rand_string(4, 4, c.c_zip);
+
+        for (i = 4; i < 9; ++i) 
+                c.c_zip[i] = '1';            
+
+        gen_rand_string(16, 16, c.c_phone);
+
+        c.c_middle[0] = 'O';
+        c.c_middle[1] = 'E';
+        c.c_middle[2] = '\0';
+
+        gen_rand_string(300, 500, c.c_data);
+        key = tpcc_util::create_customer_key(wh_id, d_id, c_id);
+        record = (char*)get_write_ref(key, CUSTOMER_TABLE);
+        memcpy(record, &c, sizeof(customer_record));
+}
+
+
+
+/* XXX For now, implement the bare minimum required for NewOrder and Payment */
+bool setup_tpcc::Run()
+{
+        uint32_t i;
+
+        if (_typ == WAREHOUSE) {
+                for (i = _low; i <= _high; ++i) 
+                        gen_warehouse(i);
+        } else if (_typ == DISTRICT) {
+                for (i = _low; i <= _high; ++i) 
+                        gen_district(_wh, i);
+        } else if (_typ == CUSTOMER) {
+                for (i = _low; i <= _high; ++i) 
+                        gen_customer(_wh, _dstrct, i);
+        } else if (_typ == ITEM) {
+                for (i = _low; i <= _high; ++i)
+                        gen_item(i);
+        } else if (_typ == STOCK) {
+                for (i = _low; i <= _high; ++i) 
+                        gen_stock(_wh, i);
+        } else {
+                assert(false);
+        }
+        return true;
+}
+
 new_order::new_order(uint32_t warehouse_id, uint32_t district_id, 
                      uint32_t customer_id, 
                      uint32_t num_items,
