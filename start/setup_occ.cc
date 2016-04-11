@@ -68,6 +68,7 @@ OCCAction** create_single_occ_action_batch(uint32_t batch_size,
         for (i = 0; i < batch_size; ++i) {
                 txn = generate_transaction(w_config);
                 ret[i] = setup_occ_action(txn);
+                ret[i]->create_inserts(20);
         }
         return ret;
 }
@@ -634,7 +635,8 @@ void occ_experiment(OCCConfig occ_config, workload_config w_conf)
         OCCActionBatch setup_txns;
         
         struct occ_result result;
-        
+
+        tpcc_config::num_warehouses = w_conf.num_warehouses;
 	occ_config.occ_epoch = OCC_EPOCH_SIZE;
         input_queues = setup_queues<OCCActionBatch>(occ_config.numThreads,
                                                     1024);

@@ -120,6 +120,7 @@ class OCCAction : public translator {
         virtual void validate_single(occ_composite_key &comp_key);
         virtual void cleanup_single(occ_composite_key &comp_key);
         virtual void install_single_write(occ_composite_key &comp_key);
+        virtual void install_single_insert(occ_composite_key &comp_key);
         
  public:
         

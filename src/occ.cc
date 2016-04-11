@@ -160,6 +160,7 @@ bool OCCWorker::RunSingle(OCCAction *action)
         action->set_mgr(this->mgr);
         action->worker = this;
         action->tbl_mgr = config.tbl_mgr;
+        action->insert_mgr = insert_mgr;
 
         try {
                 action->run();

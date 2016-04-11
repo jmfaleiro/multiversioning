@@ -77,6 +77,6 @@ uint64_t Runnable::gen_guid()
         temp = m_guid_counter;
         m_guid_counter += 1;
         
-        ret = (((uint64_t)temp) << 32) | m_pthreadId;
+        ret = (((uint64_t)temp) << 32) | m_cpu_number;
         return ret;
 }

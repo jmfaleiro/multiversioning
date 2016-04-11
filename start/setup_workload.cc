@@ -25,7 +25,7 @@ uint64_t gen_unique_key(RecordGenerator *gen,
 }
 
 
-static txn* generate_new_order(workload_config conf)
+txn* generate_new_order(workload_config conf)
 {
         uint32_t w_id, d_id, c_id, *quants, nitems, i, temp;
         uint64_t *suppliers, *items;

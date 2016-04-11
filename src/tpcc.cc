@@ -488,10 +488,10 @@ void new_order::process_item(uint32_t item_number, uint32_t order_id,
         assert(item_number < _supplier_warehouse_ids.size());
         
         uint32_t item_id, order_quantity, supplier_warehouse;
-        uint64_t stock_key, order_line_key;
+        uint64_t stock_key;//, order_line_key;
         item_record *item;
         stock_record *stock;
-        order_line_record *order_line;
+        //        order_line_record *order_line;
         char *dist_info;
         float item_amount;
 
@@ -551,12 +551,14 @@ void new_order::process_item(uint32_t item_number, uint32_t order_id,
         }
 
         /* Compute the charge for this item */
+        /*
         item_amount = item->i_price*(1+w_tax+d_tax)*(1-c_disc);
         item_amount *= _order_quantities[item_number];
         order_line_key = tpcc_util::create_order_line_key(_warehouse_id, 
                                                          _district_id, 
                                                          order_id, 
                                                          item_number);
+        */
         /*
         order_line = (order_line_record*)insert_record(order_line_key, 
                                                        ORDER_LINE_TABLE);
@@ -717,7 +719,7 @@ bool payment::Run()
         warehouse_name = warehouse_update();
         district_name = district_update();
         customer_update();
-        //        insert_history(warehouse_name, district_name);
+        insert_history(warehouse_name, district_name);
         return true;
 } 
 

@@ -259,10 +259,12 @@ void* OCCAction::insert_ref(uint64_t key, uint32_t table_id)
         record->key = key;
         record->next = NULL;
         inserts[insert_ptr].record_ptr = record;
+        inserts[insert_ptr].tableId = table_id;
         insert_ptr += 1;
         
         /* Do the actual insert */
         lock_struct = mgr->get_struct();
+        *RECORD_TID_PTR(value) = 0;
         acquire_single(RECORD_TID_PTR(value));
         tbl = tbl_mgr->get_conc_table(table_id);
         assert(tbl != NULL);
@@ -292,9 +294,10 @@ void OCCAction::undo_inserts()
                 /* Remove the record from the index */
                 temp = tbl->Remove(record->key, lock_struct);
                 assert(temp == record);
-
+                
                 /* Return the record back to the allocator */
                 insert_mgr->return_insert_record(record, table_id);
+                mgr->return_struct(lock_struct);
         }
 }
 
@@ -519,10 +522,28 @@ void OCCAction::install_single_write(occ_composite_key &comp_key)
         comp_key.is_locked = false;
 }
 
+void OCCAction::install_single_insert(occ_composite_key &comp_key)
+{
+        assert(IS_LOCKED(this->tid) == false);
+        conc_table_record *rec;
+        uint64_t old_tid;
+
+        rec = (conc_table_record*)comp_key.record_ptr;
+        old_tid = *(uint64_t*)rec->value;
+        assert(IS_LOCKED(old_tid));
+        xchgq((volatile uint64_t*)rec->value, this->tid);
+}
+
 void OCCAction::install_writes()
 {
         uint32_t i, num_writes;
+        
+        /* Writes to pre-existing records */
         num_writes = this->writeset.size();
         for (i = 0; i < num_writes; ++i) 
                 install_single_write(this->writeset[i]);        
+
+        /* Inserts */
+        for (i = 0; i < insert_ptr; ++i) 
+                install_single_insert(this->inserts[i]);
 }
