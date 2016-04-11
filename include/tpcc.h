@@ -399,6 +399,9 @@ class setup_tpcc : public txn {
         static setup_tpcc* gen_i_txn(uint32_t low, uint32_t high);
 
         bool Run();
+        
+        virtual uint32_t num_writes();
+        virtual void get_writes(struct big_key *array);
 };
 
 // class stock_level : public txn {

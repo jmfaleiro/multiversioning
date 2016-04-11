@@ -267,7 +267,44 @@ void setup_tpcc::gen_customer(uint32_t wh_id, uint32_t d_id, uint32_t c_id)
         memcpy(record, &c, sizeof(customer_record));
 }
 
+uint32_t setup_tpcc::num_writes()
+{
+        return _high - _low + 1;
+}
 
+void setup_tpcc::get_writes(struct big_key *array)
+{
+        uint32_t i;
+
+        if (_typ == WAREHOUSE) {
+                for (i = _low; i <= _high; ++i) {
+                        array[i-_low].key = (uint64_t)i;
+                        array[i-_low].table_id = WAREHOUSE_TABLE;
+                }
+        } else if (_typ == DISTRICT) {
+                for (i = _low; i <= _high; ++i) {
+                        array[i - _low].key = tpcc_util::create_district_key(_wh, i);
+                        array[i - _low].table_id = DISTRICT_TABLE;
+                }
+        } else if (_typ == CUSTOMER) {
+                for (i = _low; i <= _high; ++i) {
+                        array[i - _low].key = tpcc_util::create_customer_key(_wh, _dstrct, i);
+                        array[i - _low].table_id = CUSTOMER_TABLE;
+                }
+        } else if (_typ == ITEM) {
+                for (i = _low; i <= _high; ++i) {
+                        array[i - _low].key = (uint64_t)i;
+                        array[i - _low].table_id = ITEM_TABLE;
+                }
+        } else if (_typ == STOCK) {
+                for (i = _low; i <= _high; ++i) {
+                        array[i - _low].key = tpcc_util::create_stock_key(_wh, i);
+                        array[i - _low].table_id = STOCK_TABLE;
+                }
+        } else {
+                assert(false);
+        }
+}
 
 /* XXX For now, implement the bare minimum required for NewOrder and Payment */
 bool setup_tpcc::Run()
