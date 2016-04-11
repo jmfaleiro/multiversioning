@@ -165,10 +165,13 @@ uint64_t OCCAction::stable_copy(uint64_t key, uint32_t table_id, void **rec_ptr,
         uint32_t record_size;
         uint64_t ret, after_read;
         void *value;
+        Table *tbl;
 
-        value = this->tables[table_id]->Get(key);
+        tbl = tbl_mgr->get_table(table_id);
+        assert(tbl != NULL);
+        value = tbl->Get(key);
         *rec_ptr = value;
-        record_size = REAL_RECORD_SIZE(this->tables[table_id]->RecordSize());
+        record_size = REAL_RECORD_SIZE(tbl->RecordSize());
         tid_ptr = (volatile uint64_t*)value;
         while (true) {
                 barrier();

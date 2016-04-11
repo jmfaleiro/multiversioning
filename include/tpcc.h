@@ -172,7 +172,7 @@ class tpcc_util {
                 /* Check that we have enough space */
                 for (i = 0; i < num_sources; ++i) 
                         total_len += strlen(sources[i]);
-                assert(dest_len <= total_len);
+                assert(total_len <= dest_len);
 
                 
                 offset = 0;

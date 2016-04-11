@@ -498,7 +498,7 @@ void new_order::process_item(uint32_t item_number, uint32_t order_id,
         item_id = _items[item_number];
         order_quantity = _order_quantities[item_number];
         supplier_warehouse = _supplier_warehouse_ids[item_number];
-        stock_key = tpcc_util::create_stock_key(_warehouse_id, item_id);
+        stock_key = tpcc_util::create_stock_key(supplier_warehouse, item_id);
         
         item = (item_record*)get_read_ref((uint64_t)item_id, ITEM_TABLE);
         stock = (stock_record*)get_write_ref(stock_key, STOCK_TABLE);
@@ -516,34 +516,34 @@ void new_order::process_item(uint32_t item_number, uint32_t order_id,
         
         stock->s_ytd += order_quantity;
         switch (_district_id) {
-        case 1:
+        case 0:
                 dist_info = stock->s_dist_01;
                 break;
-        case 2:
+        case 1:
                 dist_info = stock->s_dist_02;
                 break;
-        case 3:
+        case 2:
                 dist_info = stock->s_dist_03;
                 break;
-        case 4:
+        case 3:
                 dist_info = stock->s_dist_04;
                 break;
-        case 5:
+        case 4:
                 dist_info = stock->s_dist_05;
                 break;
-        case 6:
+        case 5:
                 dist_info = stock->s_dist_06;
                 break;
-        case 7:
+        case 6:
                 dist_info = stock->s_dist_07;
                 break;
-        case 8:
+        case 7:
                 dist_info = stock->s_dist_08;
                 break;
-        case 9:
+        case 8:
                 dist_info = stock->s_dist_09;
                 break;
-        case 10:
+        case 9:
                 dist_info = stock->s_dist_10;
                 break;
         default:	/* Shouldn't get here */
@@ -557,6 +557,7 @@ void new_order::process_item(uint32_t item_number, uint32_t order_id,
                                                          _district_id, 
                                                          order_id, 
                                                          item_number);
+        /*
         order_line = (order_line_record*)insert_record(order_line_key, 
                                                        ORDER_LINE_TABLE);
         order_line->ol_o_id = order_id;
@@ -567,7 +568,7 @@ void new_order::process_item(uint32_t item_number, uint32_t order_id,
         order_line->ol_quantity = _order_quantities[item_number];
         order_line->ol_amount = _order_quantities[item_number]*item->i_price;
         strcpy(order_line->ol_dist_info, dist_info);
-
+        */
 }
 
 bool new_order::Run()
@@ -578,12 +579,12 @@ bool new_order::Run()
         warehouse_tax = read_warehouse(_warehouse_id);
         update_district(&order_id, &district_tax);
         customer_discount = get_customer_discount();
-        insert_new_order(order_id);
+        //        insert_new_order(order_id);
         num_items = _items.size();
         for (i = 0; i < num_items; ++i) 
                 process_item(i, order_id, warehouse_tax, district_tax, 
                              customer_discount);
-        insert_oorder(order_id, _all_local);        
+        //        insert_oorder(order_id, _all_local);        
         return true;
 }
 
@@ -663,11 +664,12 @@ char* payment::warehouse_update()
 /* Update the district table */
 char* payment::district_update()
 { 
-        assert(_district_id >= 1 && _district_id <= 10);
+        assert(_district_id < 10);
+        uint64_t d_id;
         district_record *district;
         
-        district = (district_record*)get_write_ref(_district_id, 
-                                                   DISTRICT_TABLE);
+        d_id = tpcc_util::create_district_key(_warehouse_id, _district_id);
+        district = (district_record*)get_write_ref(d_id, DISTRICT_TABLE);
         district->d_ytd += _h_amount;
         return district->d_name;
 } 
@@ -715,7 +717,7 @@ bool payment::Run()
         warehouse_name = warehouse_update();
         district_name = district_update();
         customer_update();
-        insert_history(warehouse_name, district_name);
+        //        insert_history(warehouse_name, district_name);
         return true;
 } 
 
