@@ -495,6 +495,22 @@ bool new_order::Run()
         return true;
 }
 
+payment::payment(uint32_t warehouse_id, uint32_t district_id, 
+                 uint32_t customer_id, 
+                 uint32_t customer_warehouse_id,
+                 uint32_t customer_district_id,
+                 float h_amount,
+                 uint32_t time)
+{
+        _warehouse_id = warehouse_id;
+        _district_id = district_id;
+        _customer_id = customer_id;
+        _customer_warehouse_id = customer_warehouse_id;
+        _customer_district_id = customer_district_id;
+        _h_amount = h_amount;
+        _time = time;
+}
+
 /* Insert history record */
 void payment::insert_history(char *warehouse_name, char *district_name)
 { 

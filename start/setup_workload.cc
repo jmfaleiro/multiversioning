@@ -24,6 +24,84 @@ uint64_t gen_unique_key(RecordGenerator *gen,
         }
 }
 
+
+static txn* generate_new_order(workload_config conf)
+{
+        uint32_t w_id, d_id, c_id, *quants, nitems, i, temp;
+        uint64_t *suppliers, *items;
+        
+        w_id = (uint32_t)rand() % conf.num_warehouses;
+        assert(w_id < conf.num_warehouses);
+        
+        d_id = (uint32_t)rand() % NUM_DISTRICTS;
+        assert(d_id < NUM_DISTRICTS);
+        
+        c_id = (uint32_t)rand() % NUM_CUSTOMERS;
+        assert(c_id < NUM_CUSTOMERS);
+        
+        nitems = 5 + ((uint32_t)rand() % 11);
+        items = (uint64_t*)zmalloc(sizeof(uint64_t)*nitems);
+        quants = (uint32_t*)zmalloc(sizeof(uint32_t)*nitems);
+        suppliers = (uint64_t*)zmalloc(sizeof(uint64_t)*nitems);
+        
+        for (i = 0; i < nitems; ++i) {
+                items[i] = (uint32_t)rand() % NUM_ITEMS;
+                quants[i] = 1 + ((uint32_t)rand() % 10);
+                temp = rand() % 100;
+                if (temp == 0) {                        
+                        /* Use a remote warehouse */
+                        do {
+                                suppliers[i] = rand() % conf.num_warehouses;
+                        } while (suppliers[i] == w_id && conf.num_warehouses > 1);
+                } else {
+                        /* Use local warehouse */
+                        suppliers[i] = w_id;
+                }
+        }
+        return new new_order(w_id, d_id, c_id, nitems, items, quants, 
+                             suppliers);
+}
+
+static txn* generate_payment(workload_config conf)
+{
+        uint32_t w_id, d_id, c_id, c_w_id, c_d_id, time, temp;
+        float h_amount;
+
+        w_id = (uint32_t)rand() % conf.num_warehouses;
+        assert(w_id < conf.num_warehouses);
+
+        d_id = (uint32_t)rand() % NUM_DISTRICTS;
+        assert(d_id < NUM_DISTRICTS);
+        
+        c_id = (uint32_t)rand() % NUM_CUSTOMERS;
+        assert(c_id < NUM_CUSTOMERS);
+        
+        temp = (uint32_t)rand() % 100;
+        if (temp >= 15) {
+                c_w_id = w_id;
+                c_d_id = d_id;
+        } else {
+                c_d_id = (uint32_t)rand() % NUM_DISTRICTS;
+                do {
+                        c_w_id = (uint32_t)rand() % conf.num_warehouses;
+                } while (c_w_id == w_id && conf.num_warehouses > 1);
+        }
+        
+        time = 0;
+        h_amount = 1.0*((uint32_t)rand() % 5000);
+        return new payment(w_id, d_id, c_id, c_w_id, c_d_id, h_amount, time);
+}
+
+static txn* generate_tpcc(workload_config conf)
+{
+        assert(conf.experiment == TPCC_SUBSET);
+        if (rand() % 2 == 0) 
+                return generate_new_order(conf);
+        else 
+                return generate_payment(conf);        
+}
+
+
 static txn* generate_ycsb_update(RecordGenerator *gen, uint32_t num_writes)
 {
         uint32_t i;
@@ -406,6 +484,8 @@ txn* generate_transaction(workload_config config)
                                                    config.theta);
                 assert(my_gen != NULL);
                 txn = generate_ycsb_action(my_gen, config);
+        } else if (config.experiment == TPCC_SUBSET) {
+                txn = generate_tpcc(config);
         } else {
                 assert(false);
         }

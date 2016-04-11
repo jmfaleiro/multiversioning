@@ -14,6 +14,14 @@
 #define 	NUM_DISTRICTS 			10
 #endif
 
+#ifndef 	NUM_CUSTOMERS
+#define 	NUM_CUSTOMERS 			3000
+#endif
+
+#ifndef 	NUM_ITEMS 
+#define 	NUM_ITEMS 			100000
+#endif
+
 enum table_identifier {
         WAREHOUSE_TABLE 	= 0,
         DISTRICT_TABLE 		= 1,
