@@ -149,6 +149,7 @@ class split_action : public translator {
         void *insert_ref(uint64_t key, uint32_t table_id);
         void remove(uint64_t key, uint32_t table_id);
         int rand();
+        uint64_t gen_guid();
 };
 
 #endif // SPLIT_ACTION_H_

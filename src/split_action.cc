@@ -129,13 +129,20 @@ uint64_t split_action::remote_deps()
         }
 }
 
-/* XXX Incomplete */
 int split_action::rand()
 {
+        /* XXX incomplete */
+        assert(false);
         return 0;
 }
 
-/* XXX Incomplete */
+uint64_t split_action::gen_guid()
+{
+        /* XXX incomplete */
+        assert(false);
+        return 0;
+}
+
 bool split_action::run()
 {
         assert(_is_post == true || _state == split_action::SCHEDULED);

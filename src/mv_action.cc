@@ -463,3 +463,8 @@ int mv_action::rand()
 {
         return exec->gen_random();
 }
+
+uint64_t mv_action::gen_guid()
+{
+        return exec->gen_guid();
+}

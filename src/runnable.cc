@@ -68,3 +68,15 @@ Runnable::Bootstrap(void *arg) {
   worker->StartWorking();
   return NULL;
 }
+
+uint64_t Runnable::gen_guid()
+{
+        uint32_t temp;
+        uint64_t ret;
+
+        temp = m_guid_counter;
+        m_guid_counter += 1;
+        
+        ret = (((uint64_t)temp) << 32) | m_pthreadId;
+        return ret;
+}

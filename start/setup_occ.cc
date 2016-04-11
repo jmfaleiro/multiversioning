@@ -580,6 +580,8 @@ struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
         }
 
         populate_tables(inputQueues[1], outputQueues[1], setup_txns, tbls);
+        std::cerr << "Done populating tables\n";
+
         dry_run(inputQueues, outputQueues, inputBatches[0], config.numThreads);
 
         std::cerr << "Done dry run\n";

@@ -336,6 +336,11 @@ int OCCAction::rand()
         return worker->gen_random();
 }
 
+uint64_t OCCAction::gen_guid()
+{
+        return worker->gen_guid();
+}
+
 void* OCCAction::read(uint64_t key, uint32_t table_id)
 {
         uint64_t tid;
@@ -386,7 +391,7 @@ void OCCAction::acquire_locks()
                         mcs_mgr::lock(cur_lock);
                 } else {
                         if(this->writeset[i].is_rmw == false) {
-                                value = this->tables[table_id]->GetAlways(key);
+                                value = tbl_mgr->get_table(table_id)->GetAlways(key);
                                 this->writeset[i].record_ptr = value;
                         }
                         value = this->writeset[i].record_ptr;
@@ -443,7 +448,7 @@ uint64_t OCCAction::compute_tid(uint32_t epoch, uint64_t last_tid)
         for (i = 0; i < num_writes; ++i) {
                 table_id = this->writeset[i].tableId;
                 key = this->writeset[i].key;                
-                value = (volatile uint64_t*)this->tables[table_id]->GetAlways(key);
+                value = (volatile uint64_t*)tbl_mgr->get_table(table_id)->GetAlways(key);
                 assert(READ_COMMITTED || IS_LOCKED(*value));
                 barrier();
                 cur_tid = GET_TIMESTAMP(*value);
@@ -488,8 +493,10 @@ void OCCAction::install_single_write(occ_composite_key &comp_key)
         void *value;
         uint64_t old_tid;
         uint32_t record_size;
+        Table *tbl;
 
-        record_size = this->tables[comp_key.tableId]->RecordSize();
+        tbl = tbl_mgr->get_table(comp_key.tableId);
+        record_size = tbl->RecordSize();
         
         if (READ_COMMITTED) {
                 value = this->tables[comp_key.tableId]->GetAlways(comp_key.key);

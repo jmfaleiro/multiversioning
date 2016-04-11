@@ -205,6 +205,7 @@ class mv_action : public translator {
         void* insert_ref(uint64_t key, uint32_t table_id);
         void remove(uint64_t key, uint32_t table_id);
         int rand();
+        uint64_t gen_guid();
         bool Run();
         virtual void add_read_key(uint32_t tableId, uint64_t key);
         virtual void add_write_key(uint32_t tableId, uint64_t key, bool is_rmw);

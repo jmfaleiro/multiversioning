@@ -15,6 +15,7 @@ protected:
         int                                   m_cpu_number;
         pthread_t                             m_thread;
         uint64_t                              m_pthreadId;
+        uint32_t 			      m_guid_counter;
         struct random_data *m_rand_state;
 
   virtual void
@@ -26,8 +27,7 @@ protected:
   static void*
   Bootstrap(void *arg);
 
-
-
+        
 
 public:    
   Runnable(int cpu_number);
@@ -38,7 +38,7 @@ public:
         void WaitInit();
 
         virtual int gen_random();
-
+        virtual uint64_t gen_guid();
 };
 
 #endif          //  RUNNABLE_HH_

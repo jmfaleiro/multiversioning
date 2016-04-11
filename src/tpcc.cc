@@ -353,6 +353,61 @@ new_order::new_order(uint32_t warehouse_id, uint32_t district_id,
         }
 }
 
+uint32_t new_order::num_rmws()
+{
+        /* District and stocks */
+        return 1 + _items.size();
+}
+
+uint32_t new_order::num_reads()
+{
+        /* Warehouse, customer, and items */
+        return 2 + _items.size();
+}
+
+void new_order::get_rmws(struct big_key *array)
+{
+        uint64_t d_id, stck_id;
+        uint32_t i, nitems;
+
+        /* District */
+        d_id = tpcc_util::create_district_key(_warehouse_id, _district_id);
+        array[0].key = d_id;
+        array[0].table_id = DISTRICT_TABLE;
+        
+        /* Stocks */
+        nitems = _items.size();
+        for (i = 0; i < nitems; ++i) {
+                stck_id = tpcc_util::create_stock_key(_supplier_warehouse_ids[i],
+                                                      _items[i]);
+                array[1+i].key = stck_id;
+                array[1+i].table_id = STOCK_TABLE;
+        }
+}
+
+void new_order::get_reads(struct big_key *array)
+{
+        uint64_t c_id;
+        uint32_t i, nitems;
+
+        /* Warehouse */
+        array[0].key = (uint64_t)_warehouse_id;
+        array[0].table_id = WAREHOUSE_TABLE;
+
+        /* Customer */
+        c_id = tpcc_util::create_customer_key(_warehouse_id, _district_id, 
+                                              _customer_id);
+        array[1].key = c_id;
+        array[1].table_id = CUSTOMER_TABLE;
+        
+        /* Item */
+        nitems = _items.size();
+        for (i = 0; i < nitems; ++i) {
+                array[2+i].key = (uint64_t)_items[i];
+                array[2+i].table_id = ITEM_TABLE;
+        }
+}
+
 /* Insert an order record */
 void new_order::insert_oorder(uint32_t order_id, bool all_local)
 {
@@ -548,6 +603,32 @@ payment::payment(uint32_t warehouse_id, uint32_t district_id,
         _time = time;
 }
 
+uint32_t payment::num_rmws()
+{
+        return 3;
+}
+
+void payment::get_rmws(struct big_key *array)
+{
+        uint64_t d_id, c_id;
+
+        /* Warehouse */
+        array[0].key = (uint64_t)_warehouse_id;
+        array[0].table_id = WAREHOUSE_TABLE;
+        
+        /* District */
+        d_id = tpcc_util::create_district_key(_warehouse_id, _district_id);
+        array[1].key = d_id;
+        array[1].table_id = DISTRICT_TABLE;
+        
+        /* Customer */
+        c_id = tpcc_util::create_customer_key(_customer_warehouse_id, 
+                                              _customer_district_id,
+                                              _customer_id);
+        array[2].key = c_id;
+        array[2].table_id = CUSTOMER_TABLE;
+}
+
 /* Insert history record */
 void payment::insert_history(char *warehouse_name, char *district_name)
 { 
@@ -556,8 +637,7 @@ void payment::insert_history(char *warehouse_name, char *district_name)
         static const char *empty = "    ";
         const char *holder[3] = {warehouse_name, empty, district_name};
  
-        history_key = tpcc_util::create_district_key(_warehouse_id, 
-                                                     _district_id);
+        history_key = guid();
         hist = (history_record*)insert_record(history_key, HISTORY_TABLE);
         hist->h_c_id = _customer_id;
         hist->h_c_d_id = _customer_district_id;

@@ -67,3 +67,7 @@ int txn::txn_rand()
         return trans->rand();
 }
 
+uint64_t txn::guid()
+{
+        return trans->gen_guid();
+}

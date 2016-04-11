@@ -28,6 +28,11 @@ int locking_action::rand()
         return worker->gen_random();
 }
 
+uint64_t locking_action::gen_guid()
+{
+        return worker->gen_guid();
+}
+
 locking_action::locking_action(txn *txn) : translator(txn)
 {
         this->worker = NULL;

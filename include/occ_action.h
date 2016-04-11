@@ -132,7 +132,8 @@ class OCCAction : public translator {
         virtual void* insert_ref(uint64_t key, uint32_t table);
         virtual void remove(uint64_t key, uint32_t table);
         virtual int rand();
-        
+        virtual uint64_t gen_guid();
+
         virtual void set_allocator(RecordBuffers *buf);
         virtual void set_tables(Table **tables, Table **lock_tables);
         virtual void set_mgr(mcs_mgr *mgr);

@@ -333,6 +333,10 @@ class new_order : public txn {
 
         virtual bool Run();
         
+        virtual uint32_t num_reads();
+        virtual uint32_t num_rmws();
+        virtual void get_reads(struct big_key *array);
+        virtual void get_rmws(struct big_key *array);        
 };
 
 class payment : public txn {
@@ -359,6 +363,9 @@ class payment : public txn {
                 uint32_t time);
 
         bool Run();
+        
+        virtual uint32_t num_rmws();
+        virtual void get_rmws(struct big_key *array);
 };
 
 class setup_tpcc : public txn {
