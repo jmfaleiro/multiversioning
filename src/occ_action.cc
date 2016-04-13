@@ -218,12 +218,16 @@ void OCCAction::validate()
         uint32_t num_reads, num_writes, i;
 
         num_reads = this->readset.size();
-        for (i = 0; i < num_reads; ++i) 
+        for (i = 0; i < num_reads; ++i) {
+                assert(this->readset[i].is_initialized == true);
                 validate_single(this->readset[i]);
+        }
         num_writes = this->writeset.size();
-        for (i = 0; i < num_writes; ++i)
+        for (i = 0; i < num_writes; ++i) {
+                assert(this->writeset[i].is_initialized == true);
                 if (this->writeset[i].is_rmw)
                         validate_single(this->writeset[i]);
+        }
 }
 
 void OCCAction::create_inserts(uint32_t n_inserts)
@@ -260,7 +264,6 @@ void* OCCAction::insert_ref(uint64_t key, uint32_t table_id)
         record->next = NULL;
         inserts[insert_ptr].record_ptr = record;
         inserts[insert_ptr].tableId = table_id;
-        insert_ptr += 1;
         
         /* Do the actual insert */
         lock_struct = mgr->get_struct();
@@ -271,9 +274,11 @@ void* OCCAction::insert_ref(uint64_t key, uint32_t table_id)
         success = tbl->Put(record, lock_struct);
         mgr->return_struct(lock_struct);
         if (success == false) {
+                insert_mgr->return_insert_record(record, table_id);
                 throw occ_validation_exception(READ_ERR);
         } 
 
+        insert_ptr += 1;
         return RECORD_VALUE_PTR(value);
 }
 
@@ -371,7 +376,7 @@ void* OCCAction::read(uint64_t key, uint32_t table_id)
                 comp_key->value = record;
                 tid = stable_copy(key, table_id, &comp_key->record_ptr, record);
                 comp_key->old_tid = tid;
-        }        
+        }
         return RECORD_VALUE_PTR(comp_key->value);
 }
 
@@ -395,15 +400,17 @@ void OCCAction::acquire_locks()
                         this->writeset[i].lock = cur_lock;
                         cur_lock->_tail_ptr = (volatile mcs_struct**)value;
                         mcs_mgr::lock(cur_lock);
-                } else {
-                        if(this->writeset[i].is_rmw == false) {
+                        this->writeset[i].is_locked = true;
+                } else { 
+                        assert(this->writeset[i].is_initialized == true);
+                        if (this->writeset[i].is_rmw == false) {
                                 value = tbl_mgr->get_table(table_id)->GetAlways(key);
                                 this->writeset[i].record_ptr = value;
                         }
                         value = this->writeset[i].record_ptr;
                         acquire_single((volatile uint64_t*)value);
+                        this->writeset[i].is_locked = true;
                 }
-                this->writeset[i].is_locked = true;
         }
 }
 
@@ -415,10 +422,8 @@ void OCCAction::release_locks()
 
         num_writes = this->writeset.size();
         for (i = 0; i < num_writes; ++i) {
-                assert(this->writeset[i].is_locked == true);
-                //                table_id = this->writeset[i].tableId;
-                //                key = this->writeset[i].key;
-                //                value = this->tables[table_id]->Get(key);
+                assert(this->writeset[i].is_locked == true && 
+                       this->writeset[i].is_initialized == true);
                 release_single((volatile uint64_t*)writeset[i].record_ptr);
                 this->writeset[i].is_locked = false;
         }
@@ -445,6 +450,7 @@ uint64_t OCCAction::compute_tid(uint32_t epoch, uint64_t last_tid)
         num_writes = this->writeset.size();
         if (!READ_COMMITTED) {
                 for (i = 0; i < num_reads; ++i) {
+                        assert(this->readset[i].is_initialized == true);
                         cur_tid = GET_TIMESTAMP(this->readset[i].old_tid);
                         assert(!IS_LOCKED(cur_tid));
                         if (cur_tid > max_tid)
@@ -452,6 +458,7 @@ uint64_t OCCAction::compute_tid(uint32_t epoch, uint64_t last_tid)
                 }
         }
         for (i = 0; i < num_writes; ++i) {
+                assert(this->writeset[i].is_initialized == true);
                 table_id = this->writeset[i].tableId;
                 key = this->writeset[i].key;                
                 value = (volatile uint64_t*)tbl_mgr->get_table(table_id)->GetAlways(key);
@@ -462,6 +469,7 @@ uint64_t OCCAction::compute_tid(uint32_t epoch, uint64_t last_tid)
                 assert(!IS_LOCKED(cur_tid));
                 if (cur_tid > max_tid)
                         max_tid = cur_tid;
+
         }
         max_tid += 0x10;
         this->tid = max_tid;
@@ -480,12 +488,12 @@ void OCCAction::cleanup()
         num_writes = this->writeset.size();
         for (i = 0; i < num_writes; ++i) {
                 assert(this->writeset[i].is_locked == false);
-                if (this->writeset[i].is_initialized == true) 
-                        cleanup_single(this->writeset[i]);
+                if (this->writeset[i].is_initialized == true)
+                       cleanup_single(this->writeset[i]);
         }
         num_reads = this->readset.size();
         for (i = 0; i < num_reads; ++i) {
-                if (this->readset[i].is_initialized == true) 
+                if (this->readset[i].is_initialized == true)
                         cleanup_single(this->readset[i]);
         }
         
@@ -540,8 +548,10 @@ void OCCAction::install_writes()
         
         /* Writes to pre-existing records */
         num_writes = this->writeset.size();
-        for (i = 0; i < num_writes; ++i) 
-                install_single_write(this->writeset[i]);        
+        for (i = 0; i < num_writes; ++i) {
+                assert(this->writeset[i].is_initialized == true);
+                install_single_write(this->writeset[i]);       
+        }
 
         /* Inserts */
         for (i = 0; i < insert_ptr; ++i) 

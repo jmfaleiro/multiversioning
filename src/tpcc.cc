@@ -488,10 +488,10 @@ void new_order::process_item(uint32_t item_number, uint32_t order_id,
         assert(item_number < _supplier_warehouse_ids.size());
         
         uint32_t item_id, order_quantity, supplier_warehouse;
-        uint64_t stock_key;//, order_line_key;
+        uint64_t stock_key, order_line_key;
         item_record *item;
         stock_record *stock;
-        //        order_line_record *order_line;
+        order_line_record *order_line;
         char *dist_info;
         float item_amount;
 
@@ -509,10 +509,8 @@ void new_order::process_item(uint32_t item_number, uint32_t order_id,
         else 
                 stock->s_quantity += -order_quantity + 91;
         
-        if (supplier_warehouse != _warehouse_id) {
+        if (supplier_warehouse != _warehouse_id) 
                 stock->s_remote_cnt += 1;
-                _all_local = false;
-        }
         
         stock->s_ytd += order_quantity;
         switch (_district_id) {
@@ -546,20 +544,17 @@ void new_order::process_item(uint32_t item_number, uint32_t order_id,
         case 9:
                 dist_info = stock->s_dist_10;
                 break;
-        default:	/* Shouldn't get here */
+        default:
                 assert(false);
         }
 
-        /* Compute the charge for this item */
-        /*
         item_amount = item->i_price*(1+w_tax+d_tax)*(1-c_disc);
         item_amount *= _order_quantities[item_number];
         order_line_key = tpcc_util::create_order_line_key(_warehouse_id, 
                                                          _district_id, 
                                                          order_id, 
                                                          item_number);
-        */
-        /*
+
         order_line = (order_line_record*)insert_record(order_line_key, 
                                                        ORDER_LINE_TABLE);
         order_line->ol_o_id = order_id;
@@ -570,7 +565,6 @@ void new_order::process_item(uint32_t item_number, uint32_t order_id,
         order_line->ol_quantity = _order_quantities[item_number];
         order_line->ol_amount = _order_quantities[item_number]*item->i_price;
         strcpy(order_line->ol_dist_info, dist_info);
-        */
 }
 
 bool new_order::Run()
@@ -578,15 +572,18 @@ bool new_order::Run()
         float district_tax, warehouse_tax, customer_discount;
         uint32_t order_id, i, num_items;
 
+
         warehouse_tax = read_warehouse(_warehouse_id);
         update_district(&order_id, &district_tax);
         customer_discount = get_customer_discount();
-        //        insert_new_order(order_id);
+        insert_new_order(order_id);
         num_items = _items.size();
         for (i = 0; i < num_items; ++i) 
                 process_item(i, order_id, warehouse_tax, district_tax, 
                              customer_discount);
-        //        insert_oorder(order_id, _all_local);        
+
+        insert_oorder(order_id, _all_local);        
+        
         return true;
 }
 

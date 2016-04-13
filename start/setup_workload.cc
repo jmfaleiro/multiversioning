@@ -29,6 +29,8 @@ txn* generate_new_order(workload_config conf)
 {
         uint32_t w_id, d_id, c_id, *quants, nitems, i, temp;
         uint64_t *suppliers, *items;
+        UniformGenerator item_gen(NUM_ITEMS);
+        set<uint64_t> seen_items;
         
         w_id = (uint32_t)rand() % conf.num_warehouses;
         assert(w_id < conf.num_warehouses);
@@ -45,7 +47,7 @@ txn* generate_new_order(workload_config conf)
         suppliers = (uint64_t*)zmalloc(sizeof(uint64_t)*nitems);
         
         for (i = 0; i < nitems; ++i) {
-                items[i] = (uint32_t)rand() % NUM_ITEMS;
+                items[i] = gen_unique_key(&item_gen, &seen_items);
                 quants[i] = 1 + ((uint32_t)rand() % 10);
                 temp = rand() % 100;
                 if (temp == 0) {                        
@@ -95,7 +97,7 @@ static txn* generate_payment(workload_config conf)
 static txn* generate_tpcc(workload_config conf)
 {
         assert(conf.experiment == TPCC_SUBSET);
-        return generate_payment(conf);
+        return generate_new_order(conf);
         /*
         if (rand() % 2 == 0) 
 
