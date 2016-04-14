@@ -50,6 +50,8 @@ insert_buf_mgr::insert_buf_mgr(int cpu, uint32_t ntables, size_t *record_sz)
         _ntables = ntables;
         _record_sizes = (size_t*)alloc_mem(sizeof(size_t)*ntables, cpu);
         assert(_record_sizes != NULL);
+        for (uint32_t i = 0; i < ntables; ++i)
+                record_sz[i] += sizeof(uint64_t);
         memcpy(_record_sizes, record_sz, sizeof(size_t)*ntables);
         _conc_allocs = (conc_table_record**)alloc_mem(sizeof(conc_table_record*)*ntables, cpu);
         assert(_conc_allocs != NULL);

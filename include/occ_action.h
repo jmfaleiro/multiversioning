@@ -118,7 +118,7 @@ class OCCAction : public translator {
         virtual bool stable_copy(uint64_t key, uint32_t table_id, void **rec_ptr,
                                  void *record_copy, 
                                  uint64_t *tid); 
-        virtual void validate_single(occ_composite_key &comp_key);
+        virtual bool validate_single(occ_composite_key &comp_key);
         virtual void cleanup_single(occ_composite_key &comp_key);
         virtual void install_single_write(occ_composite_key &comp_key);
         virtual void install_single_insert(occ_composite_key &comp_key);
@@ -142,7 +142,7 @@ class OCCAction : public translator {
 
         virtual bool run();
         virtual void acquire_locks();
-        virtual void validate();
+        virtual bool validate();
         virtual uint64_t compute_tid(uint32_t epoch, uint64_t last_tid);
         virtual void install_writes();
         virtual void release_locks();

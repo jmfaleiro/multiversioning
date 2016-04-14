@@ -153,7 +153,7 @@ uint64_t OCCWorker::NumCompleted()
 bool OCCWorker::RunSingle(OCCAction *action)
 {
         volatile uint32_t epoch;
-        bool validated;
+        bool is_locked;
 
         action->set_tables(this->config.tables, this->config.lock_tables);
         action->set_allocator(this->bufs);
@@ -161,7 +161,34 @@ bool OCCWorker::RunSingle(OCCAction *action)
         action->worker = this;
         action->tbl_mgr = config.tbl_mgr;
         action->insert_mgr = insert_mgr;
+        is_locked = false;
 
+        if (action->run() == false)
+                goto validation_fail;
+        action->acquire_locks();
+        barrier();
+        epoch = *config.epoch_ptr;
+        barrier();        
+        is_locked = true;
+        if (!READ_COMMITTED) {
+                if(action->validate() == false)
+                        goto validation_fail;
+        }
+        this->last_tid = action->compute_tid(epoch,
+                                             this->last_tid);
+        action->install_writes();
+        action->cleanup();
+        fetch_and_increment(&config.num_completed);
+        return true;
+
+ validation_fail:
+        action->undo_inserts();
+        if (is_locked)
+                action->release_locks();
+        action->cleanup();
+        return false;
+
+        /*
         try {
                 action->run();
                 action->acquire_locks();
@@ -184,6 +211,6 @@ bool OCCWorker::RunSingle(OCCAction *action)
                         action->release_locks();
                 action->cleanup();
                 validated = false;
-        }        
-        return validated;
+        } 
+        */       
 }

@@ -97,13 +97,11 @@ txn* generate_payment(workload_config conf)
 static txn* generate_tpcc(workload_config conf)
 {
         assert(conf.experiment == TPCC_SUBSET);
-        return generate_new_order(conf);
-        /*
+        //        return generate_new_order(conf);
         if (rand() % 2 == 0) 
                 return generate_new_order(conf);
         else 
                 return generate_payment(conf);        
-        */
 }
 
 

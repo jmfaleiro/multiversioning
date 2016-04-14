@@ -195,7 +195,7 @@ bool OCCAction::stable_copy(uint64_t key, uint32_t table_id, void **rec_ptr,
         }
 }
 
-void OCCAction::validate_single(occ_composite_key &comp_key)
+bool OCCAction::validate_single(occ_composite_key &comp_key)
 {
         assert(!IS_LOCKED(comp_key.old_tid));
         void *value;
@@ -211,24 +211,28 @@ void OCCAction::validate_single(occ_composite_key &comp_key)
 
         if ((GET_TIMESTAMP(cur_tid) != comp_key.old_tid) ||
             (IS_LOCKED(cur_tid) && !comp_key.is_rmw))
-                throw 1;
+                return false;
+        return true;
 }
 
-void OCCAction::validate()
+bool OCCAction::validate()
 {
         uint32_t num_reads, num_writes, i;
 
         num_reads = this->readset.size();
         for (i = 0; i < num_reads; ++i) {
                 assert(this->readset[i].is_initialized == true);
-                validate_single(this->readset[i]);
+                if (validate_single(this->readset[i]))
+                        return false;
         }
         num_writes = this->writeset.size();
         for (i = 0; i < num_writes; ++i) {
                 assert(this->writeset[i].is_initialized == true);
                 if (this->writeset[i].is_rmw)
-                        validate_single(this->writeset[i]);
+                        if (validate_single(this->writeset[i]))
+                                return false;
         }
+        return true;
 }
 
 void OCCAction::create_inserts(uint32_t n_inserts)

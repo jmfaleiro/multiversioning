@@ -590,6 +590,7 @@ bool new_order::process_item(uint32_t item_number, uint32_t order_id,
                                                          _district_id, 
                                                          order_id, 
                                                          item_number);
+        /*
         if (insert_record(order_line_key, ORDER_LINE_TABLE, (void**)&order_line) == false)
                 return false;
         order_line->ol_o_id = order_id;
@@ -599,7 +600,8 @@ bool new_order::process_item(uint32_t item_number, uint32_t order_id,
         order_line->ol_supply_w_id = _supplier_warehouse_ids[item_number];
         order_line->ol_quantity = _order_quantities[item_number];
         order_line->ol_amount = _order_quantities[item_number]*item->i_price;
-        memcpy(order_line->ol_dist_info, dist_info, sizeof(char)*25);
+        //        memcpy(order_line->ol_dist_info, dist_info, sizeof(char)*25);
+        */
         return true;
 }
 
@@ -614,6 +616,7 @@ bool new_order::Run()
                 return false;
         if (get_customer_discount(&customer_discount) == false)
                 return false;
+
         if (insert_new_order(order_id) == false)
                 return false;
         num_items = _items.size();
@@ -621,9 +624,10 @@ bool new_order::Run()
                 if (process_item(i, order_id, warehouse_tax, district_tax, 
                                  customer_discount) == false)
                         return false;
-
+        /*
         if (insert_oorder(order_id, _all_local) == false)
                 return false;        
+        */
         return true;
 }
 
@@ -670,12 +674,12 @@ void payment::get_rmws(struct big_key *array)
 }
 
 /* Insert history record */
-bool payment::insert_history(char *warehouse_name, char *district_name)
+bool payment::insert_history(__attribute__((unused)) char *warehouse_name, __attribute__((unused)) char *district_name)
 { 
         uint64_t history_key;
         history_record *hist;
-        static const char *empty = "    ";
-        const char *holder[3] = {warehouse_name, empty, district_name};
+        //        static const char *empty = "    ";
+        //        const char *holder[3] = {warehouse_name, empty, district_name};
  
         history_key = guid();
         if (insert_record(history_key, HISTORY_TABLE, (void**)&hist) == false)
@@ -687,7 +691,7 @@ bool payment::insert_history(char *warehouse_name, char *district_name)
         hist->h_w_id = _warehouse_id;
         hist->h_date = _time;
         hist->h_amount = _h_amount;
-        tpcc_util::append_strings(hist->h_data, holder, 26, 3);
+        //        tpcc_util::append_strings(hist->h_data, holder, 26, 3);
         return true;
 }
  
