@@ -64,7 +64,7 @@ txn* generate_new_order(workload_config conf)
                              suppliers);
 }
 
-static txn* generate_payment(workload_config conf)
+txn* generate_payment(workload_config conf)
 {
         uint32_t w_id, d_id, c_id, c_w_id, c_d_id, time, temp;
         float h_amount;
@@ -97,13 +97,10 @@ static txn* generate_payment(workload_config conf)
 static txn* generate_tpcc(workload_config conf)
 {
         assert(conf.experiment == TPCC_SUBSET);
-        return generate_new_order(conf);
-        /*
         if (rand() % 2 == 0) 
-
+                return generate_new_order(conf);
         else 
                 return generate_payment(conf);        
-        */
 }
 
 

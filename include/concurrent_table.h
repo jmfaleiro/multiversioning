@@ -6,6 +6,7 @@
 
 struct conc_table_record {
         uint64_t key;
+        uint64_t tid;
         void *value;
         struct conc_table_record *next;
 };
@@ -115,11 +116,14 @@ class concurrent_table {
                 return success;
         }
         
-        virtual conc_table_record* Remove(uint64_t key, mcs_struct *lock_struct) 
+        virtual void Remove(conc_table_record *rec, mcs_struct *lock_struct) 
         {
                 concurrent_table_bckt *bucket;
                 conc_table_record *iter, *prev;
-                
+                uint64_t key;
+                assert(rec != NULL);
+
+                key = rec->key;
                 bucket = get_bucket(key);
                 lock_struct->_tail_ptr = &bucket->_lock_tail;
                 mcs_mgr::lock(lock_struct);
@@ -127,14 +131,14 @@ class concurrent_table {
                 prev = NULL;
                 iter = bucket->_records;
                 while (iter != NULL) {
-                        if (iter->key == key) 
+                        if (iter == rec) 
                                 break;
                         prev = iter;
                         iter = iter->next;
                 }
 
                 /* Shouldn't be asked to remove a non-existent record */
-                assert(iter != NULL);
+                assert(iter == rec);
                 
                 /* Remove it */
                 if (prev == NULL) {
@@ -146,7 +150,7 @@ class concurrent_table {
                 }
 
                 mcs_mgr::unlock(lock_struct);
-                return iter;
+                iter->next = NULL;
         }
 };
 

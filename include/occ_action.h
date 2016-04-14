@@ -13,7 +13,7 @@
 #define EPOCH_MASK (0xFFFFFFFF00000000)
 
 #define CREATE_TID(epoch, counter) ((((uint64_t)epoch)<<32) | (((uint64_t)counter)<<4))
-#define GET_TIMESTAMP(tid) (tid & TIMESTAMP_MASK)
+#define GET_TIMESTAMP(tid) ((tid) & TIMESTAMP_MASK)
 #define GET_EPOCH(tid) ((tid & EPOCH_MASK)>>32)
 #define GET_COUNTER(tid) (GET_TIMESTAMP(tid) & ~EPOCH_MASK)
 #define IS_LOCKED(tid) ((tid & ~(TIMESTAMP_MASK)) == 1)

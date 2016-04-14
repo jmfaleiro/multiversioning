@@ -1,5 +1,6 @@
 #include <tpcc.h>
 #include <cpuinfo.h>
+#include <algorithm>
 
 setup_tpcc* setup_tpcc::gen_wh_txn(uint32_t low, uint32_t high)
 {
@@ -339,17 +340,29 @@ new_order::new_order(uint32_t warehouse_id, uint32_t district_id,
                      uint32_t *quantities,
                      uint64_t *supplier_warehouses)
 {
-        uint32_t i;
+        uint32_t i, j;
+        uint64_t temp[20];
+        assert(num_items < 20);
 
         _warehouse_id = warehouse_id;
         _district_id = district_id;
         _customer_id = customer_id;
         _all_local = true;
         
+        for (i = 0; i < num_items; ++i) 
+                temp[i] = items[i];
+
+        std::sort(temp, &temp[i]);
         for (i = 0; i < num_items; ++i) {
-                _items.push_back(items[i]);
-                _order_quantities.push_back(quantities[i]);
-                _supplier_warehouse_ids.push_back(supplier_warehouses[i]);
+                
+                /* Find the index of the item */
+                for (j = 0; j < num_items; ++j) 
+                        if (items[j] == temp[i])
+                                break;
+                
+                _items.push_back(items[j]);
+                _order_quantities.push_back(quantities[j]);
+                _supplier_warehouse_ids.push_back(supplier_warehouses[j]);
         }
 }
 
@@ -564,7 +577,7 @@ void new_order::process_item(uint32_t item_number, uint32_t order_id,
         order_line->ol_supply_w_id = _supplier_warehouse_ids[item_number];
         order_line->ol_quantity = _order_quantities[item_number];
         order_line->ol_amount = _order_quantities[item_number]*item->i_price;
-        strcpy(order_line->ol_dist_info, dist_info);
+        memcpy(order_line->ol_dist_info, dist_info, sizeof(char)*25);
 }
 
 bool new_order::Run()

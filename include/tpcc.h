@@ -295,7 +295,7 @@ struct order_line_record {
         uint32_t 	ol_quantity;
         long 		ol_delivery_d;
         float 		ol_amount;
-        char 		ol_dist_info[25];
+        char 		ol_dist_info[30];
 };
 
 struct new_order_record {
