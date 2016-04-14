@@ -75,14 +75,13 @@ class concurrent_table {
                 lock_struct->_tail_ptr = &bucket->_lock_tail;
                 mcs_mgr::lock(lock_struct);
                 iter = bucket->_records;
-                while (iter != NULL) {
-                        if (iter->key == key) {
-                                ret = iter->value;
-                                break;
-                        }
+                while (iter != NULL && iter->key > key) 
                         iter = iter->next;
-                }
-                mcs_mgr::unlock(lock_struct);
+
+                if (iter != NULL && iter->key == key)                         
+                        ret = iter->value;
+
+                mcs_mgr::unlock(lock_struct);                
                 return ret;
         }
 
@@ -90,28 +89,27 @@ class concurrent_table {
         {
                 bool success;
                 concurrent_table_bckt *bucket;
-                conc_table_record *iter;
+                conc_table_record *iter, **prev;
 
                 bucket = get_bucket(value->key);
-                success = true;
+                success = false;
                 lock_struct->_tail_ptr = &bucket->_lock_tail;
                 mcs_mgr::lock(lock_struct);
-                iter = bucket->_records;
                 
                 /* Search for a duplicate */
-                while (iter != NULL) {
-                        if (iter->key == value->key) {
-                                success = false;
-                                break;
-                        }                                
-                        iter = iter->next;
+                prev = &bucket->_records;
+                iter = bucket->_records;
+                while (iter != NULL && iter->key > value->key) {
+                        prev = &iter->next;
+                        iter = iter->next;                        
                 }
                 
-                /* No duplicate, insert record */
-                if (success == true) {
-                        value->next = bucket->_records;
-                        bucket->_records = value;
+                if (iter == NULL || iter->key < value->key) {
+                        success = true;
+                        value->next = iter;
+                        *prev = value;
                 }
+
                 mcs_mgr::unlock(lock_struct);
                 return success;
         }
@@ -119,7 +117,7 @@ class concurrent_table {
         virtual void Remove(conc_table_record *rec, mcs_struct *lock_struct) 
         {
                 concurrent_table_bckt *bucket;
-                conc_table_record *iter, *prev;
+                conc_table_record *iter, **prev;
                 uint64_t key;
                 assert(rec != NULL);
 
@@ -128,12 +126,10 @@ class concurrent_table {
                 lock_struct->_tail_ptr = &bucket->_lock_tail;
                 mcs_mgr::lock(lock_struct);
                 
-                prev = NULL;
+                prev = &bucket->_records;
                 iter = bucket->_records;
-                while (iter != NULL) {
-                        if (iter == rec) 
-                                break;
-                        prev = iter;
+                while (iter != NULL && iter->key > rec->key) {
+                        prev = &iter->next;
                         iter = iter->next;
                 }
 
@@ -141,13 +137,7 @@ class concurrent_table {
                 assert(iter == rec);
                 
                 /* Remove it */
-                if (prev == NULL) {
-                        assert(bucket->_records == iter);
-                        bucket->_records = iter->next;
-                } else {
-                        assert(bucket->_records != iter);
-                        prev->next = iter->next;
-                }
+                *prev = iter->next;
 
                 mcs_mgr::unlock(lock_struct);
                 iter->next = NULL;
