@@ -103,7 +103,7 @@ void locking_action::commit_writes(bool commit)
         }
 }
 
-void* locking_action::write_ref(uint64_t key, uint32_t table_id)
+bool locking_action::write_ref(uint64_t key, uint32_t table_id, void **val)
 {
         locking_key *k;
         int index;
@@ -117,12 +117,16 @@ void* locking_action::write_ref(uint64_t key, uint32_t table_id)
                 read_value = lookup(k);
                 k->value = this->bufs->GetRecord(table_id);
                 record_size = this->tables[table_id]->RecordSize();
-                memcpy(RECORD_VALUE_PTR(k->value), read_value, record_size);
+                //                memcpy(RECORD_VALUE_PTR(k->value), read_value, record_size);
+                memcpy(k->value, read_value, record_size);
         }
-        return RECORD_VALUE_PTR(k->value);
+        
+        //        *val = RECORD_VALUE_PTR(k->value);
+        *val = k->value;
+        return true;
 }
 
-void* locking_action::read(uint64_t key, uint32_t table_id)
+bool locking_action::read(uint64_t key, uint32_t table_id, void **val)
 {
         locking_key *k;
         int index;
@@ -132,16 +136,18 @@ void* locking_action::read(uint64_t key, uint32_t table_id)
         k = &this->readset[index];
         if (k->value == NULL) 
                 k->value = lookup(k);
-        return k->value;
+        *val = k->value;
+        return true;
 }
 
-void* locking_action::insert_ref(__attribute__((unused)) uint64_t key, 
-                                 __attribute__((unused)) uint32_t table_id)
+bool  locking_action::insert_ref(__attribute__((unused)) uint64_t key, 
+                                 __attribute__((unused)) uint32_t table_id, 
+                                 __attribute__((unused)) void **val)
 {
         assert(false);
 }
 
-void locking_action::remove(__attribute__((unused)) uint64_t key, 
+bool locking_action::remove(__attribute__((unused)) uint64_t key, 
                             __attribute__((unused)) uint32_t table_id)
 {
         assert(false);

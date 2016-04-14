@@ -200,10 +200,10 @@ class mv_action : public translator {
         mv_action(txn *t);
 
         void setup_reverse_index();
-        void* write_ref(uint64_t key, uint32_t table_id);
-        void* read(uint64_t key, uint32_t table_id);
-        void* insert_ref(uint64_t key, uint32_t table_id);
-        void remove(uint64_t key, uint32_t table_id);
+        bool write_ref(uint64_t key, uint32_t table_id, void **val);
+        bool read(uint64_t key, uint32_t table_id, void **val);
+        bool insert_ref(uint64_t key, uint32_t table_id, void **val);
+        bool remove(uint64_t key, uint32_t table_id);
         int rand();
         uint64_t gen_guid();
         bool Run();

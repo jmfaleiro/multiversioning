@@ -17,7 +17,9 @@ bool split_new_order::update_district::Run()
 
         district_key = tpcc_util::create_district_key(_warehouse_id, 
                                                       _district_id);
-        district = (district_record*)get_write_ref(district_key, DISTRICT_TABLE);
+        get_write_ref(district_key, DISTRICT_TABLE, (void**)&district);
+        //        if (get_write_ref(district_key, DISTRICT_TABLE, &district) == false)
+        //                return false;
         _order_id = district->d_next_o_id;
         district->d_next_o_id += 1;
         return true;
@@ -43,7 +45,9 @@ bool split_new_order::read_customer::Run()
         customer_key = tpcc_util::create_customer_key(_wh_id, 
                                                       _d_id, 
                                                       _c_id);
-        cust = (customer_record*)get_read_ref(customer_key, CUSTOMER_TABLE);
+        get_read_ref(customer_key, CUSTOMER_TABLE, (void**)&cust);
+        //        if (get_read_ref(customer_key, CUSTOMER_TABLE, &cust) == false)
+        //                return false;
         _dscnt = cust->c_discount;
         return true;
 }
@@ -92,7 +96,8 @@ bool split_new_order::insert_order_lines::Run()
                         order_line.ol_supply_w_id = stock_data->_supplier_wh;
                         order_line.ol_quantity = stock_data->_quantity;
                         order_line.ol_i_id = stock_data->_item_id;
-                        item = (item_record*)get_read_ref((uint64_t)stock_data->_item_id, ITEM_TABLE);
+                        get_read_ref((uint64_t)stock_data->_item_id, ITEM_TABLE, (void**)&item);
+                        //                        item = (item_record*)get_read_ref((uint64_t)stock_data->_item_id, ITEM_TABLE);
                         order_line.ol_amount = item->i_price*stock_data->_quantity;
                         strcpy(order_line.ol_dist_info, stock_data->_district_info);
                 }
@@ -111,7 +116,8 @@ bool split_new_order::update_stocks::Run()
         for (i = 0; i < num_stocks; ++i) {
                 stock_key = tpcc_util::create_stock_key(_info[i]._supplier_wh,
                                                         _info[i]._item_id);
-                stock = (stock_record*)get_write_ref(stock_key, STOCK_TABLE);
+                get_write_ref(stock_key, STOCK_TABLE, (void**)&stock);
+                //                stock = (stock_record*)get_write_ref(stock_key, STOCK_TABLE);
                 if (stock->s_order_cnt - _info[i]._quantity >= 10)
                         stock->s_quantity -= _info[i]._quantity;
                 else 
@@ -168,7 +174,8 @@ bool split_new_order::insert_oorder::Run()
         oorder_key = tpcc_util::create_new_order_key(_wh_id, 
                                                      _dstrct_id,
                                                      _dstrct_pc->_order_id);
-        oorder = (oorder_record*)insert_record(oorder_key, OORDER_TABLE);
+        insert_record(oorder_key, OORDER_TABLE, (void**)&oorder);
+        //        oorder = (oorder_record*)insert_record(oorder_key, OORDER_TABLE);
         oorder->o_id = _dstrct_pc->_order_id;
         oorder->o_w_id = _wh_id;
         oorder->o_d_id = _dstrct_id;
@@ -191,8 +198,9 @@ bool split_new_order::insert_new_order::Run()
         new_order_key = tpcc_util::create_new_order_key(_wh_id, 
                                                         _dstrct_id, 
                                                         order_id);
-        new_order = (new_order_record*)insert_record(new_order_key, 
-                                                     NEW_ORDER_TABLE);
+        insert_record(new_order_key, NEW_ORDER_TABLE, (void**)&new_order);
+        //        new_order = (new_order_record*)insert_record(new_order_key, 
+        //                                                     NEW_ORDER_TABLE);
         new_order->no_w_id = _wh_id;
         new_order->no_d_id = _dstrct_id;
         new_order->no_o_id = order_id;
@@ -205,8 +213,9 @@ bool split_payment::update_warehouse::Run()
         assert(_wh_id < tpcc_config::num_warehouses);
         warehouse_record *warehouse;
         
-        warehouse = (warehouse_record*)get_write_ref((uint64_t)_wh_id, 
-                                                     WAREHOUSE_TABLE);
+        get_write_ref((uint64_t)_wh_id, WAREHOUSE_TABLE, (void**)&warehouse);
+        //        warehouse = (warehouse_record*)get_write_ref((uint64_t)_wh_id, 
+        //                                                     WAREHOUSE_TABLE);
         warehouse->w_ytd += _h_amount;
         _warehouse_name = warehouse->w_name;
         return true;
@@ -221,8 +230,9 @@ bool split_payment::update_district::Run()
         
         district_key = tpcc_util::create_district_key(_warehouse_id, 
                                                       _district_id);
-        district = (district_record*)get_write_ref(district_key, 
-                                                   DISTRICT_TABLE);
+        get_write_ref(district_key, DISTRICT_TABLE, (void**)&district);
+        //        district = (district_record*)get_write_ref(district_key, 
+        //                                                   DISTRICT_TABLE);
         district->d_ytd += _h_amount;
         _district_name = district->d_name;
         return true;
@@ -242,8 +252,9 @@ bool split_payment::update_customer::Run()
         customer_key = tpcc_util::create_customer_key(_warehouse_id, 
                                                       _district_id, 
                                                       _customer_id);
-        cust = (customer_record*)get_write_ref(customer_key, 
-                                                   CUSTOMER_TABLE);
+        get_write_ref(customer_key, CUSTOMER_TABLE, (void**)&cust);
+        //        cust = (customer_record*)get_write_ref(customer_key, 
+        //                                                   CUSTOMER_TABLE);
 
         /* Check credit */        
         if (strcmp(credit, cust->c_credit) == 0) {	
@@ -282,7 +293,8 @@ bool split_payment::insert_history::Run()
                                  _district_piece->_district_name};
         
         history_key = tpcc_util::create_district_key(_wh_id, _d_id);
-        hist = (history_record*)insert_record(history_key, HISTORY_TABLE);
+        insert_record(history_key, HISTORY_TABLE, (void**)&hist);
+        //        hist = (history_record*)insert_record(history_key, HISTORY_TABLE);
         hist->h_c_id = _customer_id;
         hist->h_c_d_id = _customer_district_id;
         hist->h_c_w_id = _customer_warehouse_id;

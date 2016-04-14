@@ -26,7 +26,8 @@ bool ycsb_insert::Run()
 
         for (i = this->start; i < this->end; ++i) {
                 gen_rand(rand_array);
-                record_ptr = (char*)get_write_ref(i, 0);
+                if (get_write_ref(i, 0, (void**)&record_ptr) == false)
+                        return false;
                 memcpy(record_ptr, rand_array, YCSB_RECORD_SIZE);
         }
         return true;
@@ -64,7 +65,8 @@ bool ycsb_readonly::Run()
         memset(buf, 0x0, 1000);
         num_reads = reads.size();
         for (i = 0; i < num_reads; ++i) {
-                val = (char*)get_read_ref(reads[i], 0);
+                if (get_read_ref(reads[i], 0, (void**)&val) == false)
+                        return false;
                 for (j = 0; j < 10; ++j) {
                         buf_ptr = (uint64_t*)&buf[j*100];
                         *buf_ptr += *(uint64_t*)(&val[j*100]);
@@ -161,14 +163,16 @@ bool ycsb_rmw::Run()
         /* Accumulate each field of records in the readset into "counter". */
         counter = 0;
         for (i = 0; i < num_reads; ++i) {
-                field_ptr = (char*)get_read_ref(reads[i], 0);
+                if (get_read_ref(reads[i], 0, (void**)&field_ptr) == false)
+                        return false;
                 for (j = 0; j < 10; ++j)
                         counter += *((uint64_t*)&field_ptr[j*100]);
         }
 
         /* Perform an RMW operation on each element of the writeset. */
         for (i = 0; i < num_writes; ++i) {
-                write_ptr = (char*)get_write_ref(writes[i], 0);
+                if (get_write_ref(writes[i], 0, (void**)&write_ptr) == false) 
+                        return false;
                 for (j = 0; j < 10; ++j)
                         *((uint64_t*)&write_ptr[j*100]) += j+1+counter;
         }
@@ -210,7 +214,8 @@ bool split_ycsb_read::Run()
         total = 0;
         nreads = _reads.size();
         for (i = 0; i < nreads; ++i) {
-                record = (char*)get_read_ref(_reads[i], 0);
+                if (get_read_ref(_reads[i], 0, (void**)&record) == false)
+                        return false;
                 total += *(uint32_t*)record;
                   
         }
@@ -218,15 +223,17 @@ bool split_ycsb_read::Run()
         return true;
 }
 
-void split_ycsb_read::process_record(uint32_t *acc, uint64_t key)
+bool split_ycsb_read::process_record(uint32_t *acc, uint64_t key)
 {
         char *val;
         uint32_t i, nfields;
-
-        val = (char*)get_read_ref(key, 0);
+        
+        if (get_read_ref(key, 0, (void**)&val) == false)
+                return false;
         nfields = 10;
         for (i = 0; i < nfields; ++i) 
                 acc[i] += *(uint32_t*)&val[i*100];
+        return true;
 }
 
 split_ycsb_acc::split_ycsb_acc(vector<split_ycsb_read*> read_txns)
@@ -295,7 +302,8 @@ bool split_ycsb_update::Run()
         
         nwrites = _writes.size();
         for (i = 0; i < nwrites; ++i) {
-                record = (char*)get_write_ref(_writes[i], 0);
+                if (get_write_ref(_writes[i], 0, (void**)&record) == false)
+                        return false;
                 *(uint32_t*)record += total;
         }
         return true;
@@ -352,7 +360,8 @@ bool ycsb_update::Run()
         num_records = _writes.size();
         num_updates = 10;        
         for (i = 0; i < num_records; ++i) {
-                record = (char*)get_write_ref(_writes[i], 0);
+                if (get_write_ref(_writes[i], 0, (void**)&record) == false)
+                        return false;
                 for (j = 0; j < num_updates; ++j) {
                         temp = (uint64_t*)&record[j*100];
                         *temp += _updates[j];
@@ -415,16 +424,16 @@ bool ycsb_read_write::Run()
         total = 0;
         nreads = _reads.size();
         for (i = 0; i < nreads; ++i) {
-                record = (char*)get_read_ref(_reads[i], 0);
+                if (get_read_ref(_reads[i], 0, (void**)&record) == false)
+                        return false;
                 total += *(uint32_t*)record;
         }
 
         nwrites = _writes.size();
         for (i = 0; i < nwrites; ++i) {
-                record = (char*)get_write_ref(_writes[i], 0);
+                if (get_write_ref(_writes[i], 0, (void**)&record) == false)
+                        return false;
                 *(uint32_t*)record += total;
         }
-
-
         return true;
 }

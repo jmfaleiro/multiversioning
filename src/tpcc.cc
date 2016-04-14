@@ -86,7 +86,7 @@ void setup_tpcc::gen_rand_string(int min, int max, char *buf)
         buf[length] = '\0';
 }
 
-void setup_tpcc::gen_warehouse(uint32_t wh_id)
+bool setup_tpcc::gen_warehouse(uint32_t wh_id)
 {
         warehouse_record wh;
         char zip[] = "123456789", *record;
@@ -102,11 +102,13 @@ void setup_tpcc::gen_warehouse(uint32_t wh_id)
         gen_rand_string(3, 3, wh.w_state);
         strcpy(wh.w_zip, zip);
                 
-        record = (char*)get_write_ref((uint64_t)wh_id, WAREHOUSE_TABLE);
+        if (get_write_ref((uint64_t)wh_id, WAREHOUSE_TABLE, (void**)&record) == false)
+                return false;
         memcpy(record, &wh, sizeof(warehouse_record));
+        return true;
 }
 
-void setup_tpcc::gen_district(uint32_t wh_id, uint32_t d_id)
+bool setup_tpcc::gen_district(uint32_t wh_id, uint32_t d_id)
 {
         uint64_t key;
         district_record d;
@@ -126,11 +128,13 @@ void setup_tpcc::gen_district(uint32_t wh_id, uint32_t d_id)
 
         strcpy(d.d_zip, contiguous_zip);
         key = tpcc_util::create_district_key(wh_id, d_id);
-        record = (char*)get_write_ref(key, DISTRICT_TABLE);
+        if (get_write_ref(key, DISTRICT_TABLE, (void**)&record) == false)
+                return false;
         memcpy(record, &d, sizeof(district_record));
+        return true;
 }
 
-void setup_tpcc::gen_item(uint32_t item_id)
+bool setup_tpcc::gen_item(uint32_t item_id)
 {
         item_record itm;
         int rand_pct, len, original_start;
@@ -159,11 +163,13 @@ void setup_tpcc::gen_item(uint32_t item_id)
         }
 
         itm.i_im_id = 1 + (rand() % 10000);
-        record = (char*)get_write_ref((uint64_t)item_id, ITEM_TABLE);
+        if (get_write_ref((uint64_t)item_id, ITEM_TABLE, (void**)&record) == false)
+                return false;
         memcpy(record, &itm, sizeof(item_record));
+        return true;
 }
 
-void setup_tpcc::gen_stock(uint32_t wh_id, uint32_t item_id)
+bool setup_tpcc::gen_stock(uint32_t wh_id, uint32_t item_id)
 {
         stock_record stck;
         int rand_pct, len, start_original;
@@ -209,11 +215,13 @@ void setup_tpcc::gen_stock(uint32_t wh_id, uint32_t item_id)
         gen_rand_string(24, 24, stck.s_dist_10);
 
         key = tpcc_util::create_stock_key(wh_id, item_id);
-        record = (char*)get_write_ref(key, STOCK_TABLE);
+        if (get_write_ref(key, STOCK_TABLE, (void**)&record) == false)
+                return false;
         memcpy(record, &stck, sizeof(stock_record));
+        return true;
 }
 
-void setup_tpcc::gen_customer(uint32_t wh_id, uint32_t d_id, uint32_t c_id)
+bool setup_tpcc::gen_customer(uint32_t wh_id, uint32_t d_id, uint32_t c_id)
 {
         uint64_t key;
         customer_record c;
@@ -264,8 +272,10 @@ void setup_tpcc::gen_customer(uint32_t wh_id, uint32_t d_id, uint32_t c_id)
 
         gen_rand_string(300, 500, c.c_data);
         key = tpcc_util::create_customer_key(wh_id, d_id, c_id);
-        record = (char*)get_write_ref(key, CUSTOMER_TABLE);
+        if (get_write_ref(key, CUSTOMER_TABLE, (void**)&record) == false)
+                return false;
         memcpy(record, &c, sizeof(customer_record));
+        return true;
 }
 
 uint32_t setup_tpcc::num_writes()
@@ -311,26 +321,28 @@ void setup_tpcc::get_writes(struct big_key *array)
 bool setup_tpcc::Run()
 {
         uint32_t i;
-
+        bool ret;
+        
+        ret = true;
         if (_typ == WAREHOUSE) {
                 for (i = _low; i <= _high; ++i) 
-                        gen_warehouse(i);
+                        ret = gen_warehouse(i);
         } else if (_typ == DISTRICT) {
                 for (i = _low; i <= _high; ++i) 
-                        gen_district(_wh, i);
+                        ret = gen_district(_wh, i);
         } else if (_typ == CUSTOMER) {
                 for (i = _low; i <= _high; ++i) 
-                        gen_customer(_wh, _dstrct, i);
+                        ret = gen_customer(_wh, _dstrct, i);
         } else if (_typ == ITEM) {
-                for (i = _low; i <= _high; ++i)
-                        gen_item(i);
+                for (i = _low; i <= _high; ++i)                        
+                        ret = gen_item(i);
         } else if (_typ == STOCK) {
                 for (i = _low; i <= _high; ++i) 
-                        gen_stock(_wh, i);
+                        ret = gen_stock(_wh, i);
         } else {
                 assert(false);
         }
-        return true;
+        return ret;
 }
 
 new_order::new_order(uint32_t warehouse_id, uint32_t district_id, 
@@ -422,14 +434,15 @@ void new_order::get_reads(struct big_key *array)
 }
 
 /* Insert an order record */
-void new_order::insert_oorder(uint32_t order_id, bool all_local)
+bool new_order::insert_oorder(uint32_t order_id, bool all_local)
 {
         oorder_record *oorder;
         uint64_t oorder_key;
         
         oorder_key = tpcc_util::create_new_order_key(_warehouse_id, _district_id,
                                                     order_id);
-        oorder = (oorder_record*)insert_record(oorder_key, OORDER_TABLE);
+        if (insert_record(oorder_key, OORDER_TABLE, (void**)&oorder) == false)
+                return false;
         oorder->o_id = order_id;
         oorder->o_w_id = _warehouse_id;
         oorder->o_d_id = _district_id;
@@ -437,33 +450,37 @@ void new_order::insert_oorder(uint32_t order_id, bool all_local)
         oorder->o_carrier_id = 0;
         oorder->o_ol_cnt = _items.size();
         oorder->o_all_local = all_local;
+        return true;
 }
 
-float new_order::read_warehouse(uint32_t warehouse_id)
+bool new_order::read_warehouse(uint32_t warehouse_id, float *ret)
 {
         warehouse_record *wh;
         
-        wh = (warehouse_record*)get_read_ref((uint64_t)warehouse_id, WAREHOUSE_TABLE);
-        return wh->w_tax;
+        if (get_read_ref((uint64_t)warehouse_id, WAREHOUSE_TABLE, (void**)&wh) == false)
+                return false;
+        *ret = wh->w_tax;
+        return true;
 }
 
 /* Increment district's next order id field */
-void new_order::update_district(uint32_t *order_id, float *district_tax)
+bool new_order::update_district(uint32_t *order_id, float *district_tax)
 {
         uint64_t district_key;
         district_record *district;
         
         district_key = tpcc_util::create_district_key(_warehouse_id, 
                                                      _district_id);
-        district = (district_record*)get_write_ref(district_key, 
-                                                   DISTRICT_TABLE);
+        if (get_write_ref(district_key, DISTRICT_TABLE, (void**)&district) == false)
+                return false;
         *order_id = district->d_next_o_id;
         *district_tax = district->d_tax;
         district->d_next_o_id += 1;
+        return true;
 }
 
 /* Read customer discount */
-float new_order::get_customer_discount()
+bool new_order::get_customer_discount(float *ret)
 {
         uint64_t customer_key;
         customer_record *customer;
@@ -471,12 +488,14 @@ float new_order::get_customer_discount()
         customer_key = tpcc_util::create_customer_key(_warehouse_id, 
                                                      _district_id, 
                                                      _customer_id);
-        customer = (customer_record*)get_read_ref(customer_key, CUSTOMER_TABLE);
-        return customer->c_discount;
+        if (get_read_ref(customer_key, CUSTOMER_TABLE, (void**)&customer) == false)
+                return false;
+        *ret = customer->c_discount;
+        return true;
 }
 
 /* Insert a new order record */
-void new_order::insert_new_order(uint32_t order_id)
+bool new_order::insert_new_order(uint32_t order_id)
 {
         uint64_t new_order_key;
         new_order_record *record;
@@ -484,14 +503,16 @@ void new_order::insert_new_order(uint32_t order_id)
         new_order_key = tpcc_util::create_new_order_key(_warehouse_id, 
                                                        _district_id, 
                                                        order_id);
-        record = (new_order_record*)insert_record(new_order_key, NEW_ORDER_TABLE);
+        if (insert_record(new_order_key, NEW_ORDER_TABLE, (void**)&record) == false)
+                return false;
         record->no_w_id = _warehouse_id;
         record->no_d_id = _district_id;
         record->no_o_id = order_id;
+        return true;
 }
 
 /* Process one out of the items requested */
-void new_order::process_item(uint32_t item_number, uint32_t order_id, 
+bool new_order::process_item(uint32_t item_number, uint32_t order_id, 
                              float w_tax, 
                              float d_tax, 
                              float c_disc)
@@ -513,8 +534,10 @@ void new_order::process_item(uint32_t item_number, uint32_t order_id,
         supplier_warehouse = _supplier_warehouse_ids[item_number];
         stock_key = tpcc_util::create_stock_key(supplier_warehouse, item_id);
         
-        item = (item_record*)get_read_ref((uint64_t)item_id, ITEM_TABLE);
-        stock = (stock_record*)get_write_ref(stock_key, STOCK_TABLE);
+        if (get_read_ref((uint64_t)item_id, ITEM_TABLE, (void**)&item) == false)
+                return false;
+        if (get_write_ref(stock_key, STOCK_TABLE, (void**)&stock) == false)
+                return false;
         
         /* Update inventory */
         if (stock->s_order_cnt - order_quantity >= 10) 
@@ -567,9 +590,8 @@ void new_order::process_item(uint32_t item_number, uint32_t order_id,
                                                          _district_id, 
                                                          order_id, 
                                                          item_number);
-
-        order_line = (order_line_record*)insert_record(order_line_key, 
-                                                       ORDER_LINE_TABLE);
+        if (insert_record(order_line_key, ORDER_LINE_TABLE, (void**)&order_line) == false)
+                return false;
         order_line->ol_o_id = order_id;
         order_line->ol_d_id = _district_id;
         order_line->ol_w_id = _warehouse_id;
@@ -578,25 +600,30 @@ void new_order::process_item(uint32_t item_number, uint32_t order_id,
         order_line->ol_quantity = _order_quantities[item_number];
         order_line->ol_amount = _order_quantities[item_number]*item->i_price;
         memcpy(order_line->ol_dist_info, dist_info, sizeof(char)*25);
+        return true;
 }
 
 bool new_order::Run()
 {
         float district_tax, warehouse_tax, customer_discount;
         uint32_t order_id, i, num_items;
-
-
-        warehouse_tax = read_warehouse(_warehouse_id);
-        update_district(&order_id, &district_tax);
-        customer_discount = get_customer_discount();
-        insert_new_order(order_id);
+        
+        if (read_warehouse(_warehouse_id, &warehouse_tax) == false)
+                return false;
+        if (update_district(&order_id, &district_tax) == false)
+                return false;
+        if (get_customer_discount(&customer_discount) == false)
+                return false;
+        if (insert_new_order(order_id) == false)
+                return false;
         num_items = _items.size();
         for (i = 0; i < num_items; ++i) 
-                process_item(i, order_id, warehouse_tax, district_tax, 
-                             customer_discount);
+                if (process_item(i, order_id, warehouse_tax, district_tax, 
+                                 customer_discount) == false)
+                        return false;
 
-        insert_oorder(order_id, _all_local);        
-        
+        if (insert_oorder(order_id, _all_local) == false)
+                return false;        
         return true;
 }
 
@@ -643,7 +670,7 @@ void payment::get_rmws(struct big_key *array)
 }
 
 /* Insert history record */
-void payment::insert_history(char *warehouse_name, char *district_name)
+bool payment::insert_history(char *warehouse_name, char *district_name)
 { 
         uint64_t history_key;
         history_record *hist;
@@ -651,7 +678,8 @@ void payment::insert_history(char *warehouse_name, char *district_name)
         const char *holder[3] = {warehouse_name, empty, district_name};
  
         history_key = guid();
-        hist = (history_record*)insert_record(history_key, HISTORY_TABLE);
+        if (insert_record(history_key, HISTORY_TABLE, (void**)&hist) == false)
+                return false;
         hist->h_c_id = _customer_id;
         hist->h_c_d_id = _customer_district_id;
         hist->h_c_w_id = _customer_warehouse_id;
@@ -660,34 +688,39 @@ void payment::insert_history(char *warehouse_name, char *district_name)
         hist->h_date = _time;
         hist->h_amount = _h_amount;
         tpcc_util::append_strings(hist->h_data, holder, 26, 3);
+        return true;
 }
  
 /* Update the warehouse table */
-char* payment::warehouse_update()
+bool payment::warehouse_update(char **ret)
 { 
         assert(_warehouse_id < tpcc_config::num_warehouses);
         warehouse_record *warehouse;        
-        warehouse = (warehouse_record*)get_write_ref((uint64_t)_warehouse_id, 
-                                                     WAREHOUSE_TABLE);
+        
+        if (get_write_ref((uint64_t)_warehouse_id, WAREHOUSE_TABLE, (void**)&warehouse) == false)
+                return false;
         warehouse->w_ytd += _h_amount;
-        return warehouse->w_name;
+        *ret = warehouse->w_name;
+        return true;
 }
  
 /* Update the district table */
-char* payment::district_update()
+bool payment::district_update(char **ret)
 { 
         assert(_district_id < 10);
         uint64_t d_id;
         district_record *district;
         
         d_id = tpcc_util::create_district_key(_warehouse_id, _district_id);
-        district = (district_record*)get_write_ref(d_id, DISTRICT_TABLE);
+        if (get_write_ref(d_id, DISTRICT_TABLE, (void**)&district) == false)
+                return false;
         district->d_ytd += _h_amount;
-        return district->d_name;
+        *ret = district->d_name;
+        return true;
 } 
  
 /* Update the customer table */
-void payment::customer_update()
+bool payment::customer_update()
 { 
         uint64_t customer_key;
         customer_record *cust;
@@ -700,7 +733,8 @@ void payment::customer_update()
                                                      _customer_district_id,
                                                      _customer_id);
 
-        cust = (customer_record*)get_write_ref(customer_key, CUSTOMER_TABLE);
+        if (get_write_ref(customer_key, CUSTOMER_TABLE, (void**)&cust) == false)
+                return false;
         if (strcmp(credit, cust->c_credit) == 0) {
                 sprintf(c_id_str, "%x", _customer_id);
                 sprintf(c_d_id_str, "%x", _customer_district_id);
@@ -719,17 +753,27 @@ void payment::customer_update()
                 cust->c_ytd_payment += _h_amount;
                 cust->c_payment_cnt += 1;
         }
+        return true;
 }
  
 /* Run payment txn  */
 bool payment::Run()
 { 
         char *warehouse_name, *district_name;
- 
-        warehouse_name = warehouse_update();
-        district_name = district_update();
-        customer_update();
-        insert_history(warehouse_name, district_name);
+        bool success;
+
+        success = warehouse_update(&warehouse_name);
+        if (success == false)
+                return false;
+        success = district_update(&district_name);
+        if (success == false)
+                return false;
+        success = customer_update();
+        if (success == false)
+                return false;
+        success = insert_history(warehouse_name, district_name);
+        if (success == false)
+                return false;
         return true;
 } 
 

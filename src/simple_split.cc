@@ -20,7 +20,8 @@ bool simple_split::Run()
         uint64_t *val;
 
         for (i = 0; i < records->size(); ++i) {
-                val = (uint64_t*)get_write_ref((*records)[i], 0);
+                if (get_write_ref((*records)[i], 0, (void**)&val) == false)
+                        return false;
                 *val += 1;                
         }
         return true;

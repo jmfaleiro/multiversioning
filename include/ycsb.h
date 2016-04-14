@@ -71,7 +71,7 @@ class split_ycsb_read : public txn {
         uint32_t 		*_accumulated;
         vector<uint64_t> 	_reads;
 
-        void process_record(uint32_t *acc, uint64_t key);
+        bool process_record(uint32_t *acc, uint64_t key);
  public:
         split_ycsb_read(uint32_t *acc_array, vector<uint64_t> reads);
         virtual bool Run();        

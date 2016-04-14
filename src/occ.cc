@@ -177,10 +177,10 @@ bool OCCWorker::RunSingle(OCCAction *action)
                 action->cleanup();
                 fetch_and_increment(&config.num_completed);
                 validated = true;
-        } catch(const occ_validation_exception &e) {
-                assert(!READ_COMMITTED || e.err == INSERT_ERR);
+        } catch(int e) {
+                assert(!READ_COMMITTED || e == 0);
                 action->undo_inserts();
-                if (e.err == VALIDATION_ERR)
+                if (e == 1)
                         action->release_locks();
                 action->cleanup();
                 validated = false;

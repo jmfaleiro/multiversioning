@@ -158,8 +158,8 @@ void OCCAction::set_mgr(mcs_mgr *mgr)
         this->mgr = mgr;
 }
 
-uint64_t OCCAction::stable_copy(uint64_t key, uint32_t table_id, void **rec_ptr,
-                                void *record_copy)
+bool OCCAction::stable_copy(uint64_t key, uint32_t table_id, void **rec_ptr,
+                            void *record_copy, uint64_t *tid)
 {
         volatile uint64_t *tid_ptr;
         uint32_t record_size;
@@ -183,13 +183,14 @@ uint64_t OCCAction::stable_copy(uint64_t key, uint32_t table_id, void **rec_ptr,
                         barrier();
                         after_read = *tid_ptr;
                         barrier();
-                        if (after_read == ret)
-                                return ret;
-                        else if (READ_COMMITTED)
+                        if (after_read == ret) {
+                                *tid = ret;
+                                return true;
+                        } else if (READ_COMMITTED) {
                                 continue;
-                        else
-                                throw occ_validation_exception(READ_ERR);
-                        return ret;
+                        } else {
+                                return false;
+                        }
                 }
         }
 }
@@ -210,7 +211,7 @@ void OCCAction::validate_single(occ_composite_key &comp_key)
 
         if ((GET_TIMESTAMP(cur_tid) != comp_key.old_tid) ||
             (IS_LOCKED(cur_tid) && !comp_key.is_rmw))
-                throw occ_validation_exception(VALIDATION_ERR);
+                throw 1;
 }
 
 void OCCAction::validate()
@@ -249,7 +250,7 @@ void OCCAction::create_inserts(uint32_t n_inserts)
                 inserts.push_back(k);
 }
 
-void* OCCAction::insert_ref(uint64_t key, uint32_t table_id)
+bool OCCAction::insert_ref(uint64_t key, uint32_t table_id, void **val)
 {
         assert(insert_ptr < inserts.size());
         void *value;
@@ -281,11 +282,12 @@ void* OCCAction::insert_ref(uint64_t key, uint32_t table_id)
                 *RECORD_TID_PTR(record->value) = 0;
                 barrier();
                 insert_mgr->return_insert_record(record, table_id);
-                throw occ_validation_exception(READ_ERR);
+                return false;
         } 
 
         insert_ptr += 1;
-        return RECORD_VALUE_PTR(value);
+        *val = RECORD_VALUE_PTR(value);
+        return true;
 }
 
 void OCCAction::undo_inserts()
@@ -317,14 +319,14 @@ void OCCAction::undo_inserts()
         }
 }
 
-void OCCAction::remove(__attribute__((unused)) uint64_t key, 
+bool OCCAction::remove(__attribute__((unused)) uint64_t key, 
                        __attribute__((unused)) uint32_t table_id)
 {
         assert(false);
 }
 
 
-void* OCCAction::write_ref(uint64_t key, uint32_t table_id)
+bool OCCAction::write_ref(uint64_t key, uint32_t table_id, void **val)
 {
         uint64_t tid;
         void *record;
@@ -345,12 +347,15 @@ void* OCCAction::write_ref(uint64_t key, uint32_t table_id)
                 comp_key->is_initialized = true;
                 comp_key->value = record;
                 if (writeset[i].is_rmw == true) {
-                        tid = stable_copy(key, table_id, &comp_key->record_ptr, 
-                                          record);
-                        comp_key->old_tid = tid;
+                        if (stable_copy(key, table_id, &comp_key->record_ptr, 
+                                        record, &tid) == true)
+                                comp_key->old_tid = tid;
+                        else 
+                                return false;
                 }
         } 
-        return RECORD_VALUE_PTR(comp_key->value);
+        *val = RECORD_VALUE_PTR(comp_key->value);
+        return true;
 }
 
 int OCCAction::rand()
@@ -363,7 +368,7 @@ uint64_t OCCAction::gen_guid()
         return worker->gen_guid();
 }
 
-void* OCCAction::read(uint64_t key, uint32_t table_id)
+bool OCCAction::read(uint64_t key, uint32_t table_id, void **val)
 {
         uint64_t tid;
         void *record;
@@ -385,10 +390,14 @@ void* OCCAction::read(uint64_t key, uint32_t table_id)
                 record = this->record_alloc->GetRecord(table_id);
                 comp_key->is_initialized = true;
                 comp_key->value = record;
-                tid = stable_copy(key, table_id, &comp_key->record_ptr, record);
-                comp_key->old_tid = tid;
+                if (stable_copy(key, table_id, &comp_key->record_ptr, record, 
+                                &tid) == true) 
+                        comp_key->old_tid = tid;
+                else 
+                        return false;
         }
-        return RECORD_VALUE_PTR(comp_key->value);
+        *val = RECORD_VALUE_PTR(comp_key->value);
+        return true;
 }
 
 void OCCAction::acquire_locks()
@@ -524,7 +533,7 @@ void OCCAction::install_single_write(occ_composite_key &comp_key)
         record_size = tbl->RecordSize();
         
         if (READ_COMMITTED) {
-                value = this->tables[comp_key.tableId]->GetAlways(comp_key.key);
+                value = tbl->GetAlways(comp_key.key);
                 acquire_single((volatile uint64_t*)value);
         } else {
                 value = comp_key.record_ptr;

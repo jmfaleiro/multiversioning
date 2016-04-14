@@ -89,10 +89,10 @@ class translator {
         
  public:
         translator(txn *t) { this->t = t; };
-        virtual void *write_ref(uint64_t key, uint32_t table) = 0;
-        virtual void *read(uint64_t key, uint32_t table) = 0;
-        virtual void* insert_ref(uint64_t key, uint32_t table) = 0;
-        virtual void remove(uint64_t key, uint32_t table) = 0;
+        virtual bool write_ref(uint64_t key, uint32_t table, void **ret) = 0;
+        virtual bool read(uint64_t key, uint32_t table, void **ret) = 0;
+        virtual bool insert_ref(uint64_t key, uint32_t table, void **ret) = 0;
+        virtual bool remove(uint64_t key, uint32_t table) = 0;
         virtual int rand() = 0;
         virtual uint64_t gen_guid() = 0;
 };
@@ -105,10 +105,10 @@ class txn {
  private:
         translator *trans;
  protected:
-        void* get_write_ref(uint64_t key, uint32_t table_id);
-        void* get_read_ref(uint64_t key, uint32_t table_id);
+        bool get_write_ref(uint64_t key, uint32_t table_id, void **val);
+        bool get_read_ref(uint64_t key, uint32_t table_id, void **val);
         void* get_insert_ref(uint64_t key, uint32_t table_id);
-        void* insert_record(uint64_t key, uint32_t table_id);
+        bool insert_record(uint64_t key, uint32_t table_id, void **val);
         void remove_record(uint64_t key, uint32_t table_id);
         int txn_rand();
         uint64_t guid();

@@ -27,10 +27,10 @@ bool SmallBank::LoadCustomerRange::Run()
                 customer_id = this->customers[i];
                 savings = this->balances[2*i];
                 checking = this->balances[2*i+1];
-                savings_rec =
-                        (SmallBankRecord*)get_write_ref(customer_id, SAVINGS);
-                checking_rec =
-                        (SmallBankRecord*)get_write_ref(customer_id, CHECKING);
+                if (get_write_ref(customer_id, SAVINGS, (void**)&savings_rec) == false)
+                        return false;
+                if (get_write_ref(customer_id, CHECKING, (void**)&checking_rec) == false)
+                        return false;
                 savings_rec->amount = savings;
                 checking_rec->amount = checking;
         }
@@ -64,10 +64,12 @@ SmallBank::Balance::Balance(uint64_t customer_id)
 
 bool SmallBank::Balance::Run()
 {
-        SmallBankRecord *checking =
-                (SmallBankRecord*)get_read_ref(customer_id, CHECKING);
-        SmallBankRecord *savings =
-                (SmallBankRecord*)get_read_ref(customer_id, SAVINGS);
+        SmallBankRecord *checking, *savings;
+
+        if (get_read_ref(customer_id, CHECKING, (void**)&checking) == false)
+                return false;
+        if (get_read_ref(customer_id, SAVINGS, (void**)&savings) == false)
+                return false;
         this->totalBalance = checking->amount + savings->amount;
         do_spin();
         return true;        
@@ -95,8 +97,9 @@ SmallBank::DepositChecking::DepositChecking(uint64_t customer, long amount)
 bool SmallBank::DepositChecking::Run()
 {
         SmallBankRecord *checking;
-
-        checking = (SmallBankRecord*)get_write_ref(this->customer_id, CHECKING);
+        
+        if (get_write_ref(this->customer_id, CHECKING, (void**)&checking) == false)
+                return false;
         checking->amount += this->amount;
         do_spin();
         return true;        
@@ -122,7 +125,8 @@ SmallBank::TransactSaving::TransactSaving(uint64_t customer, long amount)
 bool SmallBank::TransactSaving::Run()
 {
         SmallBankRecord *savings;
-        savings = (SmallBankRecord*)get_write_ref(customer_id, SAVINGS);
+        if (get_write_ref(customer_id, SAVINGS, (void**)&savings) == false)
+                return false;
         savings->amount += this->amount;
         do_spin();
         return true;
@@ -148,13 +152,13 @@ SmallBank::Amalgamate::Amalgamate(uint64_t from_customer, uint64_t to_customer)
 bool SmallBank::Amalgamate::Run()
 {
         SmallBankRecord *from_checking, *from_savings, *to_checking;
-
-        from_checking =
-                (SmallBankRecord*)get_write_ref(this->from_customer, CHECKING);
-        from_savings =
-                (SmallBankRecord*)get_write_ref(this->from_customer, SAVINGS);
-        to_checking =
-                (SmallBankRecord*)get_write_ref(this->to_customer, CHECKING);
+        
+        if (get_write_ref(this->from_customer, CHECKING, (void**)&from_checking) == false)
+                return false;
+        if (get_write_ref(this->from_customer, SAVINGS, (void**)&from_savings) == false)
+                return false;
+        if (get_write_ref(this->to_customer, CHECKING, (void**)&to_checking) == false)
+                return false;
         to_checking->amount += from_checking->amount + from_savings->amount;
         from_checking->amount = 0;
         from_savings->amount = 0;
@@ -188,9 +192,11 @@ SmallBank::WriteCheck::WriteCheck(uint64_t customer_id, long amount)
 bool SmallBank::WriteCheck::Run()
 {
         SmallBankRecord *checking, *savings;
-
-        checking = (SmallBankRecord*)get_write_ref(customer_id, CHECKING);
-        savings = (SmallBankRecord*)get_read_ref(customer_id, SAVINGS);
+        
+        if (get_write_ref(customer_id, CHECKING, (void**)&checking) == false)
+                return false;
+        if (get_read_ref(customer_id, SAVINGS, (void**)&savings) == false)
+                return false;
         if (checking->amount + savings->amount - check_amount < 0)
                 check_amount += 1;
         checking->amount -= check_amount;

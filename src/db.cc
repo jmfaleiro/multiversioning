@@ -12,19 +12,19 @@ void txn::set_translator(translator *trans)
         this->trans = trans;
 }
 
-void* txn::get_write_ref(uint64_t key, uint32_t table_id)
+bool txn::get_write_ref(uint64_t key, uint32_t table_id, void **val)
 {
-        return trans->write_ref(key, table_id);
+        return trans->write_ref(key, table_id, val);
 }
 
-void* txn::get_read_ref(uint64_t key, uint32_t table_id)
+bool txn::get_read_ref(uint64_t key, uint32_t table_id, void **val)
 {
-        return trans->read(key, table_id);
+        return trans->read(key, table_id, val);
 }
 
-void* txn::insert_record(uint64_t key, uint32_t table_id)
+bool txn::insert_record(uint64_t key, uint32_t table_id, void **val)
 {
-        return trans->insert_ref(key, table_id);
+        return trans->insert_ref(key, table_id, val);
 }
 
 void txn::remove_record(uint64_t key, uint32_t table_id)

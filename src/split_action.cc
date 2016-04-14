@@ -66,19 +66,20 @@ rendezvous_point** split_action::get_rvps()
         return _rvps;
 }
 
-void* split_action::insert_ref(__attribute__((unused)) uint64_t key, 
-                               __attribute__((unused)) uint32_t table_id)
+bool split_action::insert_ref(__attribute__((unused)) uint64_t key, 
+                              __attribute__((unused)) uint32_t table_id, 
+                              __attribute__((unused)) void **val)
 {
         assert(false);
 }
 
-void split_action::remove(__attribute__((unused)) uint64_t key, 
+bool split_action::remove(__attribute__((unused)) uint64_t key, 
                           __attribute__((unused)) uint32_t table_id)
 {
         assert(false);
 }
 
-void* split_action::write_ref(uint64_t key, uint32_t table_id)
+bool split_action::write_ref(uint64_t key, uint32_t table_id, void **val)
 {
         uint32_t index, num_writes, num_reads;
         split_dep *k;
@@ -89,15 +90,16 @@ void* split_action::write_ref(uint64_t key, uint32_t table_id)
         for (index = num_reads; index < num_writes; ++index) {
                 k = &_dependencies[index];
                 if (k->_key.key == key && k->_key.table_id == table_id) {
-                        return k->_value;
+                        *val = k->_value;
+                        return true;
                 }
         }
         assert(index < num_writes);
-        return NULL;
+        return false;
 }
 
 /* XXX Incomplete */
-void* split_action::read(uint64_t key, uint32_t table_id)
+bool split_action::read(uint64_t key, uint32_t table_id, void **val)
 {
         uint32_t index, num_reads;
         split_dep *k;
@@ -106,11 +108,12 @@ void* split_action::read(uint64_t key, uint32_t table_id)
         for (index = 0; index < num_reads; ++index) {
                 k = &_dependencies[index];
                 if (k->_key.key == key && k->_key.table_id == table_id) {
-                        return k->_value;
+                        *val = k->_value;
+                        return true;
                 }
         }
         assert(index < num_reads);
-        return NULL;
+        return false;
 }
 
 uint64_t split_action::remote_deps()

@@ -339,7 +339,7 @@ bool mv_action::Run()
         return t->Run();
 }
 
-void* mv_action::write_ref(uint64_t key, uint32_t table_id)
+bool mv_action::write_ref(uint64_t key, uint32_t table_id, void **val)
 {
         //        struct big_key bkey;
         //        struct key_index index;
@@ -353,14 +353,15 @@ void* mv_action::write_ref(uint64_t key, uint32_t table_id)
                     this->__writeset[i].tableId == table_id) {
                         assert(!this->__writeset[i].is_rmw || 
                                this->__writeset[i].initialized == true);
-                        return this->__writeset[i].value->value;
+                        *val = this->__writeset[i].value->value;
+                        return true;
                 }
         }
         assert(false);
-        return NULL;
+        return false;
 }
 
-void* mv_action::read(uint64_t key, uint32_t table_id)
+bool mv_action::read(uint64_t key, uint32_t table_id, void **val)
 {
         //        struct big_key bkey;
         //        struct key_index index;
@@ -390,7 +391,8 @@ void* mv_action::read(uint64_t key, uint32_t table_id)
         } else {
                 ret = (void*)record->value;
         }
-        return ret;
+        *val = ret;
+        return true;
 
         /*
         bkey.key = key;
@@ -418,13 +420,14 @@ void* mv_action::read(uint64_t key, uint32_t table_id)
         */
 }
 
-void* mv_action::insert_ref(__attribute__((unused)) uint64_t key, 
-                            __attribute__((unused)) uint32_t table_id)
+bool mv_action::insert_ref(__attribute__((unused)) uint64_t key, 
+                           __attribute__((unused)) uint32_t table_id, 
+                           __attribute__((unused)) void **val)
 {
         assert(false);
 }
 
-void mv_action::remove(__attribute__((unused)) uint64_t key, 
+bool mv_action::remove(__attribute__((unused)) uint64_t key, 
                        __attribute__((unused)) uint32_t table_id)
 {
         assert(false);

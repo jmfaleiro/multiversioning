@@ -314,13 +314,13 @@ class new_order : public txn {
         std::vector<uint64_t> 	_supplier_warehouse_ids;        
         bool 			_all_local;
 
-        void process_item(uint32_t item_number, uint32_t order_id, float w_tax,
+        bool process_item(uint32_t item_number, uint32_t order_id, float w_tax,
                           float d_tax, float c_disc);
-        void insert_new_order(uint32_t order_id);
-        float get_customer_discount();
-        void update_district(uint32_t *order_id, float *district_tax);
-        void insert_oorder(uint32_t order_id, bool all_local);
-        float read_warehouse(uint32_t warehouse_id);
+        bool insert_new_order(uint32_t order_id);
+        bool get_customer_discount(float *ret);
+        bool update_district(uint32_t *order_id, float *district_tax);
+        bool insert_oorder(uint32_t order_id, bool all_local);
+        bool read_warehouse(uint32_t warehouse_id, float *ret);
 
  public:
 
@@ -349,10 +349,10 @@ class payment : public txn {
         float 			_h_amount;
         uint32_t 		_time;        
 
-        void insert_history(char *warehouse_name, char *district_name);
-        char* warehouse_update();
-        char* district_update();
-        void customer_update();
+        bool insert_history(char *warehouse_name, char *district_name);
+        bool warehouse_update(char **ret);
+        bool district_update(char **ret);
+        bool customer_update();
 
  public:
         payment(uint32_t warehouse_id, uint32_t district_id, 
@@ -388,11 +388,11 @@ class setup_tpcc : public txn {
         int gen_rand_range(int min, int max);
         void gen_rand_string(int min, int max, char *buf);
 
-        void gen_warehouse(uint32_t w_id);
-        void gen_district(uint32_t w_id, uint32_t d_id);
-        void gen_customer(uint32_t w_id, uint32_t d_id, uint32_t c_id);
-        void gen_stock(uint32_t w_id, uint32_t s_id);
-        void gen_item(uint32_t i_id);
+        bool gen_warehouse(uint32_t w_id);
+        bool gen_district(uint32_t w_id, uint32_t d_id);
+        bool gen_customer(uint32_t w_id, uint32_t d_id, uint32_t c_id);
+        bool gen_stock(uint32_t w_id, uint32_t s_id);
+        bool gen_item(uint32_t i_id);
 
         
  public:

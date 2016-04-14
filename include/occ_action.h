@@ -115,8 +115,9 @@ class OCCAction : public translator {
         std::vector<occ_composite_key> writeset;
         std::vector<occ_composite_key> shadow_writeset;
 
-        virtual uint64_t stable_copy(uint64_t key, uint32_t table_id,
-                                     void **rec_ptr, void *record_copy); 
+        virtual bool stable_copy(uint64_t key, uint32_t table_id, void **rec_ptr,
+                                 void *record_copy, 
+                                 uint64_t *tid); 
         virtual void validate_single(occ_composite_key &comp_key);
         virtual void cleanup_single(occ_composite_key &comp_key);
         virtual void install_single_write(occ_composite_key &comp_key);
@@ -128,10 +129,10 @@ class OCCAction : public translator {
         virtual void create_inserts(uint32_t n_inserts);
         OCCAction *link;
         
-        virtual void *write_ref(uint64_t key, uint32_t table);
-        virtual void *read(uint64_t key, uint32_t table);
-        virtual void* insert_ref(uint64_t key, uint32_t table);
-        virtual void remove(uint64_t key, uint32_t table);
+        virtual bool write_ref(uint64_t key, uint32_t table, void **val);
+        virtual bool read(uint64_t key, uint32_t table, void **val);
+        virtual bool insert_ref(uint64_t key, uint32_t table, void **val);
+        virtual bool remove(uint64_t key, uint32_t table);
         virtual int rand();
         virtual uint64_t gen_guid();
 
