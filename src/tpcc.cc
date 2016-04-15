@@ -577,14 +577,13 @@ void new_order::process_item(uint32_t item_number, uint32_t order_id,
         order_line->ol_supply_w_id = _supplier_warehouse_ids[item_number];
         order_line->ol_quantity = _order_quantities[item_number];
         order_line->ol_amount = _order_quantities[item_number]*item->i_price;
-        memcpy(order_line->ol_dist_info, dist_info, sizeof(char)*25);
+        strcpy(order_line->ol_dist_info, dist_info);
 }
 
 bool new_order::Run()
 {
         float district_tax, warehouse_tax, customer_discount;
         uint32_t order_id, i, num_items;
-
 
         warehouse_tax = read_warehouse(_warehouse_id);
         update_district(&order_id, &district_tax);

@@ -524,7 +524,7 @@ void OCCAction::install_single_write(occ_composite_key &comp_key)
         record_size = tbl->RecordSize();
         
         if (READ_COMMITTED) {
-                value = this->tables[comp_key.tableId]->GetAlways(comp_key.key);
+                value = tbl->GetAlways(comp_key.key);
                 acquire_single((volatile uint64_t*)value);
         } else {
                 value = comp_key.record_ptr;
