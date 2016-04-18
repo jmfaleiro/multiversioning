@@ -15,24 +15,25 @@ void insert_buf_mgr::alloc_entries(uint32_t table_id, size_t record_sz,
                table_id == HISTORY_TABLE);
         
         uint64_t i, num_records;
+        size_t entry_sz;
         char *data;
-        conc_table_record *header_data;
+        TableRecord *header;
 
         num_records = alloc_sz / record_sz;
-        
+        entry_sz = sizeof(TableRecord) + record_sz;
+
         /* Allocate data */
-        header_data = (conc_table_record*)zmalloc(sizeof(conc_table_record)*num_records);
-        data = (char*)zmalloc(record_sz*num_records);
+        data = (char*)zmalloc(entry_sz*num_records);
 
         /* Setup */
         for (i = 0; i < num_records; ++i) {                
-                header_data[i].value = &data[i*record_sz];
-                header_data[i].next = &header_data[i+1];
+                header = (TableRecord*)(&data[entry_sz*i]);
+                header->next = (TableRecord*)&data[entry_sz*(i+1)];
         }
+        header->next = NULL;
         
         /* Add to allocation queue */
-        header_data[i-1].next = _conc_allocs[table_id];
-        _conc_allocs[table_id] = header_data;
+        _conc_allocs[table_id] = (TableRecord*)data;
 }
 
 void insert_buf_mgr::alloc_single(uint32_t table_id)
@@ -53,14 +54,14 @@ insert_buf_mgr::insert_buf_mgr(int cpu, uint32_t ntables, size_t *record_sz)
         memcpy(_record_sizes, record_sz, sizeof(size_t)*ntables);
         for (uint32_t i = 0; i < ntables; ++i)
                 _record_sizes[i] += 8;
-        _conc_allocs = (conc_table_record**)alloc_mem(sizeof(conc_table_record*)*ntables, cpu);
+        _conc_allocs = (TableRecord**)alloc_mem(sizeof(TableRecord*)*ntables, cpu);
         assert(_conc_allocs != NULL);
-        memset(_conc_allocs, 0x0, sizeof(conc_table_record*)*ntables);
+        memset(_conc_allocs, 0x0, sizeof(TableRecord*)*ntables);
 }
 
-conc_table_record* insert_buf_mgr::get_insert_record(uint32_t table_id) 
+TableRecord* insert_buf_mgr::get_insert_record(uint32_t table_id) 
 {
-        conc_table_record *ret;
+        TableRecord *ret;
 
         if (_conc_allocs[table_id] == NULL) 
                 alloc_single(table_id);
@@ -72,7 +73,7 @@ conc_table_record* insert_buf_mgr::get_insert_record(uint32_t table_id)
         return ret;        
 }
 
-void insert_buf_mgr::return_insert_record(conc_table_record *record, 
+void insert_buf_mgr::return_insert_record(TableRecord *record, 
                                           uint32_t table_id)
 {
         record->next = _conc_allocs[table_id];

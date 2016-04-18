@@ -137,7 +137,7 @@ void* locking_action::read(uint64_t key, uint32_t table_id)
 
 void* locking_action::insert_ref(uint64_t key, uint32_t table_id)
 {
-        conc_table_record *record;
+        TableRecord *record;
         concurrent_table *tbl;
         bool success;        
 

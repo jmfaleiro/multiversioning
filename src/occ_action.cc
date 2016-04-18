@@ -252,7 +252,7 @@ void OCCAction::create_inserts(uint32_t n_inserts)
 void* OCCAction::insert_ref(uint64_t key, uint32_t table_id)
 {
 
-        conc_table_record *record;
+        TableRecord *record;
         concurrent_table *tbl;
         bool success;        
 
@@ -307,12 +307,12 @@ void OCCAction::undo_inserts()
 {
 
         uint32_t i, table_id;
-        conc_table_record *record;
+        TableRecord *record;
         concurrent_table *tbl;
         mcs_struct *lock_struct;
 
         for (i = 0; i < insert_ptr; ++i) {
-                record = (conc_table_record*)inserts[i].record_ptr;
+                record = (TableRecord*)inserts[i].record_ptr;
                 table_id = inserts[i].tableId;                
                 tbl = tbl_mgr->get_conc_table(table_id);
                 assert(tbl != NULL);
@@ -551,11 +551,11 @@ void OCCAction::install_single_write(occ_composite_key &comp_key)
 void OCCAction::install_single_insert(occ_composite_key &comp_key)
 {
         assert(IS_LOCKED(this->tid) == false);
-        conc_table_record *rec;
+        TableRecord *rec;
         uint64_t old_tid;
         uint64_t* tid_ptr;
 
-        rec = (conc_table_record*)comp_key.record_ptr;
+        rec = (TableRecord*)comp_key.record_ptr;
         tid_ptr = (uint64_t*)RECORD_TID_PTR(rec->value);
         old_tid = *tid_ptr;
         assert(GET_TIMESTAMP(old_tid) == 0);

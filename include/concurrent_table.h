@@ -4,16 +4,18 @@
 #include <mcs.h>
 #include <table.h>
 
+/*
 struct conc_table_record {
         uint64_t key;
         uint64_t tid;
         void *value;
         struct conc_table_record *next;
 };
+*/
 
 struct concurrent_table_bckt {
         volatile mcs_struct __attribute__((__packed__, __aligned__(CACHE_LINE))) *_lock_tail;
-        conc_table_record 		*_records;
+        TableRecord 		*_records;
 }__attribute__((__packed__, __aligned__(CACHE_LINE)));
 
 class concurrent_table {
@@ -22,7 +24,7 @@ class concurrent_table {
         TableConfig 		conf;
         uint64_t 		_salt;
         uint64_t 		_tbl_sz;
-        concurrent_table_bckt 	*_buckets;
+        concurrent_table_bckt 		*_buckets;
 
         concurrent_table_bckt* get_bucket(uint64_t key)
         {
@@ -44,7 +46,7 @@ class concurrent_table {
         virtual void* LockedGet(uint64_t key, mcs_struct *lock_struct) 
         {
                 concurrent_table_bckt *bucket;
-                conc_table_record *iter;
+                TableRecord *iter;
                 void *ret;
                 
                 ret = NULL;
@@ -67,7 +69,7 @@ class concurrent_table {
         virtual void* Get(uint64_t key, mcs_struct *lock_struct) 
         {
                 concurrent_table_bckt *bucket;
-                conc_table_record *iter;
+                TableRecord *iter;
                 void *ret;
                 
                 ret = NULL;
@@ -85,7 +87,7 @@ class concurrent_table {
                 return ret;
         }
 
-        virtual bool Put(conc_table_record *value, mcs_struct *lock_struct)
+        virtual bool Put(TableRecord *value, mcs_struct *lock_struct)
         {
                 //                bool success;
                 concurrent_table_bckt *bucket;
@@ -117,10 +119,10 @@ class concurrent_table {
                 return true;
         }
         
-        virtual void Remove(conc_table_record *rec, mcs_struct *lock_struct) 
+        virtual void Remove(TableRecord *rec, mcs_struct *lock_struct) 
         {
                 concurrent_table_bckt *bucket;
-                conc_table_record *iter, **prev;
+                TableRecord *iter, **prev;
                 uint64_t key;
                 assert(rec != NULL);
 

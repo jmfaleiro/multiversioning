@@ -3,6 +3,7 @@
 
 #include <table.h>
 #include <concurrent_table.h>
+#include <insert_table.h>
 
 class table_mgr {
  private:
@@ -13,7 +14,6 @@ class table_mgr {
  public:
         table_mgr(Table **tables, concurrent_table **conc_tables, 
                   uint32_t ntables);
-
         concurrent_table* get_conc_table(uint32_t table_id);
         Table* get_table(uint32_t table_id);
         void set_init();

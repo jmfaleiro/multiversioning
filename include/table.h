@@ -118,6 +118,14 @@ class Table {
     memcpy(rec->value, value, conf.valueSz);
     buckets[index] = rec;
   }
+
+  virtual void Insert(uint64_t key, TableRecord *rec)
+  {
+          uint64_t index; 
+          index = Hash128to64(std::make_pair(conf.tableId, key)) % conf.numBuckets;
+          rec->next = buckets[index];
+          buckets[index] = rec;
+  }
   
   virtual void* Get(uint64_t key) {
           uint64_t index = 

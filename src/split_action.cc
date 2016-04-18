@@ -66,10 +66,9 @@ rendezvous_point** split_action::get_rvps()
         return _rvps;
 }
 
-void* split_action::insert_ref(__attribute__((unused)) uint64_t key, 
-                               __attribute__((unused)) uint32_t table_id)
+void* split_action::insert_ref(uint64_t key, uint32_t table_id)
 {
-        assert(false);
+        
 }
 
 void split_action::remove(__attribute__((unused)) uint64_t key, 
