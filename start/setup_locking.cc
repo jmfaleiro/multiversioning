@@ -8,9 +8,13 @@
 #include <config.h>
 #include <fstream>
 #include <sys/time.h>
+#include <tpcc.h>
+#include <table_mgr.h>
 
 #define EXTRA_BATCHES 1
 
+
+extern RecordBuffersConfig setup_buffer_config(int cpu, workload_config w_conf);
 extern uint32_t GLOBAL_RECORD_SIZE;
 uint32_t record_sizes[2];
 
@@ -55,12 +59,12 @@ static locking_action* txn_to_action(txn *t)
         return ret;
 }
 
-static locking_action* generate_action(workload_config w_conf)
+static locking_action* generate_action(workload_config w_conf, uint32_t thread)
 {
         locking_action *ret;
         txn *t;
 
-        t = generate_transaction(w_conf);
+        t = generate_transaction(w_conf, thread);
         assert(t != NULL);
         ret = txn_to_action(t);
         assert(ret != NULL);
@@ -68,7 +72,8 @@ static locking_action* generate_action(workload_config w_conf)
 }
 
 static locking_action_batch create_single_batch(uint32_t num_txns,
-                                                workload_config w_conf)
+                                                workload_config w_conf, 
+                                                uint32_t thread)
 {
         locking_action_batch ret;
         uint32_t i;
@@ -76,7 +81,7 @@ static locking_action_batch create_single_batch(uint32_t num_txns,
         ret.batchSize = num_txns;
         ret.batch = (locking_action**)malloc(sizeof(locking_action*)*num_txns);
         for (i = 0; i < num_txns; ++i)
-                ret.batch[i] = generate_action(w_conf);        
+                ret.batch[i] = generate_action(w_conf, thread);        
         return ret;
 }
 
@@ -93,9 +98,9 @@ static locking_action_batch* setup_single_round(uint32_t num_txns,
         remainder = num_txns % num_threads;
         for (i = 0; i < num_threads; ++i) {
                 if (i < remainder)
-                        ret[i] = create_single_batch(txns_per_thread+1, w_conf);
+                        ret[i] = create_single_batch(txns_per_thread+1, w_conf, i);
                 else
-                        ret[i] = create_single_batch(txns_per_thread, w_conf);
+                        ret[i] = create_single_batch(txns_per_thread, w_conf, i);
         }
         return ret;
 }
@@ -124,8 +129,9 @@ static locking_worker** setup_workers(locking_queue **input,
                                       LockManager *mgr,
                                       uint32_t num_threads,
                                       uint32_t num_pending,
-                                      Table **tables,
-                                      uint32_t num_tables)
+                                      table_mgr *tables,
+                                      __attribute__((unused)) uint32_t num_tables,
+                                      workload_config w_conf)
 {
         assert(mgr != NULL && tables != NULL);
         locking_worker **ret;
@@ -144,13 +150,7 @@ static locking_worker** setup_workers(locking_queue **input,
                         num_pending,
                         tables,                        
                 };
-                struct RecordBuffersConfig rb_conf = {
-                        num_tables,
-                        record_sizes,
-                        5000,
-                        i,
-                };
-
+                struct RecordBuffersConfig rb_conf = setup_buffer_config(i, w_conf);
                 ret[i] = new(i) locking_worker(conf, rb_conf);
         }
         return ret;
@@ -219,8 +219,7 @@ static struct locking_result do_measurement(locking_config conf,
                                             locking_action_batch **batches,
                                             uint32_t num_batches,
                                             locking_action_batch setup,
-                                            Table **tables,
-                                            uint32_t num_tables)
+                                            table_mgr *tbl_mgr)
 {
         uint32_t i, j;
         struct locking_result result;
@@ -237,8 +236,10 @@ static struct locking_result do_measurement(locking_config conf,
         /* Setup the database. */
         inputs[0]->EnqueueBlocking(setup);
         outputs[0]->DequeueBlocking();
-        for (i = 0; i < num_tables; ++i)
-                tables[i]->SetInit();
+        tbl_mgr->set_init();
+        
+        //        for (i = 0; i < num_tables; ++i)
+        //                tables[i]->SetInit();
 
         std::cerr << "Done setting up tables!\n";
         
@@ -275,19 +276,21 @@ void locking_experiment(locking_config conf, workload_config w_conf)
 {
         locking_queue **inputs, **outputs;
         locking_action_batch **experiment_txns, setup_txns;
-        Table **tables;
-        uint32_t num_records[2], num_tables;
+        table_mgr *tables;
+        uint32_t num_tables, *num_records;
         struct LockManagerConfig mgr_config;
         struct locking_result result;
         LockManager *lock_manager;
         locking_worker **workers;
-        
+
+        tpcc_config::num_warehouses = w_conf.num_warehouses;
         inputs = setup_queues<locking_action_batch>(conf.num_threads, 1024);
         outputs = setup_queues<locking_action_batch>(conf.num_threads, 1024);
         setup_txns = setup_db(w_conf);
         experiment_txns = setup_input(conf, w_conf, EXTRA_BATCHES);
         
         if (w_conf.experiment == SMALL_BANK) {
+                num_records = (uint32_t*)zmalloc(sizeof(uint32_t)*2);
                 num_records[0] = w_conf.num_records;
                 num_records[1] = w_conf.num_records;
                 num_tables = 2;
@@ -296,9 +299,26 @@ void locking_experiment(locking_config conf, workload_config w_conf)
                    w_conf.experiment == YCSB_2RMW8R ||
                    w_conf.experiment == YCSB_SINGLE_HOT ||
                    w_conf.experiment == YCSB_RW) {
+                num_records = (uint32_t*)zmalloc(sizeof(uint32_t));
                 num_records[0] = w_conf.num_records;
                 num_tables = 1;
+        } else if (w_conf.experiment == TPCC_SUBSET) {
+                num_records = (uint32_t*)zmalloc(sizeof(uint32_t)*11);
+                num_tables = 11;
+                
+                num_records[WAREHOUSE_TABLE] = w_conf.num_warehouses;
+                num_records[DISTRICT_TABLE] = w_conf.num_warehouses*NUM_DISTRICTS;
+                num_records[CUSTOMER_TABLE] = w_conf.num_warehouses*NUM_DISTRICTS*NUM_CUSTOMERS;
+                num_records[ITEM_TABLE] = NUM_ITEMS;
+                num_records[STOCK_TABLE] = w_conf.num_warehouses*NUM_ITEMS;
+                num_records[HISTORY_TABLE] = 0;
+                num_records[NEW_ORDER_TABLE] = 0;
+                num_records[OORDER_TABLE] = 0;
+                num_records[ORDER_LINE_TABLE] = 0;
+                num_records[DELIVERY_TABLE] = 0;
+                num_records[CUSTOMER_ORDER_INDEX] = 0;
         } else {
+                num_records = NULL;
                 assert(false);
         }
                    
@@ -309,12 +329,11 @@ void locking_experiment(locking_config conf, workload_config w_conf)
                 0,
                 (int)conf.num_threads - 1,
         };
-        tables = setup_hash_tables(num_tables, num_records, false);
+        tables = setup_hash_tables(w_conf, false);
         lock_manager = new LockManager(mgr_config);        
         workers = setup_workers(inputs, outputs, lock_manager,
-                                conf.num_threads, 50, tables, num_tables);
+                                conf.num_threads, 50, tables, num_tables, w_conf);
         result = do_measurement(conf, workers, inputs, outputs, experiment_txns,
-                                1+EXTRA_BATCHES, setup_txns, tables,
-                                num_tables);
+                                1+EXTRA_BATCHES, setup_txns, tables);
         write_locking_output(conf, result, w_conf);
 }

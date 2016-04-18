@@ -56,17 +56,18 @@ OCCAction* setup_occ_action(txn *txn)
 }
 
 OCCAction** create_single_occ_action_batch(uint32_t batch_size,
-                                           workload_config w_config)
+                                           workload_config w_config, 
+                                           uint32_t thread)
 {
         uint32_t i;
         OCCAction **ret;
         txn *txn;
         
         ret = (OCCAction**)alloc_mem(batch_size*sizeof(OCCAction*), 71);
-        assert(ret != NULL);
+        //        assert(ret != NULL);
         memset(ret, 0x0, batch_size*sizeof(OCCAction*));
         for (i = 0; i < batch_size; ++i) {
-                txn = generate_transaction(w_config);
+                txn = generate_transaction(w_config, thread);
                 ret[i] = setup_occ_action(txn);
                 ret[i]->create_inserts(20);
         }
@@ -108,7 +109,8 @@ OCCActionBatch* setup_occ_single_input(OCCConfig config, workload_config w_conf)
                 if (i == config.numThreads-1)
                         txns_per_thread += remainder;
                 actions = create_single_occ_action_batch(txns_per_thread,
-                                                         w_conf);
+                                                         w_conf,
+                                                         i);
                 ret[i] = {
                         txns_per_thread,
                         actions,
@@ -117,31 +119,162 @@ OCCActionBatch* setup_occ_single_input(OCCConfig config, workload_config w_conf)
         return ret;
 }
 
-Table** setup_occ_lock_tables(int start_cpu, int end_cpu, uint32_t table_sz)
+Table** setup_occ_lock_tables(OCCConfig o_conf, workload_config w_conf)
 {
         assert(READ_COMMITTED);
         char val[CACHE_LINE];
-        uint32_t i;
-        TableConfig conf;
-        Table **ret;
+        uint32_t i, j, k;
+        int start_cpu, end_cpu;
+        Table **ret, *tbl;
+        uint64_t num_warehouses, num_districts, num_customers, num_stocks;
+        
+        start_cpu = 1;
+        end_cpu = o_conf.numThreads - 1;
+        memset(val, 0x0, CACHE_LINE);
 
         /* First create a table */
-        conf = {
-                0,
-                2*table_sz,
-                start_cpu,
-                end_cpu,
-                2*table_sz,
-                CACHE_LINE,
-                CACHE_LINE,
-        };
-        ret = (Table**)zmalloc(sizeof(Table*));
-        ret[0] = new (0) Table(conf);
+        if (is_ycsb_exp(w_conf)) {
+                TableConfig ycsb_conf = {
+                        0,
+                        2*w_conf.num_records,
+                        start_cpu,
+                        end_cpu,
+                        2*w_conf.num_records,
+                        CACHE_LINE,
+                        CACHE_LINE,
+                };
+                ret = (Table**)zmalloc(sizeof(Table*));
+                ret[0] = new (0) Table(ycsb_conf);
         
-        /* Initialize the table */
-        memset(val, 0x0, CACHE_LINE);
-        for (i = 0; i < table_sz; ++i) 
-                ret[0]->Put(i, val);
+                /* Initialize the table */
+                memset(val, 0x0, CACHE_LINE);
+                for (i = 0; i < w_conf.num_records; ++i) 
+                        ret[0]->Put(i, val);
+
+        } else if (w_conf.experiment == SMALL_BANK) {
+                TableConfig sb_conf = {
+                        0,
+                        2*w_conf.num_records,
+                        start_cpu,
+                        end_cpu,
+                        2*w_conf.num_records,
+                        CACHE_LINE,
+                        CACHE_LINE,
+                };
+                ret = (Table**)zmalloc(2*sizeof(Table*));
+                ret[0] = new (0) Table(sb_conf);
+                ret[1] = new (0) Table(sb_conf);
+        
+                /* Initialize the table */
+
+                for (i = 0; i < w_conf.num_records; ++i) {
+                        ret[0]->Put(i, val);
+                        ret[1]->Put(i, val);
+                }
+
+        } else if (w_conf.experiment == TPCC_SUBSET) {
+                num_warehouses = w_conf.num_warehouses;
+                num_districts = num_warehouses*NUM_DISTRICTS;
+                num_customers = num_districts*NUM_CUSTOMERS;
+                num_stocks = NUM_ITEMS*w_conf.num_warehouses;
+
+                ret = (Table**)zmalloc(sizeof(Table*)*11);
+                
+                /* Warehouse */
+                TableConfig wh_conf = {
+                        0,
+                        2*num_warehouses,
+                        start_cpu,
+                        end_cpu,
+                        2*num_warehouses,
+                        CACHE_LINE,
+                        CACHE_LINE,
+                };
+                
+                tbl = new(0) Table(wh_conf);
+                ret[WAREHOUSE_TABLE] = tbl;
+                for (i = 0; i < num_warehouses; ++i) 
+                        tbl->Put(i, val);
+
+                /* District */
+                TableConfig d_conf = {
+                        0,
+                        2*num_districts,
+                        start_cpu,
+                        end_cpu,
+                        2*num_districts,
+                        CACHE_LINE,
+                        CACHE_LINE,
+                };
+                
+                tbl = new(0) Table(d_conf);
+                for (i = 0; i < num_warehouses; ++i) {
+                        for (j = 0; j < NUM_DISTRICTS; ++j) {
+                                tbl->Put(tpcc_util::create_district_key(i, j),
+                                         val);
+                        }
+                }
+                ret[DISTRICT_TABLE] = tbl;
+                
+                /* Customer */
+                TableConfig c_conf = {
+                        0,
+                        2*num_customers,
+                        start_cpu,
+                        end_cpu,
+                        2*num_customers,
+                        CACHE_LINE,
+                        CACHE_LINE,
+                };
+                
+                tbl = new(0) Table(c_conf);
+                for (i = 0; i < num_warehouses; ++i) {
+                        for (j = 0; j < NUM_DISTRICTS; ++j) {
+                                for (k = 0; k < NUM_CUSTOMERS; ++k) {
+                                        tbl->Put(tpcc_util::create_customer_key(i, j, k), 
+                                                 val);
+                                }
+                        }
+                }
+                ret[CUSTOMER_TABLE] = tbl;
+
+                /* Item */
+                TableConfig i_conf = {
+                        0,
+                        2*NUM_ITEMS,
+                        start_cpu,
+                        end_cpu,
+                        2*NUM_ITEMS,
+                        CACHE_LINE,
+                        CACHE_LINE,
+                };
+                tbl = new(0) Table(i_conf);
+                for (i = 0; i < NUM_ITEMS; ++i) {
+                        tbl->Put(i, val);
+                }
+                ret[ITEM_TABLE] = tbl;
+
+                /* Stock */
+                TableConfig s_conf = {
+                        0,
+                        2*num_stocks,
+                        start_cpu,
+                        end_cpu,
+                        2*num_stocks,
+                        CACHE_LINE,
+                        CACHE_LINE,
+                };
+                tbl = new(0) Table(s_conf);
+                for (i = 0; i < num_warehouses; ++i) {
+                        for (j = 0; j < NUM_ITEMS; ++j) {
+                                tbl->Put(tpcc_util::create_stock_key(i, j),
+                                         val);
+                        }
+                }
+                ret[STOCK_TABLE] = tbl;
+        } else {
+                assert(false);
+        }
         return ret;
 }
 
@@ -177,8 +310,8 @@ OCCWorker** setup_occ_workers(SimpleQueue<OCCActionBatch> **inputQueue,
                               SimpleQueue<OCCActionBatch> **outputQueue,
                               table_mgr *tbls, int numThreads,
                               uint64_t epoch_threshold, uint32_t numTables, 
-                              uint32_t num_records, 
-                              workload_config w_conf)
+                              workload_config w_conf,
+                              OCCConfig conf)
 {
         OCCWorker **workers;
         volatile uint32_t *epoch_ptr;
@@ -201,7 +334,7 @@ OCCWorker** setup_occ_workers(SimpleQueue<OCCActionBatch> **inputQueue,
          * TPC-C. 
          */
         if (READ_COMMITTED)
-                lock_tables = setup_occ_lock_tables(0, numThreads, num_records);
+                lock_tables = setup_occ_lock_tables(conf, w_conf);
         else
                 lock_tables = NULL;
         //        lock_tables_copy = NULL;
@@ -340,7 +473,7 @@ table_mgr* setup_tpcc_tables(workload_config w_conf, bool occ)
                 switch (i) {
                 case WAREHOUSE_TABLE:
                         rw_tbls[i] = setup_single_table((uint64_t)i,
-                                                        w_conf.num_warehouses,
+                                                        2*w_conf.num_warehouses,
                                                         0,
                                                         71,
                                                         2*w_conf.num_warehouses,
@@ -348,18 +481,18 @@ table_mgr* setup_tpcc_tables(workload_config w_conf, bool occ)
                         break;
                 case DISTRICT_TABLE:
                         rw_tbls[i] = setup_single_table((uint64_t)i,
-                                                        10*w_conf.num_warehouses,
+                                                        2*NUM_DISTRICTS*w_conf.num_warehouses,
                                                         0,
                                                         71,
-                                                        20*w_conf.num_warehouses, 
+                                                        2*NUM_DISTRICTS*w_conf.num_warehouses, 
                                                         occ? sizeof(district_record)+8:sizeof(district_record));
                         break;
                 case CUSTOMER_TABLE:
                          rw_tbls[i] = setup_single_table((uint64_t)i,
-                                                         3000*10*w_conf.num_warehouses,
+                                                         2*NUM_DISTRICTS*NUM_CUSTOMERS*w_conf.num_warehouses,
                                                          0,
                                                          71,
-                                                         6000*10*w_conf.num_warehouses,
+                                                         2*NUM_DISTRICTS*NUM_CUSTOMERS*w_conf.num_warehouses,
                                                          occ? sizeof(customer_record)+8:sizeof(customer_record));
                         break;
                 case NEW_ORDER_TABLE:
@@ -373,18 +506,18 @@ table_mgr* setup_tpcc_tables(workload_config w_conf, bool occ)
                         break;
                 case STOCK_TABLE:
                          rw_tbls[i] = setup_single_table((uint64_t)i,
-                                                         100000*w_conf.num_warehouses,
+                                                         2*NUM_ITEMS*w_conf.num_warehouses,
                                                          0,
                                                          71,
-                                                         200000*w_conf.num_warehouses,
+                                                         2*NUM_ITEMS*w_conf.num_warehouses,
                                                          occ? sizeof(stock_record)+8:sizeof(stock_record));
                         break;
                 case ITEM_TABLE: 
                          rw_tbls[i] = setup_single_table((uint64_t)i,
-                                                         100000,
+                                                         2*NUM_ITEMS,
                                                          0,
                                                          71,
-                                                         200000,
+                                                         2*NUM_ITEMS,
                                                          occ? sizeof(item_record)+8:sizeof(item_record));
                         break;
                 case HISTORY_TABLE:
@@ -392,7 +525,7 @@ table_mgr* setup_tpcc_tables(workload_config w_conf, bool occ)
                         break;
                 case DELIVERY_TABLE:
                          rw_tbls[i] = setup_single_table((uint64_t)i,
-                                                         10*w_conf.num_warehouses,
+                                                         20*w_conf.num_warehouses,
                                                          0,
                                                          71,
                                                          20*w_conf.num_warehouses,
@@ -432,6 +565,7 @@ table_mgr* setup_hash_tables(workload_config w_conf, bool occ)
         return NULL;
 }
 
+/*
 Table** setup_hash_tables(uint32_t num_tables, uint32_t *num_records, bool occ)
 {
         Table **tables;
@@ -454,7 +588,7 @@ Table** setup_hash_tables(uint32_t num_tables, uint32_t *num_records, bool occ)
         }
         return tables;
 }
-
+*/
 
 
 static OCCActionBatch setup_db(workload_config conf)
@@ -531,10 +665,13 @@ uint64_t wait_to_completion(__attribute__((unused)) SimpleQueue<OCCActionBatch> 
         //        OCCActionBatch temp;
         //        for (i = 1; i < num_workers; ++i) 
         //                output_queues[i]->DequeueBlocking();
+        
+        num_completed = 0;
+        sleep(30);
+        for (i = 1; i < num_workers; ++i) 
+                num_completed += workers[i]->NumCompleted();
+        std::cerr << num_completed << "\n";
 
-        sleep(60);
-                for (i = 1; i < num_workers; ++i) 
-                        num_completed += workers[i]->NumCompleted();
         return num_completed;
 }
 
@@ -562,6 +699,35 @@ void dry_run(SimpleQueue<OCCActionBatch> **input_queues,
                 output_queues[i]->DequeueBlocking();
 }
 
+void check_tables(OCCConfig config, table_mgr *tbls)
+{
+        uint32_t i, j, num_warehouses;
+        warehouse_record *wh;
+        district_record *d;
+        void *record;
+        uint64_t key;
+
+        if (config.experiment != TPCC_SUBSET)
+                return;
+        
+        num_warehouses = tpcc_config::num_warehouses;
+        for (i = 0; i < num_warehouses; ++i) {
+                record = tbls->get_table(WAREHOUSE_TABLE)->Get((uint64_t)i);
+                wh = (warehouse_record*)&(((uint64_t*)record)[1]);
+                assert(wh->w_id == i);
+        }
+        
+        for (i = 0; i < num_warehouses; ++i) {
+                for (j = 0; j < NUM_DISTRICTS; ++j) {
+                        key = tpcc_util::create_district_key(i, j);
+                        record = tbls->get_table(DISTRICT_TABLE)->Get(key);
+                        d = (district_record*)&(((uint64_t*)record)[1]);
+                        assert(d->d_w_id == i);
+                        assert(d->d_id == j);
+                }
+        }
+}
+
 struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
                                  SimpleQueue<OCCActionBatch> **outputQueues,
                                  OCCWorker **workers,
@@ -583,8 +749,9 @@ struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
         populate_tables(inputQueues[1], outputQueues[1], setup_txns, tbls);
         std::cerr << "Done populating tables\n";
 
-        dry_run(inputQueues, outputQueues, inputBatches[0], config.numThreads);
 
+        dry_run(inputQueues, outputQueues, inputBatches[0], config.numThreads);
+        check_tables(config, tbls);
         std::cerr << "Done dry run\n";
         barrier();
         clock_gettime(CLOCK_REALTIME, &start_time);
@@ -648,8 +815,8 @@ void occ_experiment(OCCConfig occ_config, workload_config w_conf)
                                     occ_config.numThreads, 
                                     occ_config.occ_epoch,
                                     2, 
-                                    0, /* XXX THIS MUST BE CHANGED FOR READ COMMITTED */
-                                    w_conf);
+                                    w_conf,
+                                    occ_config);
         inputs = setup_occ_input(occ_config, w_conf, 1);
         pin_memory();
         result = run_occ_workers(input_queues, output_queues, workers,

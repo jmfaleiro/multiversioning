@@ -1,5 +1,8 @@
 #include <eager_worker.h>
 
+extern size_t *tpcc_record_sizes;
+
+
 locking_worker::locking_worker(locking_worker_config config,
                                RecordBuffersConfig rb_conf) 
     : Runnable(config.cpu)
@@ -11,6 +14,8 @@ locking_worker::locking_worker(locking_worker_config config,
         m_num_done = 0;
         this->bufs = new(config.cpu) RecordBuffers(rb_conf);
         this->mgr = new(config.cpu) mcs_mgr(1000000, config.cpu);
+        this->insert_mgr = new(config.cpu) insert_buf_mgr(config.cpu, 11, 
+                                                          tpcc_record_sizes);
 }
 
 void locking_worker::Init()
@@ -93,6 +98,7 @@ void locking_worker::give_locks(locking_action *txn)
         mcs_struct *lck;
 
         lck = mgr->get_struct();
+        txn->lck = lck;
         num_writes = txn->writeset.size();
         for (i = 0; i < num_writes; ++i) 
                 txn->writeset[i].lock_entry = lck;
@@ -117,7 +123,8 @@ void locking_worker::take_locks(locking_action *txn)
 
 void locking_worker::TryExec(locking_action *txn)
 {
-        txn->tables = this->config.tables;
+        txn->tables = this->config.tbl_mgr;
+        txn->insert_mgr = this->insert_mgr;
         if (config.mgr->Lock(txn)) {
                 assert(txn->num_dependencies == 0);
                 assert(txn->bufs == NULL);

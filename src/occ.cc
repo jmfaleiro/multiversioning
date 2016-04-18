@@ -110,7 +110,14 @@ void OCCWorker::TxnRunner()
                         config.outputQueue->EnqueueBlocking(output);
                 } else {
                         uint32_t batch_sz = input.batchSize;
+                        //                        uint64_t blah_lo = NumCompleted();
                         for (i = 0; ; ++i) {
+                                //                                uint64_t blah_hi = NumCompleted();
+                                //                                if (blah_hi - blah_lo > 10000) {
+                                //                                        std::cout << "Thread: " << config.cpu << " Txns: " << blah_hi - blah_lo << "\n";
+                                //                                        blah_lo = blah_hi;
+                                //                                }
+                                
                                 while (num_pending >= 50)
                                         num_pending -= exec_pending(&pending_list);
                                 if (!RunSingle(input.batch[i % batch_sz])) {
@@ -161,6 +168,7 @@ bool OCCWorker::RunSingle(OCCAction *action)
         action->worker = this;
         action->tbl_mgr = config.tbl_mgr;
         action->insert_mgr = insert_mgr;
+        action->lck = mgr->get_struct();
 
         try {
                 action->run();
@@ -185,5 +193,6 @@ bool OCCWorker::RunSingle(OCCAction *action)
                 action->cleanup();
                 validated = false;
         }        
+        mgr->return_struct(action->lck);        
         return validated;
 }

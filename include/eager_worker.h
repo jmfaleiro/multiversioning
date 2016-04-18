@@ -9,6 +9,8 @@
 #include <runnable.hh>
 #include <record_buffer.h>
 #include <mcs.h>
+#include <insert_buf_mgr.h>
+#include <table_mgr.h>
 
 struct locking_action_batch {
   uint32_t batchSize;
@@ -23,7 +25,7 @@ struct locking_worker_config {
   locking_queue *outputQueue;  
   int cpu;
   uint32_t maxPending;
-  Table **tables;
+  table_mgr *tbl_mgr;
 };
 
 class locking_worker : public Runnable {
@@ -33,6 +35,7 @@ private:
   locking_action *m_queue_tail;                  // Tail of queue of waiting txns
   int         m_num_elems;                    // Number of elements in the queue
   mcs_mgr *mgr;
+  insert_buf_mgr *insert_mgr;
   volatile uint32_t m_num_done;
 
   RecordBuffers *bufs;

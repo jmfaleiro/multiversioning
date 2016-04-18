@@ -87,16 +87,19 @@ class concurrent_table {
 
         virtual bool Put(conc_table_record *value, mcs_struct *lock_struct)
         {
-                bool success;
+                //                bool success;
                 concurrent_table_bckt *bucket;
-                conc_table_record *iter, **prev;
+                //                conc_table_record *iter, **prev;
 
                 bucket = get_bucket(value->key);
-                success = false;
+                //                success = false;
                 lock_struct->_tail_ptr = &bucket->_lock_tail;
                 mcs_mgr::lock(lock_struct);
                 
                 /* Search for a duplicate */
+                value->next = bucket->_records;
+                bucket->_records = value;
+                /*
                 prev = &bucket->_records;
                 iter = bucket->_records;
                 while (iter != NULL && iter->key > value->key) {
@@ -109,9 +112,9 @@ class concurrent_table {
                         value->next = iter;
                         *prev = value;
                 }
-
+                */
                 mcs_mgr::unlock(lock_struct);
-                return success;
+                return true;
         }
         
         virtual void Remove(conc_table_record *rec, mcs_struct *lock_struct) 
@@ -128,7 +131,7 @@ class concurrent_table {
                 
                 prev = &bucket->_records;
                 iter = bucket->_records;
-                while (iter != NULL && iter->key > rec->key) {
+                while (iter != NULL && iter != rec) {
                         prev = &iter->next;
                         iter = iter->next;
                 }

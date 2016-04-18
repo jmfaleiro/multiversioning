@@ -251,6 +251,21 @@ void OCCAction::create_inserts(uint32_t n_inserts)
 
 void* OCCAction::insert_ref(uint64_t key, uint32_t table_id)
 {
+
+        conc_table_record *record;
+        concurrent_table *tbl;
+        bool success;        
+
+        record = insert_mgr->get_insert_record(table_id);
+        record->key = key;
+        record->next = NULL;
+        tbl = tbl_mgr->get_conc_table(table_id);
+        assert(tbl != NULL);
+        success = tbl->Put(record, lck);
+        assert(success == true);
+        return record->value;
+        
+        /*
         assert(insert_ptr < inserts.size());
         void *value;
         conc_table_record *record;
@@ -267,12 +282,11 @@ void* OCCAction::insert_ref(uint64_t key, uint32_t table_id)
         inserts[insert_ptr].tableId = table_id;
         inserts[insert_ptr].key = key;
        
-        /* Do the actual insert */
         lock_struct = mgr->get_struct();
         *RECORD_TID_PTR(record->value) = 0;
         barrier();
-        acquire_single(RECORD_TID_PTR(value));
-        assert(IS_LOCKED(*RECORD_TID_PTR(record->value)));
+        //        acquire_single(RECORD_TID_PTR(value));
+        //        assert(IS_LOCKED(*RECORD_TID_PTR(record->value)));
         tbl = tbl_mgr->get_conc_table(table_id);
         assert(tbl != NULL);
         success = tbl->Put(record, lock_struct);
@@ -281,37 +295,29 @@ void* OCCAction::insert_ref(uint64_t key, uint32_t table_id)
                 *RECORD_TID_PTR(record->value) = 0;
                 barrier();
                 insert_mgr->return_insert_record(record, table_id);
-                throw occ_validation_exception(READ_ERR);
+                throw occ_validation_exception(INSERT_ERR);
         } 
 
         insert_ptr += 1;
         return RECORD_VALUE_PTR(value);
+        */
 }
 
 void OCCAction::undo_inserts()
 {
+
         uint32_t i, table_id;
         conc_table_record *record;
         concurrent_table *tbl;
         mcs_struct *lock_struct;
 
         for (i = 0; i < insert_ptr; ++i) {
-                //                std::cerr << "Here!\n";
                 record = (conc_table_record*)inserts[i].record_ptr;
                 table_id = inserts[i].tableId;                
                 tbl = tbl_mgr->get_conc_table(table_id);
-                assert(IS_LOCKED(*RECORD_TID_PTR(record->value)));
-                assert(GET_TIMESTAMP(*RECORD_TID_PTR(record->value)) == 0);
-
                 assert(tbl != NULL);
                 lock_struct = mgr->get_struct();
-
-                /* Remove the record from the index */
                 tbl->Remove(record, lock_struct);
-        
-                /* Return the record back to the allocator */
-                *RECORD_TID_PTR(record->value) = 0;
-                barrier();
                 insert_mgr->return_insert_record(record, table_id);
                 mgr->return_struct(lock_struct);
         }
@@ -420,6 +426,7 @@ void OCCAction::acquire_locks()
                         }
                         value = this->writeset[i].record_ptr;
                         acquire_single((volatile uint64_t*)value);
+                        assert(IS_LOCKED(*((uint64_t*)value)));
                         this->writeset[i].is_locked = true;
                 }
         }
@@ -568,6 +575,8 @@ void OCCAction::install_writes()
         }
 
         /* Inserts */
+        /*
         for (i = 0; i < insert_ptr; ++i) 
-                install_single_insert(this->inserts[i]);
+        install_single_insert(this->inserts[i]);
+        */
 }

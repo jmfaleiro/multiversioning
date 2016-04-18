@@ -567,7 +567,7 @@ void new_order::process_item(uint32_t item_number, uint32_t order_id,
                                                          _district_id, 
                                                          order_id, 
                                                          item_number);
-
+        
         order_line = (order_line_record*)insert_record(order_line_key, 
                                                        ORDER_LINE_TABLE);
         order_line->ol_o_id = order_id;
@@ -578,6 +578,7 @@ void new_order::process_item(uint32_t item_number, uint32_t order_id,
         order_line->ol_quantity = _order_quantities[item_number];
         order_line->ol_amount = _order_quantities[item_number]*item->i_price;
         strcpy(order_line->ol_dist_info, dist_info);
+        
 }
 
 bool new_order::Run()

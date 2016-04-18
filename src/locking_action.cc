@@ -59,9 +59,9 @@ void locking_action::add_read_key(uint64_t key, uint32_t table_id)
 void* locking_action::lookup(locking_key *k)
 {
         if (k->is_write == true) 
-                return this->tables[k->table_id]->GetAlways(k->key);
+                return tables->get_table(k->table_id)->GetAlways(k->key);
         else
-                return this->tables[k->table_id]->Get(k->key);
+                return tables->get_table(k->table_id)->Get(k->key);
 }
 
 int locking_action::find_key(uint64_t key, uint32_t table_id,
@@ -94,7 +94,7 @@ void locking_action::commit_writes(bool commit)
                 if (k->value != NULL) {
                         if (commit) {
                                 value = lookup(k);
-                                record_size = this->tables[k->table_id]->RecordSize();                        
+                                record_size = tables->get_table(k->table_id)->RecordSize();                        
                                 memcpy(value, RECORD_VALUE_PTR(k->value), record_size);
                         }
                         this->bufs->ReturnRecord(k->table_id, k->value);
@@ -116,7 +116,7 @@ void* locking_action::write_ref(uint64_t key, uint32_t table_id)
         if (k->value == NULL) {
                 read_value = lookup(k);
                 k->value = this->bufs->GetRecord(table_id);
-                record_size = this->tables[table_id]->RecordSize();
+                record_size = this->tables->get_table(table_id)->RecordSize();
                 memcpy(RECORD_VALUE_PTR(k->value), read_value, record_size);
         }
         return RECORD_VALUE_PTR(k->value);
@@ -135,10 +135,20 @@ void* locking_action::read(uint64_t key, uint32_t table_id)
         return k->value;
 }
 
-void* locking_action::insert_ref(__attribute__((unused)) uint64_t key, 
-                                 __attribute__((unused)) uint32_t table_id)
+void* locking_action::insert_ref(uint64_t key, uint32_t table_id)
 {
-        assert(false);
+        conc_table_record *record;
+        concurrent_table *tbl;
+        bool success;        
+
+        record = insert_mgr->get_insert_record(table_id);
+        record->key = key;
+        record->next = NULL;
+        tbl = tables->get_conc_table(table_id);
+        assert(tbl != NULL);
+        success = tbl->Put(record, lck);
+        assert(success == true);
+        return record->value;
 }
 
 void locking_action::remove(__attribute__((unused)) uint64_t key, 

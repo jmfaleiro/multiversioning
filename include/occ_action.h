@@ -108,7 +108,8 @@ class OCCAction : public translator {
         OCCWorker *worker;
         table_mgr *tbl_mgr;
         insert_buf_mgr *insert_mgr;
-        
+        mcs_struct *lck;
+
         uint32_t insert_ptr;
         std::vector<occ_composite_key> inserts;
         std::vector<occ_composite_key> readset;

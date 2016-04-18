@@ -7,6 +7,8 @@
 #include <machine.h>
 #include <record_buffer.h>
 #include <mcs.h>
+#include <insert_buf_mgr.h>
+#include <table_mgr.h>
 
 class locking_action;
 class lock_manager_table;
@@ -96,8 +98,10 @@ class locking_action : public translator {
         locking_worker *worker;
         locking_action *next;
         locking_action *prev;
-        Table **tables;
+        table_mgr *tables;
+        insert_buf_mgr *insert_mgr;
         bool prepared;
+        mcs_struct *lck;
         uint32_t read_index;
         uint32_t write_index;
         bool finished_execution;

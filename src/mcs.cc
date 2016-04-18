@@ -29,7 +29,7 @@ mcs_struct* mcs_mgr::get_struct()
 
 void mcs_mgr::return_struct(mcs_struct *m_struct)
 {
-        assert(m_struct->_is_held == 1 && m_struct->_next == NULL);
+        //        assert(m_struct->_is_held == 1 && m_struct->_next == NULL);
         m_struct->_next = _free_list;
         _free_list = m_struct;
 }

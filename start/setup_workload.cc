@@ -24,15 +24,15 @@ uint64_t gen_unique_key(RecordGenerator *gen,
         }
 }
 
-
-txn* generate_new_order(workload_config conf)
+txn* generate_new_order(workload_config conf, __attribute__((unused)) uint32_t thread)
 {
         uint32_t w_id, d_id, c_id, *quants, nitems, i, temp;
         uint64_t *suppliers, *items;
         UniformGenerator item_gen(NUM_ITEMS);
         set<uint64_t> seen_items;
         
-        w_id = (uint32_t)rand() % conf.num_warehouses;
+        //        assert(thread < conf.num_warehouses);
+        w_id = (uint64_t)rand() % conf.num_warehouses;
         assert(w_id < conf.num_warehouses);
         
         d_id = (uint32_t)rand() % NUM_DISTRICTS;
@@ -49,14 +49,15 @@ txn* generate_new_order(workload_config conf)
         for (i = 0; i < nitems; ++i) {
                 items[i] = gen_unique_key(&item_gen, &seen_items);
                 quants[i] = 1 + ((uint32_t)rand() % 10);
+                //                suppliers[i] = w_id;
                 temp = rand() % 100;
                 if (temp == 0) {                        
-                        /* Use a remote warehouse */
+
                         do {
                                 suppliers[i] = rand() % conf.num_warehouses;
                         } while (suppliers[i] == w_id && conf.num_warehouses > 1);
                 } else {
-                        /* Use local warehouse */
+
                         suppliers[i] = w_id;
                 }
         }
@@ -64,12 +65,13 @@ txn* generate_new_order(workload_config conf)
                              suppliers);
 }
 
-txn* generate_payment(workload_config conf)
+txn* generate_payment(workload_config conf, __attribute__((unused)) uint32_t thread)
 {
-        uint32_t w_id, d_id, c_id, c_w_id, c_d_id, time, temp;
+        uint32_t w_id, d_id, c_id, c_w_id, c_d_id, time; //temp;
         float h_amount;
+        assert(thread < conf.num_warehouses);
 
-        w_id = (uint32_t)rand() % conf.num_warehouses;
+        w_id = thread; //(uint64_t)rand() % conf.num_warehouses;
         assert(w_id < conf.num_warehouses);
 
         d_id = (uint32_t)rand() % NUM_DISTRICTS;
@@ -77,7 +79,11 @@ txn* generate_payment(workload_config conf)
         
         c_id = (uint32_t)rand() % NUM_CUSTOMERS;
         assert(c_id < NUM_CUSTOMERS);
-        
+
+        c_w_id = w_id;
+        c_d_id = d_id;
+
+        /*
         temp = (uint32_t)rand() % 100;
         if (temp >= 15) {
                 c_w_id = w_id;
@@ -88,20 +94,22 @@ txn* generate_payment(workload_config conf)
                         c_w_id = (uint32_t)rand() % conf.num_warehouses;
                 } while (c_w_id == w_id && conf.num_warehouses > 1);
         }
-        
+        */
         time = 0;
         h_amount = 1.0*((uint32_t)rand() % 5000);
         return new payment(w_id, d_id, c_id, c_w_id, c_d_id, h_amount, time);
 }
 
-static txn* generate_tpcc(workload_config conf)
+static txn* generate_tpcc(workload_config conf, uint32_t thread)
 {
         assert(conf.experiment == TPCC_SUBSET);
-
+        return generate_new_order(conf, thread);
+        /*
         if (rand() % 2 == 0) 
-                return generate_new_order(conf);
+                return generate_new_order(conf, thread);
         else 
-                return generate_payment(conf);        
+                return generate_payment(conf, thread);
+        */
 }
 
 
@@ -469,7 +477,7 @@ uint32_t generate_input(workload_config conf, txn ***loaders)
                 assert(false);
 }
 
-txn* generate_transaction(workload_config config)
+txn* generate_transaction(workload_config config, uint32_t thread)
 {
         txn *txn;
         
@@ -488,7 +496,7 @@ txn* generate_transaction(workload_config config)
                 assert(my_gen != NULL);
                 txn = generate_ycsb_action(my_gen, config);
         } else if (config.experiment == TPCC_SUBSET) {
-                txn = generate_tpcc(config);
+                txn = generate_tpcc(config, thread);
         } else {
                 assert(false);
         }

@@ -534,7 +534,7 @@ static ActionBatch mv_create_action_batch(MVConfig config,
         assert(batch.actionBuf != NULL);
         for (i = 0; i < config.epochSize; ++i) {
                 timestamp = CREATE_MV_TIMESTAMP(epoch, i);
-                txn = generate_transaction(w_config);
+                txn = generate_transaction(w_config, 0);
                 action = generate_mv_action(txn);
                 action->__version = timestamp;
                 batch.actionBuf[i] = action;
