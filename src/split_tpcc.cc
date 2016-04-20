@@ -9,6 +9,20 @@ split_new_order::update_district::update_district(uint32_t warehouse_id,
         _district_id = district_id;
 }
 
+uint32_t split_new_order::update_district::num_rmws()
+{
+        return 1;
+}
+
+void split_new_order::update_district::get_rmws(big_key *array)
+{
+        uint64_t key;
+        
+        key = tpcc_util::create_district_key(_warehouse_id, _district_id);
+        array[0].key = key;
+        array[0].table_id = DISTRICT_TABLE;
+}
+
 /* update_district is a "root" piece. */
 bool split_new_order::update_district::Run()
 {
@@ -35,6 +49,20 @@ split_new_order::read_customer::read_customer(uint32_t wh_id, uint32_t d_id,
         _c_id = c_id;
 }
 
+uint32_t split_new_order::read_customer::num_reads()
+{
+        return 1;
+}
+
+void split_new_order::read_customer::get_reads(big_key *array)
+{
+        uint64_t key;
+        
+        key = tpcc_util::create_district_key(_wh_id, _d_id);
+        array[0].key = key;
+        array[0].table_id = CUSTOMER_TABLE;
+}
+
 /* read_customer is a "root" piece */
 bool split_new_order::read_customer::Run()
 {
@@ -46,6 +74,17 @@ bool split_new_order::read_customer::Run()
         cust = (customer_record*)get_read_ref(customer_key, CUSTOMER_TABLE);
         _dscnt = cust->c_discount;
         return true;
+}
+
+uint32_t split_new_order::insert_order_lines::num_rmws()
+{
+        return 1;
+}
+
+void split_new_order::insert_order_lines::get_rmws(big_key *array)
+{
+        array[0].key = tpcc_util::create_district_key(_wh_id, _dstrct_id);
+        array[0].table_id = ORDER_LINE_TABLE;
 }
 
 split_new_order::insert_order_lines::insert_order_lines(uint32_t wh_id, 
@@ -98,6 +137,17 @@ bool split_new_order::insert_order_lines::Run()
                 }
         }
         return true;
+}
+
+uint32_t split_new_order::update_stocks::num_rmws()
+{
+        return 1;
+}
+
+void split_new_order::update_stocks::get_rmws(big_key *array)
+{
+        array[0].key = (uint64_t)_wh_id;
+        array[0].table_id = STOCK_TABLE;
 }
 
 /* update_stocks is a "root" piece. */
@@ -159,6 +209,17 @@ bool split_new_order::update_stocks::Run()
         return true;
 }
 
+uint32_t split_new_order::insert_oorder::num_rmws()
+{
+        return 1;
+}
+
+void split_new_order::insert_oorder::get_rmws(big_key *array)
+{
+        array[0].key = tpcc_util::create_district_key(_wh_id, _dstrct_id);
+        array[0].table_id = OORDER_TABLE;
+}
+
 /* Depends on the execution of the update_district piece */
 bool split_new_order::insert_oorder::Run()
 {
@@ -177,6 +238,17 @@ bool split_new_order::insert_oorder::Run()
         oorder->o_ol_cnt = _num_items;
         oorder->o_all_local = _all_local;        
         return true;
+}
+
+uint32_t split_new_order::insert_new_order::num_rmws()
+{
+        return 1;
+}
+
+void split_new_order::insert_new_order::get_rmws(big_key *array)
+{
+        array[0].key = tpcc_util::create_district_key(_wh_id, _dstrct_id);
+        array[0].table_id = NEW_ORDER_TABLE;
 }
 
 /* Depends on the execution of the update_district piece. */

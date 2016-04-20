@@ -21,6 +21,22 @@ namespace split_new_order {
                 uint32_t 	_supplier_wh;
                 char 		*_district_info;
         };
+
+        class read_warehouse : public txn {
+        private:
+                friend class read_customer_last_name;
+                friend class read_customer;
+                friend class insert_new_order;
+                friend class insert_oorder;
+                friend class insert_order_lines;
+                friend class update_stocks;
+
+                uint32_t 		_warehouse_id;
+                float 			_w_tax;
+
+        public:
+                read_warehouse(uint32_t warehouse_id);
+        };
         
         /* Root piece */
         class update_district : public txn {
@@ -31,6 +47,7 @@ namespace split_new_order {
                 friend class insert_oorder;
                 friend class insert_order_lines;
                 friend class update_stocks;
+                friend class read_warehouse;
                 
                 uint32_t 		_warehouse_id;
                 uint32_t 		_district_id;
@@ -39,6 +56,9 @@ namespace split_new_order {
         public:
                 update_district(uint32_t warehouse_id, uint32_t district_id);
                 bool Run();
+                
+                virtual uint32_t num_rmws();
+                virtual void get_rmws(big_key *array);
         };
         
         /* Root piece */
@@ -50,6 +70,7 @@ namespace split_new_order {
                 friend class insert_oorder;
                 friend class insert_order_lines;
                 friend class update_stocks;
+                friend class read_warehouse;
 
                 uint32_t 		_wh_id;
                 uint32_t 		_d_id;
@@ -63,6 +84,9 @@ namespace split_new_order {
                               uint64_t name_index, 
                               uint32_t id);
                 bool Run();
+
+                virtual uint32_t num_reads();
+                virtual void get_reads(big_key *array);
         };
 
         /* Must wait on update_district piece */
@@ -74,6 +98,7 @@ namespace split_new_order {
                 friend class insert_oorder;
                 friend class insert_order_lines;
                 friend class update_stocks;
+                friend class read_warehouse;
 
                 update_district 	*_dstrct_pc;	/* Read order id */
                 uint32_t 		_wh_id;
@@ -84,6 +109,8 @@ namespace split_new_order {
                                  uint32_t dstrct_id);
                 virtual bool Run();
 
+                virtual uint32_t num_rmws();
+                virtual void get_rmws(big_key *array);
         };
 
         /* Must wait on update_district piece */
@@ -95,6 +122,7 @@ namespace split_new_order {
                 friend class insert_new_order;
                 friend class insert_order_lines;
                 friend class update_stocks;
+                friend class read_warehouse;
                 
                 update_district 	*_dstrct_pc;	/* Read order id */
                 read_customer 		*_cust_pc;
@@ -111,6 +139,9 @@ namespace split_new_order {
                               bool all_local, 
                               uint32_t num_items);
                 virtual bool Run();
+
+                virtual uint32_t num_rmws();
+                virtual void get_rmws(big_key *array);
         };
         
         
@@ -122,11 +153,13 @@ namespace split_new_order {
                 friend class insert_new_order;
                 friend class insert_oorder;
                 friend class update_stocks;
+                friend class ready_warehouse;
 
                 uint32_t 			_wh_id;
                 uint32_t 			_dstrct_id;	
                 update_district 		*_dstrct_pc;	/* order id */
                 std::vector<update_stocks*> 	_stock_pieces;  /* stock data */
+                read_warehouse 			*_wh_pc;
 
         public:
                 insert_order_lines(uint32_t wh_id, 
@@ -135,6 +168,9 @@ namespace split_new_order {
                                    update_stocks **stock_pieces, 
                                    uint32_t num_pieces);
                 virtual bool Run();
+
+                virtual uint32_t num_rmws();
+                virtual void get_rmws(big_key *array);
         };
 
         /* Root piece. */
@@ -146,6 +182,7 @@ namespace split_new_order {
                 friend class insert_new_order;
                 friend class insert_oorder;
                 friend class insert_order_lines;
+                friend class read_warehouse;
                 
                 uint32_t 				_wh_id;
                 uint32_t 				_dstrct_id;
@@ -157,6 +194,9 @@ namespace split_new_order {
                               uint32_t num_stocks);
 
                 virtual bool Run();
+
+                virtual uint32_t num_rmws();
+                virtual void get_rmws(big_key *array);
         };
 };
 
