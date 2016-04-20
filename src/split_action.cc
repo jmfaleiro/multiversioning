@@ -68,7 +68,15 @@ rendezvous_point** split_action::get_rvps()
 
 void* split_action::insert_ref(uint64_t key, uint32_t table_id)
 {
-        
+        TableRecord *record;
+        Table *tbl;
+
+        record = _insert_mgr->get_insert_record(table_id);
+        record->key = key;
+        record->next = NULL;
+        tbl = _tables[table_id];
+        tbl->Insert(key, record);
+        return record->value;
 }
 
 void split_action::remove(__attribute__((unused)) uint64_t key, 
@@ -91,8 +99,9 @@ void* split_action::write_ref(uint64_t key, uint32_t table_id)
                         return k->_value;
                 }
         }
-        assert(index < num_writes);
-        return NULL;
+        
+        assert(index == num_writes);
+        return _tables[table_id]->Get(key);
 }
 
 /* XXX Incomplete */
@@ -108,8 +117,8 @@ void* split_action::read(uint64_t key, uint32_t table_id)
                         return k->_value;
                 }
         }
-        assert(index < num_reads);
-        return NULL;
+        assert(index == num_reads);
+        return _tables[table_id]->Get(key);
 }
 
 uint64_t split_action::remote_deps()

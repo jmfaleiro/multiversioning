@@ -10,6 +10,8 @@
 #define 	DEP_ARRAY_SZ 		(1<<20)
 #define		SPLIT_RECORD_SIZE(sz) 	(sz+sizeof(split_key*))
 
+extern size_t *tpcc_record_sizes;
+
 struct split_record {
         big_key 	key;
         uint64_t 	epoch;
@@ -26,7 +28,8 @@ struct split_executor_config {
         uint32_t 			outstanding_threshold;
         splt_inpt_queue 		*input_queue;
         splt_inpt_queue			*output_queue;
-        Table 				**tables;
+        Table 				**lock_tables;
+        Table 				**data_tables;
 };
 
 struct split_queue {
@@ -44,6 +47,9 @@ class split_executor : public Runnable {
         split_dep 				*dep_array;
         uint64_t epoch;
         uint32_t 				num_outstanding;
+
+        /* Inserts */
+        insert_buf_mgr 				*_insert_mgr;
 
         /* Manage cross-partition dependencies. */
         void sync_commit_rvp(split_action *action, bool committed);

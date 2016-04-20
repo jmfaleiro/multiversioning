@@ -3,7 +3,6 @@
 
 #include <table.h>
 #include <concurrent_table.h>
-#include <insert_table.h>
 
 class table_mgr {
  private:

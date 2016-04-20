@@ -6,6 +6,8 @@
 #include <db.h>
 #include <graph.h>
 #include <action.h>
+#include <insert_buf_mgr.h>
+#include <table.h>
 
 enum access_t {
         SPLIT_READ,
@@ -81,6 +83,10 @@ class split_action : public translator {
 
  private:
         uint64_t 		_state;
+
+        /* For inserts */
+        insert_buf_mgr 		*_insert_mgr;
+        Table 			**_tables;
         
         /* Data for abortable actions */
         bool 				_can_abort;

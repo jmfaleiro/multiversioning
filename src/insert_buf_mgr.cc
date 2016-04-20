@@ -26,6 +26,7 @@ void insert_buf_mgr::alloc_entries(uint32_t table_id, size_t record_sz,
         data = (char*)zmalloc(entry_sz*num_records);
 
         /* Setup */
+        header = NULL;
         for (i = 0; i < num_records; ++i) {                
                 header = (TableRecord*)(&data[entry_sz*i]);
                 header->next = (TableRecord*)&data[entry_sz*(i+1)];

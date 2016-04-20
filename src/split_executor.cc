@@ -9,6 +9,8 @@ split_executor::split_executor(struct split_executor_config config)
         queue._count = 0;
         init_dep_array();
         epoch = 1;
+        _insert_mgr = new(config.cpu) insert_buf_mgr(config.cpu, 11, 
+                                                     tpcc_record_sizes);
 }
 
 void split_executor::init_dep_array()
@@ -167,7 +169,7 @@ void split_executor::schedule_operation(big_key &key, split_action *action,
 
 
         /* XXX Intialize the entry some how */
-        entry = (split_record*)config.tables[key.table_id]->Get(key.key);
+        entry = (split_record*)config.lock_tables[key.table_id]->Get(key.key);
         assert(entry->key == key);
         prev = entry->key_struct;
         if (entry->epoch == epoch && prev != NULL) {
@@ -225,7 +227,7 @@ void split_executor::do_check()
         split_dep *check;
 
         for (uint32_t i = 0; i < 1000; ++i) {
-                temp = (split_record*)config.tables[0]->Get((uint64_t)i);
+                temp = (split_record*)config.lock_tables[0]->Get((uint64_t)i);
                 assert(temp->key.key == (uint64_t)i);
                 check = temp->key_struct;
                 assert(check == NULL || check->_key.key == (uint64_t)i);
@@ -357,6 +359,8 @@ bool split_executor::process_action(split_action *action)
         if (state != split_action::COMPLETE) {
                 if (state == split_action::SCHEDULED &&
                     action->remote_deps() == 0) {
+                        action->_insert_mgr = _insert_mgr;
+                        action->_tables = config.data_tables;
                         if (try_execute(action) == true) {
                                 signal_reads(action);
                                 return true;
