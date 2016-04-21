@@ -2,6 +2,32 @@
 #include <split_tpcc.h>
 #include <algorithm>
 
+split_new_order::read_warehouse::read_warehouse(uint32_t warehouse_id)
+{
+        _warehouse_id = warehouse_id;
+}
+
+uint32_t split_new_order::read_warehouse::num_reads()
+{
+        return 1;
+}
+
+void split_new_order::read_warehouse::get_reads(big_key *array)
+{
+        array[0].key = (uint64_t)_warehouse_id;
+        array[0].table_id = WAREHOUSE_TABLE;
+}
+
+bool split_new_order::read_warehouse::Run()
+{
+        warehouse_record *wh;
+
+        wh = (warehouse_record*)get_read_ref((uint64_t)_warehouse_id, 
+                                             WAREHOUSE_TABLE);
+        _w_tax = wh->w_tax;
+        return true;
+}
+
 split_new_order::update_district::update_district(uint32_t warehouse_id, 
                                                   uint32_t district_id)
 {

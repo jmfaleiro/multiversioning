@@ -36,6 +36,10 @@ namespace split_new_order {
 
         public:
                 read_warehouse(uint32_t warehouse_id);
+                bool Run();
+                
+                virtual uint32_t num_reads();
+                virtual void get_reads(big_key *array);
         };
         
         /* Root piece */
@@ -133,7 +137,7 @@ namespace split_new_order {
 
         public:
                 insert_oorder(update_district *dstrct_pc, 
-                              read_customer *_cust_pc,
+                              read_customer *cust_pc,
                               uint32_t wh_id, 
                               uint32_t dstrct_id, 
                               bool all_local, 

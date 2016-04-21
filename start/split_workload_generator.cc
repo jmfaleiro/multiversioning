@@ -6,11 +6,23 @@
 #include <config.h>
 #include <simple_split.h>
 #include <set>
+#include <split_tpcc.h>
 
 extern RecordGenerator *my_gen;
 
 extern uint64_t gen_unique_key(RecordGenerator *gen, 
                                std::set<uint64_t> *seen_keys);
+
+struct split_new_order_conf {
+        uint32_t warehouse_id;
+        uint32_t district_id;
+        uint32_t customer_id;
+        uint32_t num_items;
+        uint32_t *items;
+        uint32_t *suppliers;
+        uint32_t *quants;
+        bool all_local;
+};
 
 uint64_t simple_record0, simple_record1;
 bool init = false;
@@ -26,6 +38,20 @@ uint32_t get_partition(uint64_t record, __attribute__((unused)) uint32_t table,
 //         return Hash128to64(std::make_pair(record, temp)) % num_partitions;
 }
 
+uint32_t get_tpcc_partition(void *record, uint32_t type)
+{
+        if (type == WAREHOUSE_TABLE) {
+                return 0;
+        } else if (type == DISTRICT_TABLE) {
+                return 0;
+        } else if (type == CUSTOMER_TABLE) {
+                return 0;
+        } else {
+                assert(false);
+                return 0;
+        }
+}
+
 graph_node* find_node(uint32_t partition, txn_graph *graph)
 {
         vector<graph_node*> *nodes;
@@ -38,6 +64,174 @@ graph_node* find_node(uint32_t partition, txn_graph *graph)
                         return (*nodes)[i];
         }
         return NULL;
+}
+
+split_new_order_conf gen_neworder_conf(workload_config conf)
+{
+        assert(conf.experiment == TPCC_SUBSET);
+        
+        uint32_t w_id, d_id, c_id, *quants, nitems, i, temp, *items, *suppliers;
+        UniformGenerator item_gen(NUM_ITEMS);
+        set<uint64_t> seen_items;
+        split_new_order_conf ret;
+
+        
+        //        assert(thread < conf.num_warehouses);
+        w_id = (uint64_t)rand() % conf.num_warehouses;
+        assert(w_id < conf.num_warehouses);
+        
+        d_id = (uint32_t)rand() % NUM_DISTRICTS;
+        assert(d_id < NUM_DISTRICTS);
+        
+        c_id = (uint32_t)rand() % NUM_CUSTOMERS;
+        assert(c_id < NUM_CUSTOMERS);
+        
+        nitems = 5 + ((uint32_t)rand() % 11);
+        items = (uint32_t*)zmalloc(sizeof(uint32_t)*nitems);
+        quants = (uint32_t*)zmalloc(sizeof(uint32_t)*nitems);
+        suppliers = (uint32_t*)zmalloc(sizeof(uint32_t)*nitems);
+        
+        for (i = 0; i < nitems; ++i) {
+                items[i] = gen_unique_key(&item_gen, &seen_items);
+                quants[i] = 1 + ((uint32_t)rand() % 10);
+                //                suppliers[i] = w_id;
+                temp = rand() % 100;
+                if (temp == 0) {                        
+
+                        do {
+                                suppliers[i] = rand() % conf.num_warehouses;
+                        } while (suppliers[i] == w_id && conf.num_warehouses > 1);
+                } else {
+
+                        suppliers[i] = w_id;
+                }
+        }
+        
+        ret.warehouse_id = w_id;
+        ret.district_id = d_id;
+        ret.customer_id = c_id;
+        ret.num_items = nitems;
+        ret.items = items;
+        ret.suppliers = suppliers;
+        ret.quants = quants;
+        return ret;
+}
+
+txn_graph* gen_new_order(workload_config conf, __attribute__((unused)) uint32_t num_partitions)
+{
+        using namespace split_new_order;
+        assert(conf.experiment == TPCC_SUBSET);
+        
+        uint32_t cur_wh, i, cur_stock, j, partition;
+        stock_update_data *stock_args;
+        std::unordered_map<uint32_t, uint32_t> warehouse_cnt;
+        std::set<uint32_t> warehouses;
+        split_new_order_conf no_conf;
+        read_warehouse *warehouse_pc;
+        update_district *district_pc;
+        read_customer *customer_pc;
+        insert_new_order *new_order_pc;
+        update_stocks *stock_pc;
+        insert_oorder *oorder_pc;
+        vector<update_stocks*> stock_pieces;
+        insert_order_lines *ol_pc;
+        
+        no_conf = gen_neworder_conf(conf);
+        warehouse_pc = new read_warehouse(no_conf.warehouse_id);
+        district_pc = new update_district(no_conf.warehouse_id, no_conf.district_id);
+        customer_pc = new read_customer(no_conf.warehouse_id, 
+                                        no_conf.district_id, 
+                                        false, 
+                                        0, 
+                                        no_conf.customer_id);
+        /*
+        new_order_pc = new insert_new_order(district_pc, no_conf.warehouse_id, 
+                                            no_conf.district_id);
+        oorder_pc = new insert_oorder(district_pc, customer_pc, 
+                                      no_conf.warehouse_id, 
+                                      no_conf.district_id, 
+                                      no_conf.all_local, 
+                                      no_conf.num_items);
+        
+        for (i = 0; i < no_conf.num_items; ++i) {
+                cur_wh = no_conf.suppliers[i];
+                if (warehouse_cnt.count(cur_wh) == 0) 
+                        warehouse_cnt[cur_wh] = 1;
+                else 
+                        warehouse_cnt[cur_wh] += 1;
+        }
+        
+        for (auto it = warehouse_cnt.begin();
+             it != warehouse_cnt.end();
+             ++it) {
+                stock_args = (stock_update_data*)zmalloc(sizeof(stock_update_data)*it->second);
+                cur_stock = 0;
+                for (j = 0; j < no_conf.num_items; ++j) {
+                        if (no_conf.suppliers[j] == it->first) {
+                                stock_args[cur_stock]._item_id = no_conf.items[j];
+                                stock_args[cur_stock]._quantity = no_conf.quants[j];
+                                stock_args[cur_stock]._supplier_wh = no_conf.suppliers[j];
+                                cur_stock += 1;
+                        }
+                }
+                stock_pc = new update_stocks(no_conf.warehouse_id, 
+                                                    no_conf.district_id, 
+                                                    stock_args, 
+                                                    it->second);
+                stock_pieces.push_back(stock_pc);
+                free(stock_args);
+        }
+
+       
+        ol_pc = new insert_order_lines(no_conf.warehouse_id, no_conf.district_id, 
+                                       district_pc, 
+                                       stock_pieces, 
+                                       warehouse_cnt.size());
+        */
+                                       
+        /* Turn it into a graph */
+        txn_graph *graph;
+        graph = new txn_graph();
+        
+        /* Add graph nodes */
+        graph_node *warehouse_node = new graph_node();
+        partition = get_tpcc_partition(warehouse_pc, WAREHOUSE_TABLE);
+        warehouse_node->app = warehouse_pc;
+        warehouse_node->partition = partition;
+        
+        graph_node *district_node = new graph_node();
+        partition = get_tpcc_partition(district_pc, WAREHOUSE_TABLE);
+        district_node->app = district_pc;
+        
+        graph_node *customer_node = new graph_node();
+        partition = get_tpcc_partition(customer_pc, CUSTOMER_TABLE);
+        customer_node->app = customer_pc;
+        
+        /*
+        graph_node *new_order_node = new graph_node();
+        new_order_node->app = new_order_pc;
+        
+        graph_node *oorder_node = new graph_node();
+        oorder_node->app = oorder_pc;
+        
+        graph_node *order_line_node = new graph_node();
+        order_line_node->app = ol_pc;
+        
+        vector<graph_node*> stock_nodes;
+        graph_node *temp;
+        for (i = 0; i < stock_pieces.size(); ++i) {
+                temp = new graph_node();
+                temp->app = stock_pieces[i];
+                stock_nodes.push_back(temp);
+        }
+        
+        graph->add_edge(district_node, new_order_node);
+        graph->add_edge(district_node, oorder_node);
+        graph->add_edge(district_node, order_line_node);
+        graph->add_edge(warehouse_node, order_line_node);
+        graph->add_edge(customer_node, order_line_node);
+        */
+        return graph;
 }
 
 txn_graph* gen_read_write(RecordGenerator *gen, workload_config conf, 
