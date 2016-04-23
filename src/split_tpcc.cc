@@ -25,6 +25,7 @@ bool split_new_order::read_warehouse::Run()
         wh = (warehouse_record*)get_read_ref((uint64_t)_warehouse_id, 
                                              WAREHOUSE_TABLE);
         _w_tax = wh->w_tax;
+        //        assert(false);
         return true;
 }
 
@@ -116,14 +117,14 @@ void split_new_order::insert_order_lines::get_rmws(big_key *array)
 split_new_order::insert_order_lines::insert_order_lines(uint32_t wh_id, 
                                                         uint32_t d_id, 
                                                         update_district *dstrct_pc,
-                                                        update_stocks **stock_pieces,
-                                                        uint32_t num_pieces)
+                                                        std::vector<update_stocks*> *stock_pieces)
 {
-        uint32_t i;
+        uint32_t i, num_pieces;
         
         _dstrct_pc = dstrct_pc;
+        num_pieces = stock_pieces->size();
         for (i = 0; i < num_pieces; ++i) 
-                _stock_pieces.push_back(stock_pieces[i]);
+                _stock_pieces.push_back((*stock_pieces)[i]);
         
         _wh_id = wh_id;
         _dstrct_id = d_id;
@@ -142,7 +143,6 @@ bool split_new_order::insert_order_lines::Run()
         order_line.ol_o_id = order_id;
         order_line.ol_d_id = _dstrct_id;
         order_line.ol_w_id = _wh_id;
-        
         
         order_id = _dstrct_pc->_order_id;
         num_stocks = _stock_pieces.size();
@@ -165,6 +165,23 @@ bool split_new_order::insert_order_lines::Run()
         return true;
 }
 
+split_new_order::update_stocks::update_stocks(uint32_t wh_id, uint32_t dstrct_id,
+                                              uint32_t supplier_id, 
+                                              stock_update_data *info, 
+                                              uint32_t num_stocks)
+{
+        uint32_t i;
+        
+        _wh_id = wh_id;
+        _dstrct_id = dstrct_id;
+        _supplier_id = supplier_id;
+        for (i = 0; i < num_stocks; ++i) 
+                _info.push_back(info[i]);
+        for (i = 0; i < num_stocks; ++i) 
+                _info[i]._district_info = NULL;
+        
+}
+
 uint32_t split_new_order::update_stocks::num_rmws()
 {
         return 1;
@@ -172,7 +189,7 @@ uint32_t split_new_order::update_stocks::num_rmws()
 
 void split_new_order::update_stocks::get_rmws(big_key *array)
 {
-        array[0].key = (uint64_t)_wh_id;
+        array[0].key = (uint64_t)_supplier_id;
         array[0].table_id = STOCK_TABLE;
 }
 
@@ -198,34 +215,34 @@ bool split_new_order::update_stocks::Run()
                 
                 stock->s_ytd += _info[i]._quantity;
                 switch (_dstrct_id) {
-                case 1:
+                case 0:
                         _info[i]._district_info = stock->s_dist_01;
                         break;
-                case 2:
+                case 1:
                         _info[i]._district_info = stock->s_dist_02;
                         break;
-                case 3:
+                case 2:
                         _info[i]._district_info = stock->s_dist_03;
                         break;
-                case 4:
+                case 3:
                         _info[i]._district_info = stock->s_dist_04;
                         break;
-                case 5:
+                case 4:
                         _info[i]._district_info = stock->s_dist_05;
                         break;
-                case 6:
+                case 5:
                         _info[i]._district_info = stock->s_dist_06;
                         break;
-                case 7:
+                case 6:
                         _info[i]._district_info = stock->s_dist_07;
                         break;
-                case 8:
+                case 7:
                         _info[i]._district_info = stock->s_dist_08;
                         break;
-                case 9:
+                case 8:
                         _info[i]._district_info = stock->s_dist_09;
                         break;
-                case 10:
+                case 9:
                         _info[i]._district_info = stock->s_dist_10;
                         break;
                 default:	/* Shouldn't get here */
@@ -235,9 +252,26 @@ bool split_new_order::update_stocks::Run()
         return true;
 }
 
+split_new_order::insert_oorder::insert_oorder(update_district *dstrct_pc, 
+                                              read_customer *cust_pc,
+                                              uint32_t wh_id, 
+                                              uint32_t dstrct_id,
+                                              bool all_local, 
+                                              uint32_t num_items)
+{
+        _dstrct_pc = dstrct_pc;
+        _cust_pc = cust_pc;
+        _wh_id = wh_id;
+        _dstrct_id = dstrct_id;
+        _all_local = all_local;
+        _num_items = num_items;
+}
+
+
 uint32_t split_new_order::insert_oorder::num_rmws()
 {
         return 1;
+        //        return 0;
 }
 
 void split_new_order::insert_oorder::get_rmws(big_key *array)
@@ -249,36 +283,45 @@ void split_new_order::insert_oorder::get_rmws(big_key *array)
 /* Depends on the execution of the update_district piece */
 bool split_new_order::insert_oorder::Run()
 {
-        oorder_record *oorder;
-        uint64_t oorder_key;
-        
-        oorder_key = tpcc_util::create_new_order_key(_wh_id, 
-                                                     _dstrct_id,
-                                                     _dstrct_pc->_order_id);
-        oorder = (oorder_record*)insert_record(oorder_key, OORDER_TABLE);
-        oorder->o_id = _dstrct_pc->_order_id;
-        oorder->o_w_id = _wh_id;
-        oorder->o_d_id = _dstrct_id;
-        oorder->o_c_id = _cust_pc->_c_id;
-        oorder->o_carrier_id = 0;
-        oorder->o_ol_cnt = _num_items;
-        oorder->o_all_local = _all_local;        
         return true;
 }
 
-uint32_t split_new_order::insert_new_order::num_rmws()
+void split_new_order::insert_new_order::do_order_lines()
 {
-        return 1;
+        order_line_record order_line;
+        uint32_t i, j, order_id, num_stocks, num_infos, count;
+        update_stocks *stock_piece;
+        stock_update_data *stock_data;
+        item_record *item;
+
+        order_id = _dstrct_pc->_order_id;
+        order_line.ol_o_id = order_id;
+        order_line.ol_d_id = _dstrct_id;
+        order_line.ol_w_id = _wh_id;
+        
+        order_id = _dstrct_pc->_order_id;
+        num_stocks = _stock_pieces.size();
+        count = 0;
+        for (i = 0; i < num_stocks; ++i) {
+                stock_piece = _stock_pieces[i];
+                num_infos = stock_piece->_info.size();
+                for (j = 0; j < num_infos; ++j) {
+                        order_line.ol_number = count;
+                        count += 1;
+                        stock_data = &stock_piece->_info[j];
+                        order_line.ol_supply_w_id = stock_data->_supplier_wh;
+                        order_line.ol_quantity = stock_data->_quantity;
+                        order_line.ol_i_id = stock_data->_item_id;
+                        assert(order_line.ol_i_id < NUM_ITEMS);
+                        item = (item_record*)get_read_ref((uint64_t)stock_data->_item_id, ITEM_TABLE);
+                        order_line.ol_amount = item->i_price*stock_data->_quantity;
+                        //                        assert(stock_data->_district_info != NULL);
+                        strcpy(order_line.ol_dist_info, stock_data->_district_info);
+                }
+        }
 }
 
-void split_new_order::insert_new_order::get_rmws(big_key *array)
-{
-        array[0].key = tpcc_util::create_district_key(_wh_id, _dstrct_id);
-        array[0].table_id = NEW_ORDER_TABLE;
-}
-
-/* Depends on the execution of the update_district piece. */
-bool split_new_order::insert_new_order::Run()
+void split_new_order::insert_new_order::do_new_order()
 {
         uint32_t order_id;
         uint64_t new_order_key;
@@ -294,6 +337,66 @@ bool split_new_order::insert_new_order::Run()
         new_order->no_w_id = _wh_id;
         new_order->no_d_id = _dstrct_id;
         new_order->no_o_id = order_id;
+}
+
+void split_new_order::insert_new_order::do_oorder()
+{
+        oorder_record *oorder;
+        uint64_t oorder_key;
+        
+        oorder_key = tpcc_util::create_new_order_key(_wh_id, 
+                                                     _dstrct_id,
+                                                     _dstrct_pc->_order_id);
+        oorder = (oorder_record*)insert_record(oorder_key, OORDER_TABLE);
+        oorder->o_id = _dstrct_pc->_order_id;
+        oorder->o_w_id = _wh_id;
+        oorder->o_d_id = _dstrct_id;
+        oorder->o_c_id = _cust_pc->_c_id;
+        oorder->o_carrier_id = 0;
+        oorder->o_ol_cnt = _num_items;
+        oorder->o_all_local = _all_local;        
+}
+
+split_new_order::insert_new_order::insert_new_order(update_district *dstrct_pc, 
+                                                    read_customer *cust_pc,
+                                                    uint32_t wh_id, 
+                                                    uint32_t dstrct_id,
+                                                    bool all_local,
+                                                    uint32_t num_items,
+                                                    std::vector<update_stocks*> *stock_pcs)
+{
+        uint32_t i;
+
+        _dstrct_pc = dstrct_pc;
+        _cust_pc = cust_pc;
+        _wh_id = wh_id;
+        _dstrct_id = dstrct_id;
+        _all_local = all_local;
+        _num_items = num_items;
+        
+        for (i = 0; i < stock_pcs->size(); ++i) 
+                _stock_pieces.push_back((*stock_pcs)[i]);
+}
+
+uint32_t split_new_order::insert_new_order::num_rmws()
+{
+        return 1;
+        //        return 0;
+}
+
+void split_new_order::insert_new_order::get_rmws(big_key *array)
+{
+        array[0].key = tpcc_util::create_district_key(_wh_id, _dstrct_id);
+        array[0].table_id = NEW_ORDER_TABLE;
+}
+
+/* Depends on the execution of the update_district piece. */
+bool split_new_order::insert_new_order::Run()
+{
+
+        do_oorder();
+        do_new_order();
+        do_order_lines();
         return true;
 }
 

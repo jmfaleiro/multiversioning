@@ -95,7 +95,7 @@ void* split_action::write_ref(uint64_t key, uint32_t table_id)
         num_writes += num_reads;
         for (index = num_reads; index < num_writes; ++index) {
                 k = &_dependencies[index];
-                if (k->_key.key == key && k->_key.table_id == table_id) {
+                if (k->_key.key == key && k->_key.table_id == table_id && k->_value != NULL) {
                         return k->_value;
                 }
         }
@@ -113,7 +113,7 @@ void* split_action::read(uint64_t key, uint32_t table_id)
         num_reads = _readset.size();
         for (index = 0; index < num_reads; ++index) {
                 k = &_dependencies[index];
-                if (k->_key.key == key && k->_key.table_id == table_id) {
+                if (k->_key.key == key && k->_key.table_id == table_id && k->_value != NULL) {
                         return k->_value;
                 }
         }
@@ -129,9 +129,12 @@ uint64_t split_action::remote_deps()
                 barrier();
                 cnt = _dep_rvp->done;
                 barrier();
-                if (cnt == 1)
+                if (cnt == 1) {
                         _dependency_flag = 0;
-                return (cnt == 1);
+                        return 0;
+                } else {
+                        return 1;
+                }
         } else {
                 return 0;
         }

@@ -104,13 +104,27 @@ namespace split_new_order {
                 friend class update_stocks;
                 friend class read_warehouse;
 
-                update_district 	*_dstrct_pc;	/* Read order id */
+                update_district 		*_dstrct_pc;	/* Read order id */
+                read_customer			*_cust_pc;
+                std::vector<update_stocks*>	_stock_pieces;
                 uint32_t 		_wh_id;
                 uint32_t 		_dstrct_id;
+                bool 			_all_local;
+                uint32_t 		_num_items;
+
+                void do_new_order();
+                void do_oorder();
+                void do_order_lines();
 
         public:
-                insert_new_order(update_district *dstrct_pc, uint32_t wh_id, 
-                                 uint32_t dstrct_id);
+                insert_new_order(update_district *dstrct_pc, 
+                                 read_customer *customer_pc,
+                                 uint32_t wh_id, 
+                                 uint32_t dstrct_id, 
+                                 bool all_local, 
+                                 uint32_t num_items,
+                                 std::vector<update_stocks*> *stock_pcs);
+
                 virtual bool Run();
 
                 virtual uint32_t num_rmws();
@@ -169,8 +183,7 @@ namespace split_new_order {
                 insert_order_lines(uint32_t wh_id, 
                                    uint32_t dstrct_id, 
                                    update_district *dstrct_pc,
-                                   update_stocks **stock_pieces, 
-                                   uint32_t num_pieces);
+                                   std::vector<update_stocks*> *stock_pieces);
                 virtual bool Run();
 
                 virtual uint32_t num_rmws();
@@ -193,7 +206,10 @@ namespace split_new_order {
                 std::vector<stock_update_data> 		_info;
 
         public:
+                uint32_t 				_supplier_id;
+
                 update_stocks(uint32_t wh_id, uint32_t dstrct_id, 
+                              uint32_t supplier_id,
                               stock_update_data *info, 
                               uint32_t num_stocks);
 

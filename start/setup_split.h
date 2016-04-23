@@ -19,6 +19,8 @@
 extern uint32_t GLOBAL_RECORD_SIZE;
 extern uint32_t get_partition(uint64_t record, uint32_t table, 
                               uint32_t num_partitions);
+extern uint32_t get_tpcc_partition(uint32_t warehouse, uint32_t district, 
+                                   uint32_t type, uint32_t num_partitions);
 
 struct txn_phase {
         vector<int> *parent_nodes;
@@ -140,15 +142,25 @@ public:
                 }
 
                 gen_rand_string(24, 24, stock->s_dist_01);
+                assert(strlen(stock->s_dist_01) < 25);
                 gen_rand_string(24, 24, stock->s_dist_02);
+                assert(strlen(stock->s_dist_02) < 25);
                 gen_rand_string(24, 24, stock->s_dist_03);
+                assert(strlen(stock->s_dist_03) < 25);
                 gen_rand_string(24, 24, stock->s_dist_04);
+                assert(strlen(stock->s_dist_04) < 25);
                 gen_rand_string(24, 24, stock->s_dist_05);
+                assert(strlen(stock->s_dist_05) < 25);
                 gen_rand_string(24, 24, stock->s_dist_06);
+                assert(strlen(stock->s_dist_06) < 25);
                 gen_rand_string(24, 24, stock->s_dist_07);
+                assert(strlen(stock->s_dist_07) < 25);
                 gen_rand_string(24, 24, stock->s_dist_08);
+                assert(strlen(stock->s_dist_08) < 25);
                 gen_rand_string(24, 24, stock->s_dist_09);
+                assert(strlen(stock->s_dist_09) < 25);
                 gen_rand_string(24, 24, stock->s_dist_10);
+                assert(strlen(stock->s_dist_10) < 25);
         }
 
         static void init_stock(Table *tbl, uint32_t warehouse)
@@ -172,72 +184,92 @@ public:
                                  split_config s_conf, 
                                  vector<int> cpus)
         {
-                uint32_t i, j, ncpus, sizes[s_conf.num_partitions], cur_wh;
+                uint32_t i, j, ncpus, sizes[s_conf.num_partitions], index;
                 int cpu;
                 TableConfig t_conf;
                 split_record splt_rec;
+                stock_record stock;
 
-                memset(sizes, 0x0, sizeof(uint32_t)*80);
-                ncpus = cpus.size();
-                assert(ncpus < s_conf.num_partitions);                
-                
-                /* Find warehouses per cpu */
+                memset(sizes, 0x0, sizeof(uint32_t)*s_conf.num_partitions);
                 for (i = 0; i < w_conf.num_warehouses; ++i) {
-                        cpu = cpus[i % ncpus];
-                        sizes[cpu] += 1;
+                        index = get_tpcc_partition(i, 0, STOCK_TABLE, 
+                                                   s_conf.num_partitions);
+                        sizes[index] += 1;
                 }
 
+                /* Allocate tables */
                 for (i = 0; i < s_conf.num_partitions; ++i) {
-                        if (sizes[i] == 0) {
-                                data_tbls[i][STOCK_TABLE] = NULL;
-                                lock_tbls[i][STOCK_TABLE] = NULL;
-                                continue;
-                        }
-                        
                         t_conf.tableId = STOCK_TABLE;
-                        t_conf.numBuckets = 2*sizes[i]*NUM_ITEMS;
+                        t_conf.numBuckets = 2*sizes[i];
                         t_conf.startCpu = i;
                         t_conf.endCpu = i+1;
-                        t_conf.freeListSz = sizes[i]*NUM_ITEMS;
-                        t_conf.valueSz = sizeof(stock_record);
-                        t_conf.recordSize = sizeof(stock_record);
-                        data_tbls[i][STOCK_TABLE] = new(i) Table(t_conf);
-
-                        t_conf.numBuckets = 2*sizes[i];
                         t_conf.freeListSz = sizes[i];
                         t_conf.valueSz = sizeof(split_record);
                         t_conf.recordSize = sizeof(split_record);
                         lock_tbls[i][STOCK_TABLE] = new(i) Table(t_conf);
+
+                        t_conf.valueSz = sizeof(stock_record);
+                        t_conf.recordSize = sizeof(stock_record);
+                        t_conf.numBuckets = 2*sizes[i]*NUM_ITEMS;
+                        t_conf.freeListSz = sizes[i]*NUM_ITEMS;
+                        data_tbls[i][STOCK_TABLE] = new(i) Table(t_conf);
                 }
-                
+
                 /* Insert stock records */
-                cur_wh = 0;
-                for (i = 0; i < s_conf.num_partitions; ++i) {
-                        for (j = 0; j < sizes[i]; ++j, ++cur_wh) {
-                                splt_rec.key.key = (uint64_t)cur_wh;
-                                splt_rec.key.table_id = STOCK_TABLE;
-                                splt_rec.epoch = 0;
-                                splt_rec.key_struct = NULL;
-                                splt_rec.value = NULL;
-                                lock_tbls[i][STOCK_TABLE]->Put((uint64_t)cur_wh,
-                                                               &splt_rec);
-                                init_stock(data_tbls[i][STOCK_TABLE], cur_wh);
-                        }
+                for (i = 0; i < w_conf.num_warehouses; ++i) {
+                        cpu = get_tpcc_partition(i, 0, STOCK_TABLE, s_conf.num_partitions);
+
+                        splt_rec.key.key = (uint64_t)i;
+                        splt_rec.key.table_id = STOCK_TABLE;
+                        splt_rec.epoch = 0;
+                        splt_rec.key_struct = NULL;
+                        splt_rec.value = NULL;
+
+                        lock_tbls[cpu][STOCK_TABLE]->Put((uint64_t)i, &splt_rec);
+                        init_stock(data_tbls[cpu][STOCK_TABLE], i);
                 }
         }        
         
         static void setup_districts(Table ***lock_tbls, Table ***data_tbls, 
                                     workload_config w_conf, 
-                                    int cpu)
+                                    split_config s_conf)
         {
-                uint32_t i, j;
-                district_record dist_rec;
+                uint32_t i, j, cpu, index, sizes[s_conf.num_partitions], next[s_conf.num_partitions];
+                district_record *d_recs[s_conf.num_partitions];
+                district_record *dist_rec;
                 split_record splt_rec;
                 char contiguous_zip[] = "123456789";
                 TableConfig t_conf;
                 uint64_t key;
 
+
+                memset(sizes, 0x0, sizeof(uint32_t)*s_conf.num_partitions);
+                memset(next, 0x0, sizeof(uint32_t)*s_conf.num_partitions);
+                for (i = 0; i < w_conf.num_warehouses; ++i) {
+                        for (j = 0; j < NUM_DISTRICTS; ++j) {
+                                index = get_tpcc_partition(i, j, DISTRICT_TABLE, s_conf.num_partitions);
+                                sizes[index] += 1;
+                        }
+                }
+
                 /* Allocate tables */
+                for (i = 0; i < s_conf.num_partitions; ++i) {
+                        t_conf.tableId = DISTRICT_TABLE;
+                        t_conf.numBuckets = 2*sizes[i];
+                        t_conf.startCpu = i;
+                        t_conf.endCpu = i+1;
+                        t_conf.freeListSz = sizes[i];
+                        t_conf.valueSz = sizeof(split_record);
+                        t_conf.recordSize = sizeof(split_record);
+                        lock_tbls[i][DISTRICT_TABLE] = new(i) Table(t_conf);
+                        data_tbls[i][DISTRICT_TABLE] = NULL;
+                        d_recs[i] = (district_record*)alloc_mem(sizeof(district_record)*sizes[i], i);
+                        assert(sizes[i] == 0 || d_recs[i] != NULL);
+                        memset(d_recs[i], 0x0, sizeof(district_record)*sizes[i]);
+                }
+
+
+                /* Allocate tables 
                 t_conf.tableId = DISTRICT_TABLE;
                 t_conf.numBuckets = 2*w_conf.num_warehouses*NUM_DISTRICTS;
                 t_conf.startCpu = cpu;
@@ -245,41 +277,56 @@ public:
                 t_conf.freeListSz = w_conf.num_warehouses*NUM_DISTRICTS;
                 t_conf.valueSz = sizeof(split_record);
                 t_conf.recordSize = sizeof(split_record);
-                lock_tbls[cpu][DISTRICT_TABLE] = new(cpu) Table(t_conf);
+                //                lock_tbls[cpu][DISTRICT_TABLE] = new(cpu) Table(t_conf);
                 
+                dist_rec = (district_record*)alloc_mem(sizeof(district_record)*w_conf.num_warehouses*NUM_DISTRICTS,
+                                                       cpu);
+                assert(dist_rec != NULL);
+                memset(dist_rec, 0x0, sizeof(district_record)*w_conf.num_warehouses*NUM_DISTRICTS);
+
+
                 t_conf.valueSz = sizeof(district_record);
                 t_conf.recordSize = sizeof(district_record);
                 data_tbls[cpu][DISTRICT_TABLE] = new(cpu) Table(t_conf);
+                //                data_tbls[cpu][DISTRICT_TABLE] = NULL;
+                */
 
                 /* Initialize */
                 for (i = 0; i < w_conf.num_warehouses; ++i) {
                         for (j = 0; j < NUM_DISTRICTS; ++j) {
+                                cpu = get_tpcc_partition(i, j, DISTRICT_TABLE, s_conf.num_partitions);
+                                index = next[cpu];
+                                next[cpu] += 1;
+                                dist_rec = &d_recs[cpu][index];
+
                                 key = tpcc_util::create_district_key(i, j);
-                                dist_rec.d_id = j;
-                                dist_rec.d_w_id = i;
-                                dist_rec.d_ytd = 3000;
-                                dist_rec.d_tax = (rand() % 2001) / 1000.0;
-                                dist_rec.d_next_o_id = 3000;
+                                dist_rec->d_id = j;
+                                dist_rec->d_w_id = i;
+                                dist_rec->d_ytd = 3000;
+                                dist_rec->d_tax = (rand() % 2001) / 1000.0;
+                                dist_rec->d_next_o_id = 3000;
 
-                                gen_rand_string(6, 10, dist_rec.d_name);
-                                gen_rand_string(10, 20, dist_rec.d_street_1);
-                                gen_rand_string(10, 20, dist_rec.d_street_2);
-                                gen_rand_string(10, 20, dist_rec.d_city);
-                                gen_rand_string(3, 3, dist_rec.d_state);
+                                gen_rand_string(6, 10, dist_rec->d_name);
+                                gen_rand_string(10, 20, dist_rec->d_street_1);
+                                gen_rand_string(10, 20, dist_rec->d_street_2);
+                                gen_rand_string(10, 20, dist_rec->d_city);
+                                gen_rand_string(3, 3, dist_rec->d_state);
 
-                                strcpy(dist_rec.d_zip, contiguous_zip);
+                                strcpy(dist_rec->d_zip, contiguous_zip);
                                 
-                                data_tbls[cpu][DISTRICT_TABLE]->Put(key, &dist_rec);
-
                                 /* Insert the lock */
                                 splt_rec.key.key = key;
                                 splt_rec.key.table_id = DISTRICT_TABLE;
                                 splt_rec.epoch = 0;
                                 splt_rec.key_struct = NULL;
-                                splt_rec.value = NULL;
-                                lock_tbls[cpu][DISTRICT_TABLE]->Put((uint64_t)i, &splt_rec);
+                                splt_rec.value = (char*)dist_rec;
+                                lock_tbls[cpu][DISTRICT_TABLE]->Put(key, &splt_rec);
+                                
+                                //                                data_tbls[cpu][DISTRICT_TABLE]->Put(key, &dist_rec);
                         }
                 }
+                for (i = 0; i < s_conf.num_partitions; ++i)
+                        assert(sizes[i] == next[i]);
         }
 
         static void init_c_single(customer_record *c)
@@ -325,21 +372,20 @@ public:
                 gen_rand_string(300, 500, c->c_data);
         }
         
-        static void init_cust(Table *tbl, uint32_t warehouse)
+        static void init_cust(Table *tbl, uint32_t warehouse, uint32_t district)
         {
                 customer_record record;
-                uint32_t dist, cust;
+                uint32_t cust;
 
                 /* Initialize customers */
-                for (dist = 0; dist < NUM_DISTRICTS; ++dist) {
-                        for (cust = 0; cust < NUM_CUSTOMERS; ++cust) {
-                                record.c_id = cust;
-                                record.c_d_id = dist;
-                                record.c_w_id = warehouse;
-                                init_c_single(&record);
-                                tbl->Put(tpcc_util::create_customer_key(warehouse, dist, cust),
-                                         &record);
-                        }
+                for (cust = 0; cust < NUM_CUSTOMERS; ++cust) {
+                        record.c_id = cust;
+                        record.c_d_id = district;
+                        record.c_w_id = warehouse;
+                        init_c_single(&record);
+                        tbl->Put(tpcc_util::create_customer_key(warehouse, district, 
+                                                                cust),
+                                 &record);
                 }
         }
         
@@ -372,8 +418,7 @@ public:
                 item->i_im_id = 1 + (rand() % 10000);
         }
 
-        static void setup_items(Table ***tbls, split_config s_conf, 
-                                vector<int> cpus)
+        static void setup_items(Table ***tbls, split_config s_conf)
         {
                 int cpu_min, cpu_max;
                 TableConfig t_conf;
@@ -381,32 +426,24 @@ public:
                 uint32_t i, ncpus;
                 item_record record;
 
-                ncpus = cpus.size();
-                cpu_min = cpus[0];
-                cpu_max = cpus[ncpus-1];
-                assert(cpu_min >= 0 && cpu_max < s_conf.num_partitions);
-                for (i = 0; i < ncpus; ++i) 
-                        assert(cpus[i] >= cpu_min && cpus[i] <= cpu_max);
-
                 /* Allocate table */
                 t_conf.tableId = ITEM_TABLE;
                 t_conf.numBuckets = 2*NUM_ITEMS;
-                t_conf.startCpu = cpu_min;
-                t_conf.endCpu = cpu_max;
+                t_conf.startCpu = 0;
+                t_conf.endCpu = s_conf.num_partitions;
                 t_conf.freeListSz = NUM_ITEMS;
                 t_conf.valueSz = sizeof(item_record);
                 t_conf.recordSize = sizeof(item_record);                
-                tbl = new(cpu_max) Table(t_conf);
-                
+                tbl = new(0) Table(t_conf);
+
+                for (i = 0; i < s_conf.num_partitions; ++i) 
+                        tbls[i][ITEM_TABLE] = tbl;
+
                 /* Initialize items */
                 for (i = 0; i < NUM_ITEMS; ++i) {
                         init_single_item(&record, i);
                         tbl->Put((uint64_t)i, &record);
                 }
-
-                /* Mark tables */
-                for (i = 0; i < ncpus; ++i) 
-                        tbls[cpus[i]][ITEM_TABLE] = tbl;
         }
 
         static void setup_customer_locks(Table *lock_tbl, uint32_t wh)
@@ -432,23 +469,41 @@ public:
          */
         static void setup_customers(Table ***lock_tbls, Table ***data_tbls, 
                                     workload_config w_conf, 
-                                    split_config s_conf,
-                                    vector<int> cpus)
+                                    split_config s_conf)
         {
-                uint32_t i, j, ncpus, wh, sizes[s_conf.num_partitions];
+                uint32_t i, j, index, wh, sizes[s_conf.num_partitions];
                 int cpu;
                 TableConfig t_conf;
+                split_record splt_rec;
+                uint64_t key;
 
-                memset(sizes, 0x0, sizeof(uint32_t)*80);
-                ncpus = cpus.size();
-                assert(ncpus < s_conf.num_partitions);                
-                
-                /* Find warehouses per cpu */
+                memset(sizes, 0x0, sizeof(uint32_t)*s_conf.num_partitions);
                 for (i = 0; i < w_conf.num_warehouses; ++i) {
-                        cpu = cpus[i % ncpus];
-                        sizes[cpu] += 1;
+                        for (j = 0; j < NUM_DISTRICTS; ++j) {
+                                index = get_tpcc_partition(i, j, CUSTOMER_TABLE,
+                                                           s_conf.num_partitions);
+                                sizes[index] += 1;
+                        }
                 }
-                
+
+                /* Allocate tables */
+                for (i = 0; i < s_conf.num_partitions; ++i) {
+                        t_conf.tableId = CUSTOMER_TABLE;
+                        t_conf.numBuckets = 2*sizes[i];
+                        t_conf.startCpu = i;
+                        t_conf.endCpu = i+1;
+                        t_conf.freeListSz = sizes[i];
+                        t_conf.valueSz = sizeof(split_record);
+                        t_conf.recordSize = sizeof(split_record);
+                        lock_tbls[i][CUSTOMER_TABLE] = new(i) Table(t_conf);
+
+                        t_conf.numBuckets = 2*sizes[i]*NUM_CUSTOMERS;
+                        t_conf.freeListSz = sizes[i]*NUM_CUSTOMERS;
+                        t_conf.valueSz = sizeof(customer_record);
+                        t_conf.recordSize = sizeof(customer_record);
+                        data_tbls[i][CUSTOMER_TABLE] = new(i) Table(t_conf);
+                }
+
                 /* Initialize tables */
                 for (i = 0; i < s_conf.num_partitions; ++i) {
                         if (sizes[i] == 0) {
@@ -459,104 +514,139 @@ public:
                         
                         /* Setup locks */
                         t_conf.tableId = CUSTOMER_TABLE;
-                        t_conf.numBuckets = 2*sizes[i]*NUM_DISTRICTS;
+                        t_conf.numBuckets = 2*sizes[i];
                         t_conf.startCpu = i;
                         t_conf.endCpu = i+1;
-                        t_conf.freeListSz = sizes[i]*NUM_DISTRICTS;
+                        t_conf.freeListSz = sizes[i];
                         t_conf.valueSz = sizeof(split_record);
                         t_conf.recordSize = sizeof(split_record);
                         lock_tbls[i][CUSTOMER_TABLE] = new(i) Table(t_conf);
                         
                         /* Setup data */
-                        t_conf.numBuckets = 2*sizes[i]*NUM_DISTRICTS*NUM_CUSTOMERS;
-                        t_conf.freeListSz = sizes[i]*NUM_DISTRICTS*NUM_CUSTOMERS;
+                        t_conf.numBuckets = 2*sizes[i]*NUM_CUSTOMERS;
+                        t_conf.freeListSz = sizes[i]*NUM_CUSTOMERS;
                         t_conf.valueSz = sizeof(customer_record);
                         t_conf.recordSize = sizeof(customer_record);
                         data_tbls[i][CUSTOMER_TABLE] = new(i) Table(t_conf);
                 }
                 
                 /* Insert locks and data */
-                wh = 0;
-                for (i = 0; i < s_conf.num_partitions; ++i) {
-                        if (sizes[i] == 0)
-                                lock_tbls[i][CUSTOMER_TABLE] = NULL;
-                        for (j = 0; j < sizes[i]; ++j, ++wh) {
-                                setup_customer_locks(lock_tbls[i][CUSTOMER_TABLE], wh);
-                                init_cust(data_tbls[i][CUSTOMER_TABLE], wh);
+                for (i = 0; i < w_conf.num_warehouses; ++i) {
+                        for (j = 0; j < NUM_DISTRICTS; ++j) {
+                                key = tpcc_util::create_district_key(i, j);
+                                cpu = get_tpcc_partition(i, j, CUSTOMER_TABLE, 
+                                                         s_conf.num_partitions);
+
+                                /* Insert the lock */
+                                splt_rec.key.key = key;
+                                splt_rec.key.table_id = CUSTOMER_TABLE;
+                                splt_rec.epoch = 0;
+                                splt_rec.key_struct = NULL;
+                                splt_rec.value = NULL;
+                                lock_tbls[cpu][CUSTOMER_TABLE]->Put(key, &splt_rec);
+                                init_cust(data_tbls[cpu][CUSTOMER_TABLE], i, j);
                         }
                 }
         }
 
         static void setup_warehouses(Table ***lock_tbls, Table ***data_tbls, 
                                      workload_config w_conf, 
-                                     int cpu)
+                                     split_config s_conf)
         {
-                uint32_t i;
-                warehouse_record wh_rec;
+                uint32_t i, index, cpu, sizes[s_conf.num_partitions], next[s_conf.num_partitions];
+                warehouse_record *wh_recs[s_conf.num_partitions];
+
+                //                warehouse_record *wh_rec;
                 split_record splt_rec;                
-                char zip[] = "123456789";
+                char zip[] = "123456789"; 
+                warehouse_record *data;
                 TableConfig t_conf;
                 
+                memset(sizes, 0x0, sizeof(uint32_t)*s_conf.num_partitions);
+                memset(next, 0x0, sizeof(uint32_t)*s_conf.num_partitions);
+                for (i = 0; i < w_conf.num_warehouses; ++i) {
+                        index = get_tpcc_partition(i, 0, WAREHOUSE_TABLE, 
+                                                   s_conf.num_partitions);
+                        sizes[index] += 1;
+                }
+
                 /* Allocate tables */
-                t_conf.tableId = WAREHOUSE_TABLE;
-                t_conf.numBuckets = 2*w_conf.num_warehouses;
-                t_conf.startCpu = cpu;
-                t_conf.endCpu = cpu+1;
-                t_conf.freeListSz = w_conf.num_warehouses;
-                t_conf.valueSz = sizeof(split_record);
-                t_conf.recordSize = sizeof(split_record);
-                lock_tbls[cpu][WAREHOUSE_TABLE] = new(cpu) Table(t_conf);
-                
-                t_conf.valueSz = sizeof(warehouse_record);
-                t_conf.recordSize = sizeof(warehouse_record);
-                data_tbls[cpu][WAREHOUSE_TABLE] = new(cpu) Table(t_conf);
+                for (i = 0; i < s_conf.num_partitions; ++i) {
+                        t_conf.tableId = WAREHOUSE_TABLE;
+                        t_conf.numBuckets = 2*sizes[i];
+                        t_conf.startCpu = i;
+                        t_conf.endCpu = i+1;
+                        t_conf.freeListSz = sizes[i];
+                        t_conf.valueSz = sizeof(split_record);
+                        t_conf.recordSize = sizeof(split_record);
+                        lock_tbls[i][WAREHOUSE_TABLE] = new(i) Table(t_conf);
+                        data_tbls[i][WAREHOUSE_TABLE] = NULL;
+                        wh_recs[i] = (warehouse_record*)alloc_mem(sizeof(warehouse_record)*sizes[i], i);
+                        assert(sizes[i] == 0 || wh_recs[i] != NULL);
+                        memset(wh_recs[i], 0x0, sizeof(warehouse_record)*sizes[i]);
+                }
+
+                //                t_conf.valueSz = sizeof(warehouse_record);
+                //                t_conf.recordSize = sizeof(warehouse_record);
+                //                data_tbls[cpu][WAREHOUSE_TABLE] = new(cpu) Table(t_conf);
+                // data_tbls[cpu][WAREHOUSE_TABLE] = NULL;
 
                 /* Initialize */
                 for (i = 0; i < w_conf.num_warehouses; ++i) {
-                        wh_rec.w_id = i;
-                        wh_rec.w_ytd = 3000;
-                        wh_rec.w_tax = (rand() % 2001) / 1000.0;
+                        cpu = get_tpcc_partition(i, 0, WAREHOUSE_TABLE, 
+                                                   s_conf.num_partitions);
+                        index = next[cpu];
+                        next[cpu] += 1;
+                        data = &wh_recs[cpu][index];
+
+                        data->w_id = i;
+                        data->w_id = i;
+                        data->w_ytd = 3000;
+                        data->w_tax = (rand() % 2001) / 1000.0;
                 
-                        gen_rand_string(6, 10, wh_rec.w_name);
-                        gen_rand_string(10, 20, wh_rec.w_street_1);
-                        gen_rand_string(10, 20, wh_rec.w_street_2);
-                        gen_rand_string(10, 20, wh_rec.w_city);
-                        gen_rand_string(3, 3, wh_rec.w_state);
-                        strcpy(wh_rec.w_zip, zip);                        
+                        gen_rand_string(6, 10, data->w_name);
+                        gen_rand_string(10, 20, data->w_street_1);
+                        gen_rand_string(10, 20, data->w_street_2);
+                        gen_rand_string(10, 20, data->w_city);
+                        gen_rand_string(3, 3, data->w_state);
+                        strcpy(data->w_zip, zip);                        
                         
                         /* Insert the record */
-                        data_tbls[cpu][WAREHOUSE_TABLE]->Put((uint64_t)i, &wh_rec);
+                        //                        data_tbls[cpu][WAREHOUSE_TABLE]->Put((uint64_t)i, &data);
 
                         /* Insert the lock */
                         splt_rec.key.key = i;
                         splt_rec.key.table_id = WAREHOUSE_TABLE;
                         splt_rec.epoch = 0;
                         splt_rec.key_struct = NULL;
-                        splt_rec.value = NULL;
+                        splt_rec.value = (char*)data;
                         lock_tbls[cpu][WAREHOUSE_TABLE]->Put((uint64_t)i, &splt_rec);
                 }
+                
+                for (i = 0; i < s_conf.num_partitions; ++i)
+                        assert(sizes[i] == next[i]);
         }
 
         static void setup_district_key_inserts(Table ***lock_tables, Table ***data_tables, 
                                                uint32_t table_id,
                                                workload_config w_conf,
-                                               split_config s_conf,
-                                               vector<int>cpus)
+                                               split_config s_conf)
         {
                 assert(table_id == NEW_ORDER_TABLE || 
                        table_id == OORDER_TABLE || 
                        table_id == ORDER_LINE_TABLE);
-                uint32_t i, wh, d, sizes[s_conf.num_partitions];
-                int cur_cpu;                        
+                uint32_t i, j, cpu, index, wh, d, sizes[s_conf.num_partitions];
                 split_record splt_rec;
                 uint64_t key;
                 TableConfig t_conf;
 
                 memset(sizes, 0x0, sizeof(uint32_t)*s_conf.num_partitions);
-                for (i = 0; i < w_conf.num_warehouses*NUM_DISTRICTS; ++i) {
-                        cur_cpu = cpus[i % cpus.size()];
-                        sizes[cur_cpu] += 1;
-                }
+                for (i = 0; i < w_conf.num_warehouses; ++i) 
+                        for (j = 0; j < NUM_DISTRICTS; ++j) {
+                                index = get_tpcc_partition(i, j, table_id, 
+                                                           s_conf.num_partitions);
+                                sizes[index] += 1;
+                        }
                 
                 /* Allocate tables */
                 for (i = 0; i < s_conf.num_partitions; ++i) {
@@ -572,10 +662,9 @@ public:
                         t_conf.freeListSz = sizes[i];
                         t_conf.valueSz = sizeof(split_record);
                         t_conf.recordSize = sizeof(split_record);
-
                         lock_tables[i][table_id] = new(i) Table(t_conf);
 
-                        t_conf.numBuckets = 1000000;
+                        t_conf.numBuckets = 1000000 / (s_conf.num_partitions);
                         t_conf.freeListSz = 0;
                         if (table_id == NEW_ORDER_TABLE) {
                                 t_conf.valueSz = sizeof(new_order_record);
@@ -590,68 +679,49 @@ public:
                         data_tables[i][table_id] = new(i) Table(t_conf);
                 }
                 
-                /* Initialize tables */
-                wh = 0;
-                d = 0;
-                for (i = 0; i < s_conf.num_partitions; ++i) {
-                        if (sizes[i] == 0)
-                                continue;
-                        
-                        while (sizes[i] > 0) {
-                                assert(wh < w_conf.num_warehouses);
-                                key = tpcc_util::create_district_key(wh, d);
+                for (i = 0; i < w_conf.num_warehouses; ++i) {
+                        for (j = 0; j < NUM_DISTRICTS; ++j) {
+                                key = tpcc_util::create_district_key(i, j);
+                                cpu = get_tpcc_partition(i, j, table_id, 
+                                                         s_conf.num_partitions);
 
+                                /* Insert the lock */
                                 splt_rec.key.key = key;
                                 splt_rec.key.table_id = table_id;
                                 splt_rec.epoch = 0;
                                 splt_rec.key_struct = NULL;
                                 splt_rec.value = NULL;
-
-                                lock_tables[i][table_id]->Put(key, &splt_rec);
-                                sizes[i] -= 1;
-                                d += 1;
-                                if (d == NUM_DISTRICTS) {
-                                        d = 0;
-                                        wh += 1;
-                                }
-                                        
+                                lock_tables[cpu][table_id]->Put(key, &splt_rec);
                         }
                 }
-                assert(wh == w_conf.num_warehouses && d == 0);
         }
 
         static void setup_new_orders(Table ***lock_tables, Table ***data_tables,
                                      workload_config w_conf,
-                                     split_config s_conf,
-                                     vector<int> cpus)
+                                     split_config s_conf)
         {
 
                 setup_district_key_inserts(lock_tables, data_tables, NEW_ORDER_TABLE,
                                            w_conf, 
-                                           s_conf,
-                                           cpus);
+                                           s_conf);
         }
 
         static void setup_oorders(Table ***lock_tables, Table ***data_tables,
                                   workload_config w_conf,
-                                  split_config s_conf,
-                                  vector<int> cpus)
+                                  split_config s_conf)
         {
                 setup_district_key_inserts(lock_tables, data_tables, OORDER_TABLE,
                                            w_conf, 
-                                           s_conf,
-                                           cpus);
+                                           s_conf);
         }
 
         static void setup_order_lines(Table ***lock_tables, Table ***data_tables,
                                       workload_config w_conf,
-                                      split_config s_conf,
-                                      vector<int> cpus)
+                                      split_config s_conf)
         {
                 setup_district_key_inserts(lock_tables, data_tables, ORDER_LINE_TABLE,
                                            w_conf, 
-                                           s_conf,
-                                           cpus);
+                                           s_conf);
         }
 
         static void setup_tpcc_tables(Table ****lock_tables, 
@@ -662,33 +732,36 @@ public:
                 uint32_t i;
                 vector<int> cpus, stock_cpus, ol_cpus;
                 uint32_t new_order_p;
+                Table ***ltabs, ***dtabs;
 
                 /* Each partition gets 11 tables */
-                *lock_tables = (Table***)zmalloc(sizeof(Table**)*s_conf.num_partitions);
-                *data_tables = (Table***)zmalloc(sizeof(Table**)*s_conf.num_partitions);
+                ltabs = (Table***)zmalloc(sizeof(Table**)*s_conf.num_partitions);
+                dtabs = (Table***)zmalloc(sizeof(Table**)*s_conf.num_partitions);
                 for (i = 0; i < s_conf.num_partitions; ++i) {
-                        *lock_tables[i] = (Table**)zmalloc(sizeof(Table*)*11);
-                        *data_tables[i] = (Table**)zmalloc(sizeof(Table*)*11);
+                        ltabs[i] = (Table**)zmalloc(sizeof(Table*)*11);
+                        dtabs[i] = (Table**)zmalloc(sizeof(Table*)*11);
                 }
-                
+                *lock_tables = ltabs;
+                *data_tables = dtabs;
+
                 /* 
                  * Partition 0 is in charge of warehouses, districts, 
                  * and customers 
                  */
-                setup_warehouses(*lock_tables, *data_tables, w_conf, 0);
-                setup_districts(*lock_tables, *data_tables, w_conf, 0);
-                cpus.push_back(0);
-                setup_customers(*lock_tables, *data_tables, w_conf, s_conf, 
-                                cpus);
+                setup_warehouses(ltabs, dtabs, w_conf, s_conf);
+                
+                setup_districts(ltabs, dtabs, w_conf, s_conf);
+                cpus.push_back(1);
+                setup_customers(ltabs, dtabs, w_conf, s_conf);
                 cpus.clear();
 
                 /* Either 0 or 1 in charge of new order and open order */
-                new_order_p = 1;
+                new_order_p = 2;
                 cpus.push_back((int)new_order_p);
-                setup_new_orders(*lock_tables, *data_tables, w_conf, s_conf, 
-                                 cpus);
-                setup_oorders(*lock_tables, *data_tables, w_conf, s_conf, cpus);
-                cpus.clear();
+                cpus.push_back(3);
+                setup_new_orders(ltabs, dtabs, w_conf, s_conf);
+                               
+                setup_oorders(ltabs, dtabs, w_conf, s_conf);
 
                 /* The rest are divided evenly among stocks and order lines */
                 for (i = new_order_p; i < s_conf.num_partitions; ++i) 
@@ -696,11 +769,10 @@ public:
                                 stock_cpus.push_back((int)i);
                         else 
                                 ol_cpus.push_back((int)i);
-                setup_stocks(*lock_tables, *data_tables, w_conf, s_conf, 
+                setup_stocks(ltabs, dtabs, w_conf, s_conf, 
                              stock_cpus);
-                setup_items(*data_tables, s_conf, stock_cpus);
-                setup_order_lines(*lock_tables, *data_tables, w_conf, s_conf, 
-                                  ol_cpus);
+                setup_items(dtabs, s_conf);
+                setup_order_lines(ltabs, dtabs, w_conf, s_conf);
         }
 
         static void setup_tables(Table ****lock_tables, Table ****data_tables, 
@@ -709,7 +781,8 @@ public:
         {
                 if (w_conf.experiment == YCSB_UPDATE || w_conf.experiment == YCSB_RW) {
                         *lock_tables = setup_tables(s_conf);
-                        *data_tables = NULL;
+                        *data_tables = (Table***)zmalloc(sizeof(Table**)*s_conf.num_partitions);
+                        memset(*data_tables, 0x0, sizeof(Table**)*s_conf.num_partitions);
                         init_tables(s_conf, *lock_tables);
                 } else if (w_conf.experiment == TPCC_SUBSET) {
                         setup_tpcc_tables(lock_tables, data_tables, w_conf, s_conf);
@@ -1482,6 +1555,7 @@ public:
 
                 setup_table_info(s_conf);
                 setup_tables(&lock_tables, &data_tables, w_conf, s_conf);
+                assert(lock_tables != NULL && data_tables != NULL);
 
                 input_queues = setup_input_queues(s_conf);
                 output_queues = setup_input_queues(s_conf);

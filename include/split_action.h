@@ -68,10 +68,10 @@ struct commit_rvp {
 class split_action : public translator {
  public:
         enum split_action_state {
-                UNPROCESSED,
-                SCHEDULED,
-                EXECUTED,
-                COMPLETE,
+                UNPROCESSED = 0,
+                SCHEDULED = 1,
+                EXECUTED = 2,
+                COMPLETE = 3,
         };
 
         friend class split_executor;

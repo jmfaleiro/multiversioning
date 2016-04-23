@@ -80,22 +80,26 @@ class Table {
     memset(buckets, 0x0, conf.numBuckets*sizeof(TableRecord*));
 
     // Initialize freelist
-    uint32_t recordSz = sizeof(TableRecord)+conf.valueSz;
-    char *data;
-    if (split_flag) {
-            data = (char*)alloc_mem(conf.freeListSz*recordSz, conf.startCpu);
-    } else {
-            data = (char*)alloc_interleaved_all(conf.freeListSz*recordSz);
-    }
+    if (conf.freeListSz > 0) {
+            uint32_t recordSz = sizeof(TableRecord)+conf.valueSz;
+            char *data;
+            if (split_flag) {
+                    data = (char*)alloc_mem(conf.freeListSz*recordSz, conf.startCpu);
+                    assert(data != NULL);
+            } else {
+                    data = (char*)alloc_interleaved_all(conf.freeListSz*recordSz);
+                    assert(data != NULL);
+            }
 
-    memset(data, 0x0, conf.freeListSz*recordSz);
-    for (uint64_t i = 0; i < conf.freeListSz; ++i) {
-      ((TableRecord*)(data + i*recordSz))->next = (TableRecord*)(data + (i+1)*recordSz);
-    }    
-    ((TableRecord*)(data + (conf.freeListSz-1)*recordSz))->next = NULL;    
-    freeList = (TableRecord*)data;
-    //    default_value = GetRecord();
-    //    memset(default_value->value, 0x0, conf.valueSz);
+            memset(data, 0x0, conf.freeListSz*recordSz);
+            for (uint64_t i = 0; i < conf.freeListSz; ++i) {
+                    ((TableRecord*)(data + i*recordSz))->next = (TableRecord*)(data + (i+1)*recordSz);
+            }    
+            ((TableRecord*)(data + (conf.freeListSz-1)*recordSz))->next = NULL;    
+            freeList = (TableRecord*)data;
+            //    default_value = GetRecord();
+            //    memset(default_value->value, 0x0, conf.valueSz);
+    }
   }
 
   virtual void PutEmpty(uint64_t key)
