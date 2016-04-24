@@ -16,6 +16,8 @@
 #define LCK_TBL_SZ	(((uint64_t)1) << 29)	/* 512 M */
 #define SIMPLE_SZ 	2			/* simple action size */
 
+extern uint32_t rand_salt;
+
 extern uint32_t GLOBAL_RECORD_SIZE;
 extern uint32_t get_partition(uint64_t record, uint32_t table, 
                               uint32_t num_partitions);
@@ -1546,6 +1548,7 @@ public:
         {
                 num_split_tables = 0;
                 split_table_sizes = NULL;
+                rand_salt = (uint32_t)rand();
 
                 splt_inpt_queue **input_queues, **output_queues;
                 split_action_batch **inputs;

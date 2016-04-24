@@ -8,6 +8,7 @@
 #include <set>
 #include <split_tpcc.h>
 
+uint32_t rand_salt;
 extern RecordGenerator *my_gen;
 
 extern uint64_t gen_unique_key(RecordGenerator *gen, 
@@ -40,34 +41,71 @@ uint32_t get_partition(uint64_t record, __attribute__((unused)) uint32_t table,
 
 uint32_t get_tpcc_warehouse_partition(uint32_t warehouse, uint32_t type, uint32_t num_partitions)
 {
-        return Hash128to64(std::make_pair((uint64_t)warehouse, (uint64_t)type)) % num_partitions;
+
+        uint32_t temp;
+        if (type == WAREHOUSE_TABLE) {
+                return warehouse % num_partitions;
+        } else if (type == STOCK_TABLE) {
+                return num_partitions - 1 - (warehouse % num_partitions);
+                //                temp = warehouse % num_partitions;
+                //                return num_partitions - 1 - temp;
+        }
+
+        //        uint64_t temp = ((uint64_t)type << 32) | num_partitions;
+        //        return Hash128to64(std::make_pair(warehouse, type)) % num_partitions;
 }
 
 uint32_t get_tpcc_district_partition(uint32_t warehouse, uint32_t district, 
                                      uint32_t type,
                                      uint32_t num_partitions)
 {
-        uint64_t temp;
-        temp = ((((uint64_t)warehouse) << 32) | district);
-        return Hash128to64(std::make_pair(temp, (uint64_t)type)) % num_partitions;
+        //        return  % num_partitions;
+        /*
+
+                if (type == DISTRICT_TABLE)
+                        return 0;
+                else if (type == CUSTOMER_TABLE)
+                        return 1;
+                uint32_t index;
+                index = warehouse*NUM_DISTRICTS + district;
+                return 2 + index % (num_partitions - 2);
+        */
+
+
+        return (warehouse * NUM_DISTRICTS + district) % num_partitions;
+        /*
+        if (type == DISTRICT_TABLE)
+                return 1;
+        else if (type == CUSTOMER_TABLE)
+                return 2;
+        return 3 + ((warehouse*NUM_DISTRICTS + district) % (num_partitions - 3));
+        */
+        //        assert(district < NUM_DISTRICTS);
+        //        uint32_t index;
+        //        index = warehouse*NUM_DISTRICTS + district;
+                //        return warehouse % num_partitions;
+
+        uint64_t temp0, temp1;
+        
+        temp1 = ((uint64_t)type << 32) | num_partitions;
+        temp0 = ((((uint64_t)warehouse) << 32) | district);
+        return Hash128to64(std::make_pair(temp0, type)) % num_partitions;
 }
 
 uint32_t get_tpcc_partition(uint32_t warehouse, uint32_t district, uint32_t type, 
-                            //                            int start_cpu, 
                             uint32_t num_partitions)
 {
-        if (type == WAREHOUSE_TABLE) {
+        switch (type) {
+        case WAREHOUSE_TABLE:
+        case STOCK_TABLE:
                 return get_tpcc_warehouse_partition(warehouse, type, num_partitions);
-        } else if (type == DISTRICT_TABLE) {
+        case DISTRICT_TABLE:
+        case CUSTOMER_TABLE:
+        case NEW_ORDER_TABLE:
+        case ORDER_LINE_TABLE:
+        case OORDER_TABLE:
                 return get_tpcc_district_partition(warehouse, district, type, num_partitions);
-        } else if (type == CUSTOMER_TABLE) {
-                return get_tpcc_district_partition(warehouse, district, type, num_partitions);
-        } else if (type == NEW_ORDER_TABLE || type == OORDER_TABLE || ORDER_LINE_TABLE) {
-                return get_tpcc_district_partition(warehouse, district, NEW_ORDER_TABLE,
-                                                   num_partitions);
-        } else if (type == STOCK_TABLE) {
-                return get_tpcc_warehouse_partition(warehouse, type, num_partitions);
-        } else {
+        default:
                 assert(false);
         }
 }
@@ -114,7 +152,7 @@ split_new_order_conf gen_neworder_conf(workload_config conf)
         for (i = 0; i < nitems; ++i) {
                 items[i] = gen_unique_key(&item_gen, &seen_items);
                 quants[i] = 1 + ((uint32_t)rand() % 10);
-                //                suppliers[i] = w_id;
+                //suppliers[i] = w_id;
                 temp = rand() % 100;
                 if (temp == 0) {                        
 
@@ -202,7 +240,6 @@ txn_graph* gen_new_order(workload_config conf, __attribute__((unused)) uint32_t 
                 stock_pieces.push_back(stock_pc);
                 free(stock_args);
         }
-
         new_order_pc = new insert_new_order(district_pc, customer_pc,
                                             no_conf.warehouse_id, 
                                             no_conf.district_id,
@@ -227,7 +264,18 @@ txn_graph* gen_new_order(workload_config conf, __attribute__((unused)) uint32_t 
         warehouse_node->app = warehouse_pc;
         warehouse_node->partition = partition;
         graph->add_node(warehouse_node);
-        
+
+        vector<graph_node*> stock_nodes;
+        graph_node *temp;
+        for (i = 0; i < stock_pieces.size(); ++i) {
+                temp = new graph_node();
+                temp->app = stock_pieces[i];
+                temp->partition = get_tpcc_partition(stock_pieces[i]->_supplier_id, 0, STOCK_TABLE, num_partitions);
+                //                assert(temp->partition == warehouse_node->partition);
+                stock_nodes.push_back(temp);
+                graph->add_node(temp);
+        }
+
         graph_node *district_node = new graph_node();
         partition = get_tpcc_partition(no_conf.warehouse_id, 
                                        no_conf.district_id, 
@@ -236,14 +284,14 @@ txn_graph* gen_new_order(workload_config conf, __attribute__((unused)) uint32_t 
         district_node->app = district_pc;
         district_node->partition = partition;
         graph->add_node(district_node);
-
+        
         graph_node *customer_node = new graph_node();
         partition = get_tpcc_partition(no_conf.warehouse_id, no_conf.district_id,
                                        CUSTOMER_TABLE, num_partitions);
         customer_node->app = customer_pc;
         customer_node->partition = partition;
         graph->add_node(customer_node);        
-
+        
         
 
         /*
@@ -265,33 +313,30 @@ txn_graph* gen_new_order(workload_config conf, __attribute__((unused)) uint32_t 
                                                     num_partitions);
         graph->add_node(oorder_node);
         graph->add_edge(district_node, oorder_node);
+
+        
         */
 
 
-        vector<graph_node*> stock_nodes;
-        graph_node *temp;
-        for (i = 0; i < stock_pieces.size(); ++i) {
-                temp = new graph_node();
-                temp->app = stock_pieces[i];
-                temp->partition = get_tpcc_partition(stock_pieces[i]->_supplier_id, 0, STOCK_TABLE, num_partitions);
-                stock_nodes.push_back(temp);
-                graph->add_node(temp);
-        }
 
         graph_node *new_order_node = new graph_node();
         new_order_node->app = new_order_pc;
         new_order_node->partition = get_tpcc_partition(no_conf.warehouse_id, no_conf.district_id, NEW_ORDER_TABLE, num_partitions);
+        
         //        std::cout << new_order_node->partition << "\n";
         //        assert(new_order_node->partition >= 2);
         graph->add_node(new_order_node);
         graph->add_edge(district_node, new_order_node);
         graph->add_edge(customer_node, new_order_node);
+        graph->add_edge(warehouse_node, new_order_node);
+
+
         assert(stock_pieces.size() == stock_nodes.size());
         for (i = 0; i < stock_pieces.size(); ++i) 
                 graph->add_edge(stock_nodes[i], new_order_node);
 
-
         /*
+
         graph_node *order_line_node = new graph_node();
         order_line_node->app = ol_pc;
         order_line_node->partition = get_tpcc_partition(no_conf.warehouse_id, 
@@ -304,6 +349,7 @@ txn_graph* gen_new_order(workload_config conf, __attribute__((unused)) uint32_t 
         graph->add_edge(warehouse_node, order_line_node);
         //        graph->add_edge(new_order_node, order_line_node);
         */
+        //        assert(graph->get_nodes()->size() == + stock_nodes.size());
         return graph;
 }
 

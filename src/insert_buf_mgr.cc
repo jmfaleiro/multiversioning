@@ -24,8 +24,8 @@ void insert_buf_mgr::alloc_entries(uint32_t table_id, size_t record_sz,
 
         /* Allocate data */
         //data = (char*)alloc_mem(entry_sz*num_records, _cpu);
-        //        assert(data != NULL);
-        //        memset(data, 0x0, entry_sz*num_records);
+        //assert(data != NULL);
+        //memset(data, 0x0, entry_sz*num_records);
         data = (char*)zmalloc(entry_sz*num_records);
 
         /* Setup */
