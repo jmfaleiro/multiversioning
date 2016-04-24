@@ -244,12 +244,15 @@ bool split_ycsb_acc::Run()
         uint32_t i, j, ntxns;
         uint32_t *temp;
         
+        _accumulated = _read_txns[0]->_accumulated;
         //        accumulated = &(_read_txns[0]->_accumulated);
         ntxns = _read_txns.size();
         for (i = 1; i < ntxns; ++i) {
-                temp = _read_txns[i]->_accumulated;
-                for (j = 0; j < 10; ++j) 
-                        _read_txns[0]->_accumulated[j] += temp[j];
+                _accumulated[0] += _accumulated[i];
+                //                temp = _accumulatr_read_txns[i]->_accumulated;
+                //                *_accumulated += temp;
+                //                for (j = 0; j < 10; ++j) 
+                //                        _read_txns[0]->_accumulated[j] += temp[j];
                 //                        (*_accumulated)[j] += temp[j];
         }
         return true;
@@ -289,9 +292,9 @@ bool split_ycsb_update::Run()
         uint32_t i, nwrites, total;
         char *record;
 
-        total = 0;
-        for (i = 0; i < _nreads; ++i) 
-                total += _accumulated[i];
+        total = *_accumulated;//0;
+        //        for (i = 0; i < _nreads; ++i) 
+        //                total += _accumulated[i];
         
         nwrites = _writes.size();
         for (i = 0; i < nwrites; ++i) {

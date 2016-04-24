@@ -25,7 +25,7 @@ fmt_multi_cc = "build/db --cc_type 0 --num_cc_threads {0} --num_txns {1} --epoch
 
 def main():
     for i in range(0, 200):
-        tpcc()
+        test_locking()
 #        new_contention()
 
 
@@ -49,8 +49,15 @@ def tpcc():
     whs = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40]
     ntxns = 3000000
     for w in whs:
-        split_expt(fixed_dir, "split.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 20, 0, 0, 20, 10)
-        split_expt(vary_dir, "split.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 20, 0, 0, 20, w)
+#        locking_expt(fixed_dir, "locking.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, 20)
+#        occ_expt(fixed_dir, "occ.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, 20)
+#        rc_expt(fixed_dir, "rc.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, 20)
+        split_expt(fixed_dir, "split_new.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 20, 0, 0, 20, 10)
+#        split_expt(vary_dir, "split.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 20, 0, 0, 20, w)
+
+
+
+#        split_expt(vary_dir, "split.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 20, 0, 0, 20, w)
     
 
 
@@ -71,31 +78,43 @@ def new_contention():
 
         
 def test_locking():
-    reads_dir = "results/ycsb/update/reads/low/"
-    high_dir = "results/ycsb/read_write/high/"
-    low_dir = "results/ycsb/read_write/low/"
+    reads_dir = "results/ycsb/read_write/vary"
+    high_dir = "results/ycsb/aborts/high/"
+    low_dir = "results/ycsb/aborts/low/"
 
-    locking_expt(high_dir, "locking.txt", 4, 40, ntxns, 1000000, 5, 1, 0.9, 1000, 0, 20)
-    occ_expt(high_dir, "occ.txt", 4, 40, ntxns, 1000000, 5, 1, 0.9, 1000, 0, 20)
-    rc_expt(high_dir, "rc.txt", 4, 40, ntxns, 1000000, 5, 1, 0.9, 1000, 0, 20)
-    split_expt(high_dir, "split.txt", 4, 40, ntxns, 1000000, 5, 1, 0.9, 1000, 20, 0, 0, 20)
+    ntxns = 3000000
+    for p in [0,2,4,6,8,10,12,14,16,18,20]:
+        split_expt(low_dir, "split_new.txt", 40, 40, ntxns, 1000000, 4, 1, 0.0, 1000, 20, p, 0, 20, 0)
+        clean.abort_fn(os.path.join(low_dir, "split_new.txt"), os.path.join(low_dir, "split_new_out.txt"))
+        split_expt(high_dir, "split_new.txt", 40, 40, ntxns, 1000000, 4, 1, 0.9, 1000, 20, p, 0, 20, 0)
+        clean.abort_fn(os.path.join(high_dir, "split_new.txt"), os.path.join(high_dir, "split_new_out.txt"))
+        
+    for t in [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]:
+        split_expt(reads_dir, "split_new.txt", 40, 40, ntxns, 1000000, 4, 1, t, 1000, 20, 0, 0, 20, 0)
+        clean.theta_fn("locking", os.path.join(reads_dir, "split_new.txt"), os.path.join(reads_dir, "split_new_out.txt"))
 
-    locking_expt(low_dir, "locking.txt", 4, 40, ntxns, 1000000, 5, 1, 0.0, 1000, 0, 20)
-    occ_expt(low_dir, "occ.txt", 4, 40, ntxns, 1000000, 5, 1, 0.0, 1000, 0, 20)
-    rc_expt(low_dir, "rc.txt", 4, 40, ntxns, 1000000, 5, 1, 0.0, 1000, 0, 20)
-    split_expt(low_dir, "split.txt", 4, 40, ntxns, 1000000, 5, 1, 0.0, 1000, 20, 0, 0, 20)
+#     locking_expt(high_dir, "locking.txt", 4, 40, ntxns, 1000000, 5, 1, 0.9, 1000, 0, 20)
+#     occ_expt(high_dir, "occ.txt", 4, 40, ntxns, 1000000, 5, 1, 0.9, 1000, 0, 20)
+#     rc_expt(high_dir, "rc.txt", 4, 40, ntxns, 1000000, 5, 1, 0.9, 1000, 0, 20)
+#     split_expt(high_dir, "split.txt", 4, 40, ntxns, 1000000, 5, 1, 0.9, 1000, 20, 0, 0, 20)
+# 
+#     locking_expt(low_dir, "locking.txt", 4, 40, ntxns, 1000000, 5, 1, 0.0, 1000, 0, 20)
+#     occ_expt(low_dir, "occ.txt", 4, 40, ntxns, 1000000, 5, 1, 0.0, 1000, 0, 20)
+#     rc_expt(low_dir, "rc.txt", 4, 40, ntxns, 1000000, 5, 1, 0.0, 1000, 0, 20)
+#     split_expt(low_dir, "split.txt", 4, 40, ntxns, 1000000, 5, 1, 0.0, 1000, 20, 0, 0, 20)
+# 
+#     
+#     ntxns = 2000000
+#     for p in [100,95,90,80,70,60,50,40,30,20,10,0]:        
+#         split_expt(reads_dir, "split.txt", 40, 40, ntxns, 1000000, 4, 1, 0.0, 1000, 20, 0, p, 50)
+#         clean.reads_fn(os.path.join(reads_dir, "split.txt"), os.path.join(reads_dir, "split_out.txt"))
 
-    
-#    ntxns = 2000000
-#    for p in [100,95,90,80,70,60,50,40,30,20,10,0]:        
 #        locking_expt(reads_dir, "locking.txt", 40, 40, ntxns, 1000000, 4, 1, 0.0, 1000, p, 20)
 #        clean.reads_fn(os.path.join(reads_dir, "locking.txt"), os.path.join(reads_dir, "locking_out.txt"))
 #        occ_expt(reads_dir, "occ.txt", 40, 40, ntxns, 1000000, 4, 1, 0.0, 1000, p, 20)
 #        clean.reads_fn(os.path.join(reads_dir, "occ.txt"), os.path.join(reads_dir, "occ_out.txt"))
 #        rc_expt(reads_dir, "rc.txt", 40, 40, ntxns, 1000000, 4, 1, 0.0, 1000, p, 20)
 #        clean.reads_fn(os.path.join(reads_dir, "rc.txt"), os.path.join(reads_dir, "rc_out.txt"))
-#        split_expt(reads_dir, "split.txt", 40, 40, ntxns, 1000000, 4, 1, 0.0, 1000, 20, 0, p, 50)
-#        clean.reads_fn(os.path.join(reads_dir, "split.txt"), os.path.join(reads_dir, "split_out.txt"))
 
 
 #     for i in [20,18,16,14,12,10,8,6,4,2,0]:

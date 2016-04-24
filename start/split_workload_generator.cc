@@ -378,7 +378,7 @@ txn_graph* gen_read_write(RecordGenerator *gen, workload_config conf,
         graph_node *cur_node, *writer;
         vector<graph_node*> *nodes, read_nodes, write_nodes;
         vector<split_ycsb_read*> read_txns;
-        //        split_ycsb_acc *accumulator_action;
+        split_ycsb_acc *accumulator_action;
         split_ycsb_read *current_read;
 
         write_graph = new txn_graph();
@@ -434,8 +434,8 @@ txn_graph* gen_read_write(RecordGenerator *gen, workload_config conf,
         
         /* Create accumulator */
         //        accumulator_action = NULL;
-        //        accumulator_action = new split_ycsb_acc(read_txns);
-        //        (*nodes)[0]->after = accumulator_action;
+        accumulator_action = new split_ycsb_acc(read_txns);
+        (*nodes)[0]->after = accumulator_action;
         
         /* Create write actions */
         nodes = write_graph->get_nodes();

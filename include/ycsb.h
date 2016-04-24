@@ -83,7 +83,7 @@ class split_ycsb_read : public txn {
 class split_ycsb_acc : public txn {
         friend class split_ycsb_update;
  private:
-        uint32_t 			**_accumulated;
+        uint32_t 			*_accumulated;
         vector<split_ycsb_read*> 	_read_txns;
 
  public:
