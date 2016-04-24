@@ -206,10 +206,10 @@ namespace split_new_order {
                 std::vector<stock_update_data> 		_info;
 
         public:
-                uint32_t 				_supplier_id;
+                uint32_t 				_partition;
 
                 update_stocks(uint32_t wh_id, uint32_t dstrct_id, 
-                              uint32_t supplier_id,
+                              uint32_t partition,
                               stock_update_data *info, 
                               uint32_t num_stocks);
 

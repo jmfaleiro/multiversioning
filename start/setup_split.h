@@ -186,17 +186,20 @@ public:
                                  split_config s_conf, 
                                  vector<int> cpus)
         {
-                uint32_t i, j, ncpus, sizes[s_conf.num_partitions], index;
+                uint32_t i, j, ncpus, sizes[s_conf.num_partitions], next[s_conf.num_partitions], index;
                 int cpu;
                 TableConfig t_conf;
                 split_record splt_rec;
-                stock_record stock;
+                stock_record *stock[s_conf.num_partitions], *temp;
 
                 memset(sizes, 0x0, sizeof(uint32_t)*s_conf.num_partitions);
+                memset(next, 0x0, sizeof(uint32_t)*s_conf.num_partitions);
                 for (i = 0; i < w_conf.num_warehouses; ++i) {
-                        index = get_tpcc_partition(i, 0, STOCK_TABLE, 
-                                                   s_conf.num_partitions);
-                        sizes[index] += 1;
+                        for (j = 0; j < NUM_ITEMS; ++j) {
+                                index = get_tpcc_partition(i, j, STOCK_TABLE, 
+                                                           s_conf.num_partitions);
+                                sizes[index] += 1;
+                        }
                 }
 
                 /* Allocate tables */
@@ -209,26 +212,40 @@ public:
                         t_conf.valueSz = sizeof(split_record);
                         t_conf.recordSize = sizeof(split_record);
                         lock_tbls[i][STOCK_TABLE] = new(i) Table(t_conf);
+                        stock[i] = (stock_record*)alloc_mem(sizeof(stock_record)*sizes[i], i);
+                        memset(stock[i], 0x0, sizeof(stock_record)*sizes[i]);
 
+                        /*
                         t_conf.valueSz = sizeof(stock_record);
                         t_conf.recordSize = sizeof(stock_record);
                         t_conf.numBuckets = 2*sizes[i]*NUM_ITEMS;
                         t_conf.freeListSz = sizes[i]*NUM_ITEMS;
-                        data_tbls[i][STOCK_TABLE] = new(i) Table(t_conf);
+                        */
+                        data_tbls[i][STOCK_TABLE] = NULL;
                 }
 
                 /* Insert stock records */
                 for (i = 0; i < w_conf.num_warehouses; ++i) {
-                        cpu = get_tpcc_partition(i, 0, STOCK_TABLE, s_conf.num_partitions);
+                        for (j = 0; j < NUM_ITEMS; ++j) {
+                                cpu = get_tpcc_partition(i, j, STOCK_TABLE, s_conf.num_partitions);
+                                index = next[cpu];
+                                next[cpu] += 1;
+                                temp = &stock[cpu][index];
 
-                        splt_rec.key.key = (uint64_t)i;
-                        splt_rec.key.table_id = STOCK_TABLE;
-                        splt_rec.epoch = 0;
-                        splt_rec.key_struct = NULL;
-                        splt_rec.value = NULL;
+                                splt_rec.key.key = tpcc_util::create_stock_key(i, j);
+                                splt_rec.key.table_id = STOCK_TABLE;
+                                splt_rec.epoch = 0;
+                                splt_rec.key_struct = NULL;
+                                splt_rec.value = (char*)temp;
 
-                        lock_tbls[cpu][STOCK_TABLE]->Put((uint64_t)i, &splt_rec);
-                        init_stock(data_tbls[cpu][STOCK_TABLE], i);
+                                temp->s_w_id = i;
+                                temp->s_i_id = j;
+                                setup_stock_single(temp);
+
+                                lock_tbls[cpu][STOCK_TABLE]->Put(tpcc_util::create_stock_key(i, j), 
+                                                                 &splt_rec);
+                                //                                init_stock(data_tbls[cpu][STOCK_TABLE], i);
+                        }
                 }
         }        
         

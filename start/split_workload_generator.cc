@@ -43,6 +43,7 @@ uint32_t get_tpcc_warehouse_partition(uint32_t warehouse, uint32_t type, uint32_
 {
 
         uint32_t temp;
+        assert(type == WAREHOUSE_TABLE);
         if (type == WAREHOUSE_TABLE) {
                 return warehouse % num_partitions;
         } else if (type == STOCK_TABLE) {
@@ -59,6 +60,10 @@ uint32_t get_tpcc_district_partition(uint32_t warehouse, uint32_t district,
                                      uint32_t type,
                                      uint32_t num_partitions)
 {
+        assert(type == DISTRICT_TABLE || type == NEW_ORDER_TABLE || 
+               type == CUSTOMER_TABLE ||
+               type == OORDER_TABLE ||
+               type == ORDER_LINE_TABLE);
         //        return  % num_partitions;
         /*
 
@@ -92,13 +97,20 @@ uint32_t get_tpcc_district_partition(uint32_t warehouse, uint32_t district,
         return Hash128to64(std::make_pair(temp0, type)) % num_partitions;
 }
 
+uint32_t get_tpcc_stock_partition(uint32_t warehouse, uint32_t item, uint32_t type, uint32_t num_partitions)
+{
+        assert(type == STOCK_TABLE);
+        return item % num_partitions;
+}
+
 uint32_t get_tpcc_partition(uint32_t warehouse, uint32_t district, uint32_t type, 
                             uint32_t num_partitions)
 {
         switch (type) {
         case WAREHOUSE_TABLE:
-        case STOCK_TABLE:
                 return get_tpcc_warehouse_partition(warehouse, type, num_partitions);
+        case STOCK_TABLE:
+                return get_tpcc_stock_partition(warehouse, district, type, num_partitions);
         case DISTRICT_TABLE:
         case CUSTOMER_TABLE:
         case NEW_ORDER_TABLE:
@@ -212,7 +224,7 @@ txn_graph* gen_new_order(workload_config conf, __attribute__((unused)) uint32_t 
                                       no_conf.num_items);
         */
         for (i = 0; i < no_conf.num_items; ++i) {
-                cur_wh = no_conf.suppliers[i];
+                cur_wh = get_tpcc_partition(no_conf.suppliers[i], no_conf.items[i], STOCK_TABLE, num_partitions);
                 if (warehouse_cnt.count(cur_wh) == 0) 
                         warehouse_cnt[cur_wh] = 1;
                 else 
@@ -225,7 +237,8 @@ txn_graph* gen_new_order(workload_config conf, __attribute__((unused)) uint32_t 
                 stock_args = (stock_update_data*)zmalloc(sizeof(stock_update_data)*it->second);
                 cur_stock = 0;
                 for (j = 0; j < no_conf.num_items; ++j) {
-                        if (no_conf.suppliers[j] == it->first) {
+                        cur_wh = get_tpcc_partition(no_conf.suppliers[j], no_conf.items[j], STOCK_TABLE, num_partitions);
+                        if (cur_wh == it->first) {
                                 stock_args[cur_stock]._item_id = no_conf.items[j];
                                 stock_args[cur_stock]._quantity = no_conf.quants[j];
                                 stock_args[cur_stock]._supplier_wh = no_conf.suppliers[j];
@@ -270,7 +283,7 @@ txn_graph* gen_new_order(workload_config conf, __attribute__((unused)) uint32_t 
         for (i = 0; i < stock_pieces.size(); ++i) {
                 temp = new graph_node();
                 temp->app = stock_pieces[i];
-                temp->partition = get_tpcc_partition(stock_pieces[i]->_supplier_id, 0, STOCK_TABLE, num_partitions);
+                temp->partition = stock_pieces[i]->_partition;
                 //                assert(temp->partition == warehouse_node->partition);
                 stock_nodes.push_back(temp);
                 graph->add_node(temp);

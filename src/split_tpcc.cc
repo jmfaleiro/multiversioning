@@ -168,7 +168,7 @@ bool split_new_order::insert_order_lines::Run()
 }
 
 split_new_order::update_stocks::update_stocks(uint32_t wh_id, uint32_t dstrct_id,
-                                              uint32_t supplier_id, 
+                                              uint32_t partition,
                                               stock_update_data *info, 
                                               uint32_t num_stocks)
 {
@@ -176,7 +176,7 @@ split_new_order::update_stocks::update_stocks(uint32_t wh_id, uint32_t dstrct_id
         
         _wh_id = wh_id;
         _dstrct_id = dstrct_id;
-        _supplier_id = supplier_id;
+        _partition = partition;
         for (i = 0; i < num_stocks; ++i) 
                 _info.push_back(info[i]);
         for (i = 0; i < num_stocks; ++i) 
@@ -186,14 +186,20 @@ split_new_order::update_stocks::update_stocks(uint32_t wh_id, uint32_t dstrct_id
 
 uint32_t split_new_order::update_stocks::num_rmws()
 {
-        return 1;
-        //        return 0;
+        return _info.size();
 }
 
 void split_new_order::update_stocks::get_rmws(big_key *array)
 {
-        array[0].key = (uint64_t)_supplier_id;
-        array[0].table_id = STOCK_TABLE;
+        uint32_t i, nitems;
+        
+        nitems = _info.size();
+        for (i = 0; i < nitems; ++i) {
+                array[i].key = tpcc_util::create_stock_key(_info[i]._supplier_wh, _info[i]._item_id);
+                array[i].table_id = STOCK_TABLE;
+        }
+        //        array[0].key = (uint64_t)_supplier_id;
+        //        array[0].table_id = STOCK_TABLE;
 }
 
 /* update_stocks is a "root" piece. */

@@ -50,7 +50,7 @@ def tpcc():
     ntxns = 3000000
     for w in whs:
         split_expt(fixed_dir, "split.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 20, 0, 0, 20, 10)
-#        split_expt(vary_dir, "split.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 20, 0, 0, 20, w)
+        split_expt(vary_dir, "split.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 20, 0, 0, 20, w)
     
 
 
