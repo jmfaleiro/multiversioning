@@ -3,6 +3,8 @@
 #include <cpuinfo.h>
 #include <algorithm>
 
+OCCWorker** OCCWorker::worker_array = NULL;
+
 OCCWorker::OCCWorker(OCCWorkerConfig conf, struct RecordBuffersConfig rb_conf)
         : Runnable(conf.cpu)
 {
@@ -11,6 +13,8 @@ OCCWorker::OCCWorker(OCCWorkerConfig conf, struct RecordBuffersConfig rb_conf)
         this->mgr = new(conf.cpu) mcs_mgr(NUM_MCS_LOCKS, conf.cpu);
         this->insert_mgr = new(conf.cpu) insert_buf_mgr(conf.cpu, 11, 
                                                         tpcc_record_sizes);
+        memset(&warehouse, 0x0, sizeof(warehouse_wrapper));
+        memset(district, 0x0, sizeof(district_wrapper)*10);
 }
 
 void OCCWorker::Init()
@@ -195,4 +199,14 @@ bool OCCWorker::RunSingle(OCCAction *action)
         }        
         mgr->return_struct(action->lck);        
         return validated;
+}
+
+district_wrapper* OCCWorker::get_district(uint32_t d)
+{
+        return &this->district[d];
+}
+
+warehouse_wrapper* OCCWorker::get_warehouse()
+{
+        return &this->warehouse;
 }

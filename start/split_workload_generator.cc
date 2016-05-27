@@ -42,54 +42,21 @@ uint32_t get_partition(uint64_t record, __attribute__((unused)) uint32_t table,
 uint32_t get_tpcc_warehouse_partition(uint32_t warehouse, uint32_t type, uint32_t num_partitions)
 {
 
-        uint32_t temp;
         if (type == WAREHOUSE_TABLE) {
                 return warehouse % num_partitions;
         } else if (type == STOCK_TABLE) {
                 return num_partitions - 1 - (warehouse % num_partitions);
-                //                temp = warehouse % num_partitions;
-                //                return num_partitions - 1 - temp;
+        } else {
+                assert(false);
+                return 0;
         }
-
-        //        uint64_t temp = ((uint64_t)type << 32) | num_partitions;
-        //        return Hash128to64(std::make_pair(warehouse, type)) % num_partitions;
 }
 
 uint32_t get_tpcc_district_partition(uint32_t warehouse, uint32_t district, 
-                                     uint32_t type,
+                                     __attribute__((unused)) uint32_t type,
                                      uint32_t num_partitions)
 {
-        //        return  % num_partitions;
-        /*
-
-                if (type == DISTRICT_TABLE)
-                        return 0;
-                else if (type == CUSTOMER_TABLE)
-                        return 1;
-                uint32_t index;
-                index = warehouse*NUM_DISTRICTS + district;
-                return 2 + index % (num_partitions - 2);
-        */
-
-
         return (warehouse * NUM_DISTRICTS + district) % num_partitions;
-        /*
-        if (type == DISTRICT_TABLE)
-                return 1;
-        else if (type == CUSTOMER_TABLE)
-                return 2;
-        return 3 + ((warehouse*NUM_DISTRICTS + district) % (num_partitions - 3));
-        */
-        //        assert(district < NUM_DISTRICTS);
-        //        uint32_t index;
-        //        index = warehouse*NUM_DISTRICTS + district;
-                //        return warehouse % num_partitions;
-
-        uint64_t temp0, temp1;
-        
-        temp1 = ((uint64_t)type << 32) | num_partitions;
-        temp0 = ((((uint64_t)warehouse) << 32) | district);
-        return Hash128to64(std::make_pair(temp0, type)) % num_partitions;
 }
 
 uint32_t get_tpcc_partition(uint32_t warehouse, uint32_t district, uint32_t type, 
@@ -190,9 +157,9 @@ txn_graph* gen_new_order(workload_config conf, __attribute__((unused)) uint32_t 
         read_customer *customer_pc;
         insert_new_order *new_order_pc;
         update_stocks *stock_pc;
-        insert_oorder *oorder_pc;
+        __attribute__((unused)) insert_oorder *oorder_pc;
         vector<update_stocks*> stock_pieces;
-        insert_order_lines *ol_pc;
+        __attribute__((unused)) insert_order_lines *ol_pc;
         
         no_conf = gen_neworder_conf(conf);
         warehouse_pc = new read_warehouse(no_conf.warehouse_id);

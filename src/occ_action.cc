@@ -169,10 +169,19 @@ uint64_t OCCAction::stable_copy(uint64_t key, uint32_t table_id, void **rec_ptr,
 
         tbl = tbl_mgr->get_table(table_id);
         assert(tbl != NULL);
-        value = tbl->Get(key);
+
+        if (table_id == WAREHOUSE_TABLE) {
+                value = OCCWorker::worker_array[key]->get_warehouse();
+        } else if (table_id == DISTRICT_TABLE) {
+                value = OCCWorker::worker_array[tpcc_util::get_warehouse_key(key)]->get_district(tpcc_util::get_district_key(key));
+        } else {
+                value = tbl->Get(key);
+        }
+
         *rec_ptr = value;
         record_size = REAL_RECORD_SIZE(tbl->RecordSize());
         tid_ptr = (volatile uint64_t*)value;
+        
         while (true) {
                 barrier();
                 ret = *tid_ptr;
@@ -222,6 +231,7 @@ void OCCAction::validate()
                 assert(this->readset[i].is_initialized == true);
                 validate_single(this->readset[i]);
         }
+
         num_writes = this->writeset.size();
         for (i = 0; i < num_writes; ++i) {
                 assert(this->writeset[i].is_initialized == true);
@@ -371,11 +381,11 @@ uint64_t OCCAction::gen_guid()
 
 void* OCCAction::read(uint64_t key, uint32_t table_id)
 {
+
         uint64_t tid;
         void *record;
         uint32_t i, num_reads;
         occ_composite_key *comp_key;
-
 
         num_reads = this->readset.size();
         comp_key = NULL;
@@ -421,7 +431,13 @@ void OCCAction::acquire_locks()
                 } else { 
                         assert(this->writeset[i].is_initialized == true);
                         if (this->writeset[i].is_rmw == false) {
-                                value = tbl_mgr->get_table(table_id)->GetAlways(key);
+                                if (table_id == WAREHOUSE_TABLE) {
+                                        value = OCCWorker::worker_array[key]->get_warehouse();
+                                } else if (table_id == DISTRICT_TABLE) {
+                                        value = OCCWorker::worker_array[tpcc_util::get_warehouse_key(key)]->get_district(tpcc_util::get_district_key(key));
+                                } else {
+                                        value = tbl_mgr->get_table(table_id)->Get(key);
+                                }
                                 this->writeset[i].record_ptr = value;
                         }
                         value = this->writeset[i].record_ptr;
@@ -449,7 +465,7 @@ void OCCAction::release_locks()
 
 void OCCAction::cleanup_single(occ_composite_key &comp_key)
 {
-        //        assert(comp_key.value != NULL);
+        assert(comp_key.value != NULL);
         this->record_alloc->ReturnRecord(comp_key.tableId, comp_key.value);
         comp_key.value = NULL;
         comp_key.is_initialized = false;        
@@ -475,11 +491,21 @@ uint64_t OCCAction::compute_tid(uint32_t epoch, uint64_t last_tid)
                                 max_tid = cur_tid;
                 }
         }
+
         for (i = 0; i < num_writes; ++i) {
                 assert(this->writeset[i].is_initialized == true);
                 table_id = this->writeset[i].tableId;
-                key = this->writeset[i].key;                
-                value = (volatile uint64_t*)tbl_mgr->get_table(table_id)->GetAlways(key);
+                key = this->writeset[i].key;
+                
+                if (table_id == WAREHOUSE_TABLE) {
+                        value = (volatile uint64_t*)OCCWorker::worker_array[key]->get_warehouse();
+                } else if (table_id == DISTRICT_TABLE) {
+                        value = (volatile uint64_t*)OCCWorker::worker_array[tpcc_util::get_warehouse_key(key)]->get_district(tpcc_util::get_district_key(key));
+                } else {
+                        value = (volatile uint64_t*)tbl_mgr->get_table(table_id)->Get(key);
+                }
+
+
                 assert(READ_COMMITTED || IS_LOCKED(*value));
                 barrier();
                 cur_tid = GET_TIMESTAMP(*value);
@@ -509,12 +535,13 @@ void OCCAction::cleanup()
                 if (this->writeset[i].is_initialized == true)
                        cleanup_single(this->writeset[i]);
         }
+
         num_reads = this->readset.size();
         for (i = 0; i < num_reads; ++i) {
                 if (this->readset[i].is_initialized == true)
                         cleanup_single(this->readset[i]);
         }
-        
+
         insert_ptr = 0;
 }
 
@@ -531,7 +558,14 @@ void OCCAction::install_single_write(occ_composite_key &comp_key)
         record_size = tbl->RecordSize();
         
         if (READ_COMMITTED) {
-                value = tbl->GetAlways(comp_key.key);
+                if (comp_key.tableId == WAREHOUSE_TABLE) {
+                        value = OCCWorker::worker_array[comp_key.key]->get_warehouse();
+                } else if (comp_key.tableId == DISTRICT_TABLE) {
+                        value = OCCWorker::worker_array[tpcc_util::get_warehouse_key(comp_key.key)]->get_district(tpcc_util::get_district_key(comp_key.key));
+                } else {
+                        value = tbl->Get(comp_key.key);
+                }
+
                 acquire_single((volatile uint64_t*)value);
         } else {
                 value = comp_key.record_ptr;

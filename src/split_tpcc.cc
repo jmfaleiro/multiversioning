@@ -133,11 +133,12 @@ split_new_order::insert_order_lines::insert_order_lines(uint32_t wh_id,
 /* Depends on the update_stocks and update_district pieces */
 bool split_new_order::insert_order_lines::Run()
 {
-        order_line_record order_line;
+        return true;
+                    
+        /*       
         uint32_t i, j, order_id, num_stocks, count;
         update_stocks *stock_piece;
         stock_update_data *stock_data;
-        item_record *item;
 
         order_id = _dstrct_pc->_order_id;
         order_line.ol_o_id = order_id;
@@ -153,18 +154,18 @@ bool split_new_order::insert_order_lines::Run()
                 for (j = 0; j < num_stocks; ++j) {
                         order_line.ol_number = count;
                         count += 1;
-                        /*
-                        stock_data = &stock_piece->_info[j];
+                          stock_data = &stock_piece->_info[j];
                         order_line.ol_supply_w_id = stock_data->_supplier_wh;
                         order_line.ol_quantity = stock_data->_quantity;
                         order_line.ol_i_id = stock_data->_item_id;
                         item = (item_record*)get_read_ref((uint64_t)stock_data->_item_id, ITEM_TABLE);
                         order_line.ol_amount = item->i_price*stock_data->_quantity;
-                        */
+  
                         //                        strcpy(order_line.ol_dist_info, stock_data->_district_info);
                 }
         }
         return true;
+        */
 }
 
 split_new_order::update_stocks::update_stocks(uint32_t wh_id, uint32_t dstrct_id,

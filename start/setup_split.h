@@ -183,14 +183,12 @@ public:
         
         static void setup_stocks(Table ***lock_tbls, Table ***data_tbls, 
                                  workload_config w_conf, 
-                                 split_config s_conf, 
-                                 vector<int> cpus)
+                                 split_config s_conf)
         {
-                uint32_t i, j, ncpus, sizes[s_conf.num_partitions], index;
+                uint32_t i, sizes[s_conf.num_partitions], index;
                 int cpu;
                 TableConfig t_conf;
                 split_record splt_rec;
-                stock_record stock;
 
                 memset(sizes, 0x0, sizeof(uint32_t)*s_conf.num_partitions);
                 for (i = 0; i < w_conf.num_warehouses; ++i) {
@@ -422,10 +420,9 @@ public:
 
         static void setup_items(Table ***tbls, split_config s_conf)
         {
-                int cpu_min, cpu_max;
                 TableConfig t_conf;
                 Table *tbl;
-                uint32_t i, ncpus;
+                uint32_t i;
                 item_record record;
 
                 /* Allocate table */
@@ -473,7 +470,7 @@ public:
                                     workload_config w_conf, 
                                     split_config s_conf)
         {
-                uint32_t i, j, index, wh, sizes[s_conf.num_partitions];
+                uint32_t i, j, index, sizes[s_conf.num_partitions];
                 int cpu;
                 TableConfig t_conf;
                 split_record splt_rec;
@@ -637,7 +634,7 @@ public:
                 assert(table_id == NEW_ORDER_TABLE || 
                        table_id == OORDER_TABLE || 
                        table_id == ORDER_LINE_TABLE);
-                uint32_t i, j, cpu, index, wh, d, sizes[s_conf.num_partitions];
+                uint32_t i, j, cpu, index, sizes[s_conf.num_partitions];
                 split_record splt_rec;
                 uint64_t key;
                 TableConfig t_conf;
@@ -771,8 +768,7 @@ public:
                                 stock_cpus.push_back((int)i);
                         else 
                                 ol_cpus.push_back((int)i);
-                setup_stocks(ltabs, dtabs, w_conf, s_conf, 
-                             stock_cpus);
+                setup_stocks(ltabs, dtabs, w_conf, s_conf);
                 setup_items(dtabs, s_conf);
                 setup_order_lines(ltabs, dtabs, w_conf, s_conf);
         }

@@ -372,6 +372,7 @@ OCCWorker** setup_occ_workers(SimpleQueue<OCCActionBatch> **inputQueue,
                 workers[i] = new(i) OCCWorker(worker_config, buf_config);
         }
         std::cerr << "Done setting up occ workers\n";
+        OCCWorker::worker_array = workers;
         return workers;
 }
 
@@ -472,20 +473,24 @@ table_mgr* setup_tpcc_tables(workload_config w_conf, bool occ)
         for (i = 0; i < 11; ++i) {
                 switch (i) {
                 case WAREHOUSE_TABLE:
+                        /*
                         rw_tbls[i] = setup_single_table((uint64_t)i,
                                                         2*w_conf.num_warehouses,
                                                         0,
                                                         71,
                                                         2*w_conf.num_warehouses,
                                                         occ? sizeof(warehouse_record)+8 : sizeof(warehouse_record));
+                        */
                         break;
                 case DISTRICT_TABLE:
+                        /*
                         rw_tbls[i] = setup_single_table((uint64_t)i,
                                                         2*NUM_DISTRICTS*w_conf.num_warehouses,
                                                         0,
                                                         71,
                                                         2*NUM_DISTRICTS*w_conf.num_warehouses, 
                                                         occ? sizeof(district_record)+8:sizeof(district_record));
+                        */
                         break;
                 case CUSTOMER_TABLE:
                          rw_tbls[i] = setup_single_table((uint64_t)i,

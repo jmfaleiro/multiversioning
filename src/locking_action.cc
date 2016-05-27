@@ -124,6 +124,8 @@ void* locking_action::write_ref(uint64_t key, uint32_t table_id)
 
 void* locking_action::read(uint64_t key, uint32_t table_id)
 {
+        return tables->get_table(table_id)->Get(key);
+        /*
         locking_key *k;
         int index;
         
@@ -133,6 +135,7 @@ void* locking_action::read(uint64_t key, uint32_t table_id)
         if (k->value == NULL) 
                 k->value = lookup(k);
         return k->value;
+        */
 }
 
 void* locking_action::insert_ref(uint64_t key, uint32_t table_id)

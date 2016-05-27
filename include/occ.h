@@ -8,6 +8,7 @@
 #include <exception>
 #include <record_buffer.h>
 #include <table_mgr.h>
+#include <tpcc.h>
 
 #define NUM_MCS_LOCKS	1000
 
@@ -41,8 +42,20 @@ struct OCCWorkerConfig {
         uint32_t num_tables;
 };
 
+struct district_wrapper {
+        uint64_t tid;
+        district_record district;
+};
+
+struct warehouse_wrapper {
+        uint64_t tid;
+        warehouse_record warehouse;
+};
 
 class OCCWorker : public Runnable {
+ public:
+        static OCCWorker **worker_array;
+
  private:        
         OCCWorkerConfig 	config;
         uint64_t 		incr_timestamp;
@@ -52,6 +65,9 @@ class OCCWorker : public Runnable {
         RecordBuffers 		*bufs;
         mcs_mgr 		*mgr;
         insert_buf_mgr		*insert_mgr;
+
+        district_wrapper 	district[10];
+        warehouse_wrapper 	warehouse;
         
         virtual bool RunSingle(OCCAction *action);
         virtual uint32_t exec_pending(OCCAction **action_list);
@@ -70,6 +86,9 @@ class OCCWorker : public Runnable {
         
         OCCWorker(OCCWorkerConfig conf, RecordBuffersConfig rb_conf);
         virtual uint64_t NumCompleted();
+        
+        district_wrapper *get_district(uint32_t d);
+        warehouse_wrapper *get_warehouse();
 };
 
 #endif		// OCC_H_
