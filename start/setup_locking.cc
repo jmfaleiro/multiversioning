@@ -337,3 +337,9 @@ void locking_experiment(locking_config conf, workload_config w_conf)
                                 1+EXTRA_BATCHES, setup_txns, tables);
         write_locking_output(conf, result, w_conf);
 }
+
+table_mgr* setup_hash_tables(__attribute__((unused)) workload_config w_conf, 
+                             __attribute__((unused)) bool occ)
+{
+        return NULL;
+}

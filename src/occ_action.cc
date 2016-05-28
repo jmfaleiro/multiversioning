@@ -162,14 +162,22 @@ uint64_t OCCAction::stable_copy(uint64_t key, uint32_t table_id, void **rec_ptr,
                                 void *record_copy)
 {
         volatile uint64_t *tid_ptr;
-        uint32_t record_size;
+        uint32_t record_size, warehouse;
         uint64_t ret, after_read;
         void *value;
         Table *tbl;
 
-        tbl = tbl_mgr->get_table(table_id);
-        assert(tbl != NULL);
+        if (table_id != ITEM_TABLE) {
+                warehouse = tpcc_util::get_warehouse_key(key);
+                tbl = OCCWorker::mgr_array[warehouse]->get_table(table_id);
+        } else {
+                tbl = OCCWorker::mgr_array[0]->get_table(table_id);
+        }
 
+        //        tbl = tbl_mgr->get_table(table_id);
+        assert(tbl != NULL);
+        value = tbl->Get(key);
+        /*
         if (table_id == WAREHOUSE_TABLE) {
                 value = OCCWorker::worker_array[key]->get_warehouse();
         } else if (table_id == DISTRICT_TABLE) {
@@ -177,7 +185,7 @@ uint64_t OCCAction::stable_copy(uint64_t key, uint32_t table_id, void **rec_ptr,
         } else {
                 value = tbl->Get(key);
         }
-
+        */
         *rec_ptr = value;
         record_size = REAL_RECORD_SIZE(tbl->RecordSize());
         tid_ptr = (volatile uint64_t*)value;
@@ -381,7 +389,6 @@ uint64_t OCCAction::gen_guid()
 
 void* OCCAction::read(uint64_t key, uint32_t table_id)
 {
-
         uint64_t tid;
         void *record;
         uint32_t i, num_reads;
@@ -409,7 +416,7 @@ void* OCCAction::read(uint64_t key, uint32_t table_id)
 
 void OCCAction::acquire_locks()
 {
-        uint32_t i, num_writes, table_id;
+        uint32_t i, num_writes, table_id, wh;
         uint64_t key;
         void *value;
         mcs_struct *cur_lock;
@@ -431,13 +438,22 @@ void OCCAction::acquire_locks()
                 } else { 
                         assert(this->writeset[i].is_initialized == true);
                         if (this->writeset[i].is_rmw == false) {
+                                if (table_id != ITEM_TABLE) {
+                                        wh = tpcc_util::get_warehouse_key(key);
+                                        value = OCCWorker::mgr_array[wh]->get_table(table_id)->GetAlways(key);
+                                } else {
+                                        value = OCCWorker::mgr_array[0]->get_table(table_id)->GetAlways(key);
+                                }
+
+                                /*
                                 if (table_id == WAREHOUSE_TABLE) {
                                         value = OCCWorker::worker_array[key]->get_warehouse();
                                 } else if (table_id == DISTRICT_TABLE) {
                                         value = OCCWorker::worker_array[tpcc_util::get_warehouse_key(key)]->get_district(tpcc_util::get_district_key(key));
                                 } else {
-                                        value = tbl_mgr->get_table(table_id)->Get(key);
+                                        value = tbl_mgr->get_table(table_id)->GetAlways(key);
                                 }
+                                */
                                 this->writeset[i].record_ptr = value;
                         }
                         value = this->writeset[i].record_ptr;
@@ -474,7 +490,7 @@ void OCCAction::cleanup_single(occ_composite_key &comp_key)
 uint64_t OCCAction::compute_tid(uint32_t epoch, uint64_t last_tid)
 {
         uint64_t max_tid, cur_tid, key;
-        uint32_t num_reads, num_writes, i, table_id;
+        uint32_t num_reads, num_writes, i, table_id, wh;
         volatile uint64_t *value;
         max_tid = CREATE_TID(epoch, 0);
         if (max_tid <  last_tid)
@@ -497,6 +513,13 @@ uint64_t OCCAction::compute_tid(uint32_t epoch, uint64_t last_tid)
                 table_id = this->writeset[i].tableId;
                 key = this->writeset[i].key;
                 
+                if (table_id != ITEM_TABLE) {
+                        wh = tpcc_util::get_warehouse_key(key);
+                        value = (volatile uint64_t*)OCCWorker::mgr_array[wh]->get_table(table_id)->Get(key);
+                } else {
+                        value = (volatile uint64_t*)OCCWorker::mgr_array[0]->get_table(table_id)->Get(key);
+                }
+                /*
                 if (table_id == WAREHOUSE_TABLE) {
                         value = (volatile uint64_t*)OCCWorker::worker_array[key]->get_warehouse();
                 } else if (table_id == DISTRICT_TABLE) {
@@ -504,7 +527,7 @@ uint64_t OCCAction::compute_tid(uint32_t epoch, uint64_t last_tid)
                 } else {
                         value = (volatile uint64_t*)tbl_mgr->get_table(table_id)->Get(key);
                 }
-
+                */
 
                 assert(READ_COMMITTED || IS_LOCKED(*value));
                 barrier();
@@ -551,19 +574,18 @@ void OCCAction::install_single_write(occ_composite_key &comp_key)
 
         void *value;
         uint64_t old_tid;
-        uint32_t record_size;
+        uint32_t wh, record_size;
         Table *tbl;
 
         tbl = tbl_mgr->get_table(comp_key.tableId);
         record_size = tbl->RecordSize();
         
         if (READ_COMMITTED) {
-                if (comp_key.tableId == WAREHOUSE_TABLE) {
-                        value = OCCWorker::worker_array[comp_key.key]->get_warehouse();
-                } else if (comp_key.tableId == DISTRICT_TABLE) {
-                        value = OCCWorker::worker_array[tpcc_util::get_warehouse_key(comp_key.key)]->get_district(tpcc_util::get_district_key(comp_key.key));
+                if (comp_key.tableId != ITEM_TABLE) {
+                        wh = tpcc_util::get_warehouse_key(comp_key.key);
+                        value = OCCWorker::mgr_array[wh]->get_table(comp_key.tableId)->Get(comp_key.key);
                 } else {
-                        value = tbl->Get(comp_key.key);
+                        value = OCCWorker::mgr_array[0]->get_table(comp_key.tableId)->Get(comp_key.key);
                 }
 
                 acquire_single((volatile uint64_t*)value);

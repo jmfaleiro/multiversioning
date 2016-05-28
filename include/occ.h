@@ -54,7 +54,7 @@ struct warehouse_wrapper {
 
 class OCCWorker : public Runnable {
  public:
-        static OCCWorker **worker_array;
+        static table_mgr **mgr_array;
 
  private:        
         OCCWorkerConfig 	config;
