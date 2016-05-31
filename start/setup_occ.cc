@@ -499,8 +499,8 @@ table_mgr** setup_tpcc_tables(workload_config w_conf, uint32_t num_threads, bool
                 case CUSTOMER_TABLE:
                          rw_tbls[j][i] = setup_single_table((uint64_t)i,
                                                          2*NUM_DISTRICTS*NUM_CUSTOMERS,
-                                                         j,
-                                                         j,
+                                                         0,
+                                                         num_threads-1,
                                                          2*NUM_DISTRICTS*NUM_CUSTOMERS,
                                                          occ? sizeof(customer_record)+8:sizeof(customer_record));
                         break;
@@ -516,16 +516,16 @@ table_mgr** setup_tpcc_tables(workload_config w_conf, uint32_t num_threads, bool
                 case STOCK_TABLE:
                          rw_tbls[j][i] = setup_single_table((uint64_t)i,
                                                             2*NUM_ITEMS,
-                                                            j,
-                                                            j,
+                                                            0,
+                                                            num_threads-1,
                                                             2*NUM_ITEMS,
                                                          occ? sizeof(stock_record)+8:sizeof(stock_record));
                         break;
                 case ITEM_TABLE: 
                          rw_tbls[j][i] = setup_single_table((uint64_t)i,
                                                          2*NUM_ITEMS,
-                                                            j,
-                                                            j,
+                                                            0,
+                                                            num_threads-1,
                                                          2*NUM_ITEMS,
                                                          occ? sizeof(item_record)+8:sizeof(item_record));
                         break;
@@ -535,16 +535,16 @@ table_mgr** setup_tpcc_tables(workload_config w_conf, uint32_t num_threads, bool
                 case DELIVERY_TABLE:
                          rw_tbls[j][i] = setup_single_table((uint64_t)i,
                                                          20,
-                                                         j,
-                                                         j,
+                                                         0,
+                                                         num_threads-1,
                                                          20,
                                                          occ? sizeof(uint64_t)+8:sizeof(uint64_t));
                         break;
                 case CUSTOMER_ORDER_INDEX:
                          rw_tbls[j][i] = setup_single_table((uint64_t)i,
                                                          3000*10,
-                                                         j,
-                                                         j,
+                                                         0,
+                                                         num_threads-1,
                                                          6000*10,
                                                          occ? sizeof(uint64_t)+8:sizeof(uint64_t));
                         break;

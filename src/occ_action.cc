@@ -273,15 +273,24 @@ void* OCCAction::insert_ref(uint64_t key, uint32_t table_id)
         TableRecord *record;
         concurrent_table *tbl;
         bool success;        
+        void *value;
 
         record = insert_mgr->get_insert_record(table_id);
         record->key = key;
         record->next = NULL;
+        value = (void*)record->value;
         tbl = tbl_mgr->get_conc_table(table_id);
         assert(tbl != NULL);
         success = tbl->Put(record, lck);
         assert(success == true);
-        return record->value;
+        
+        inserts[insert_ptr].record_ptr = record;
+        inserts[insert_ptr].tableId = table_id;
+        inserts[insert_ptr].key = key;
+
+        insert_ptr += 1;
+        //        xchgq((uint64_t*)value, 0x1);
+        return RECORD_VALUE_PTR(value);
         
         /*
         assert(insert_ptr < inserts.size());
@@ -316,7 +325,7 @@ void* OCCAction::insert_ref(uint64_t key, uint32_t table_id)
                 throw occ_validation_exception(INSERT_ERR);
         } 
 
-        insert_ptr += 1;
+
         return RECORD_VALUE_PTR(value);
         */
 }
@@ -515,9 +524,9 @@ uint64_t OCCAction::compute_tid(uint32_t epoch, uint64_t last_tid)
                 
                 if (table_id != ITEM_TABLE) {
                         wh = tpcc_util::get_warehouse_key(key);
-                        value = (volatile uint64_t*)OCCWorker::mgr_array[wh]->get_table(table_id)->Get(key);
+                        value = (volatile uint64_t*)OCCWorker::mgr_array[wh]->get_table(table_id)->GetAlways(key);
                 } else {
-                        value = (volatile uint64_t*)OCCWorker::mgr_array[0]->get_table(table_id)->Get(key);
+                        value = (volatile uint64_t*)OCCWorker::mgr_array[0]->get_table(table_id)->GetAlways(key);
                 }
                 /*
                 if (table_id == WAREHOUSE_TABLE) {
@@ -608,14 +617,14 @@ void OCCAction::install_single_insert(occ_composite_key &comp_key)
 {
         assert(IS_LOCKED(this->tid) == false);
         TableRecord *rec;
-        uint64_t old_tid;
+        //uint64_t old_tid;
         uint64_t* tid_ptr;
 
         rec = (TableRecord*)comp_key.record_ptr;
         tid_ptr = (uint64_t*)RECORD_TID_PTR(rec->value);
-        old_tid = *tid_ptr;
-        assert(GET_TIMESTAMP(old_tid) == 0);
-        assert(IS_LOCKED(old_tid));
+        //        old_tid = *tid_ptr;
+        //        assert(GET_TIMESTAMP(old_tid) == 0);
+        //        assert(IS_LOCKED(old_tid));
         xchgq((volatile uint64_t*)tid_ptr, this->tid);
 }
 
@@ -631,8 +640,6 @@ void OCCAction::install_writes()
         }
 
         /* Inserts */
-        /*
         for (i = 0; i < insert_ptr; ++i) 
         install_single_insert(this->inserts[i]);
-        */
 }
