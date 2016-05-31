@@ -12,6 +12,8 @@
 
 RecordGenerator *my_gen = NULL;
 
+extern uint64_t *warehouse_skip;
+
 uint64_t gen_unique_key(RecordGenerator *gen,
                         std::set<uint64_t> *seen_keys)
 {
@@ -26,15 +28,16 @@ uint64_t gen_unique_key(RecordGenerator *gen,
 
 txn* generate_new_order(workload_config conf, __attribute__((unused)) uint32_t thread)
 {
-        uint32_t w_id, d_id, c_id, *quants, nitems, i, temp;
+        uint32_t w_index, w_id, d_id, c_id, *quants, nitems, i, temp;
         uint64_t *suppliers, *items;
         UniformGenerator item_gen(NUM_ITEMS);
         set<uint64_t> seen_items;
         
-        assert(thread < conf.num_warehouses);
-        w_id = thread;//(uint64_t)rand() % conf.num_warehouses;
-        assert(w_id < conf.num_warehouses);
+
+        //assert(thread < conf.num_warehouses);
+        w_index = (uint64_t)rand() % conf.num_warehouses;
         
+        w_id = warehouse_skip[w_index];
         d_id = (uint32_t)rand() % NUM_DISTRICTS;
         assert(d_id < NUM_DISTRICTS);
         
@@ -55,11 +58,12 @@ txn* generate_new_order(workload_config conf, __attribute__((unused)) uint32_t t
 
                         do {
                                 suppliers[i] = rand() % conf.num_warehouses;
-                        } while (suppliers[i] == w_id && conf.num_warehouses > 1);
+                        } while (suppliers[i] == w_index && conf.num_warehouses > 1);
                 } else {
 
-                        suppliers[i] = w_id;
+                        suppliers[i] = w_index;
                 }
+                suppliers[i] = warehouse_skip[suppliers[i]];
         }
         return new new_order(w_id, d_id, c_id, nitems, items, quants, 
                              suppliers);
@@ -388,13 +392,13 @@ void generate_tpcc_stocks(uint32_t wh_id, txn **t_ptrs)
         }
 }
 
-uint32_t generate_tpcc_input(workload_config conf, txn ***loaders)
+uint32_t generate_tpcc_input(__attribute__((unused)) workload_config conf, txn ***loaders)
 {
         uint32_t n_wh, n_d, n_i, total, i, j, t_ptr;
         txn **ret;
 
-        n_wh = conf.num_warehouses;
-        n_d = 10*conf.num_warehouses;
+        n_wh = 40;//conf.num_warehouses;
+        n_d = 10*n_wh;//conf.num_warehouses;
         n_i = 100000;
         
         total = 0;

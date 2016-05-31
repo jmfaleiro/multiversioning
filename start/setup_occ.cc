@@ -10,6 +10,8 @@
 
 extern uint32_t GLOBAL_RECORD_SIZE;
 
+uint64_t *warehouse_skip = NULL;
+
 static bool is_ycsb_exp(workload_config w_conf)
 {
         bool ret;
@@ -173,10 +175,10 @@ Table** setup_occ_lock_tables(OCCConfig o_conf, workload_config w_conf)
                 }
 
         } else if (w_conf.experiment == TPCC_SUBSET) {
-                num_warehouses = w_conf.num_warehouses;
+                num_warehouses = 40;//w_conf.num_warehouses;
                 num_districts = num_warehouses*NUM_DISTRICTS;
                 num_customers = num_districts*NUM_CUSTOMERS;
-                num_stocks = NUM_ITEMS*w_conf.num_warehouses;
+                num_stocks = NUM_ITEMS*40;//w_conf.num_warehouses;
 
                 ret = (Table**)zmalloc(sizeof(Table*)*11);
                 
@@ -461,7 +463,9 @@ table_mgr* setup_small_bank_tables(uint64_t *num_records,
 table_mgr** setup_tpcc_tables(workload_config w_conf, uint32_t num_threads, bool occ)
 {
         assert(w_conf.experiment == TPCC_SUBSET);
+        assert(num_threads <= 40);
         
+        num_threads = 40;
         table_mgr **ret;
         Table ***rw_tbls;
         concurrent_table ***ins_tbls;
@@ -471,13 +475,13 @@ table_mgr** setup_tpcc_tables(workload_config w_conf, uint32_t num_threads, bool
         rw_tbls = (Table***)zmalloc(sizeof(Table**)*num_threads);
         ins_tbls = (concurrent_table***)zmalloc(sizeof(concurrent_table**)*num_threads);
         
-        for (i = 0; i < num_threads; ++i) {
+        for (i = 0; i < 40; ++i) {
                 rw_tbls[i] = (Table**)zmalloc(sizeof(Table*)*11);
                 ins_tbls[i] = (concurrent_table**)zmalloc(sizeof(concurrent_table*)*11);
         }
         
         
-        for (j = 0; j < num_threads; ++j) {
+        for (j = 0; j < 40; ++j) {
         for (i = 0; i < 11; ++i) {
                 switch (i) {
                 case WAREHOUSE_TABLE:
@@ -837,6 +841,33 @@ void occ_experiment(OCCConfig occ_config, workload_config w_conf)
                                     2, 
                                     w_conf,
                                     occ_config);
+        warehouse_skip = (uint64_t*)zmalloc(sizeof(uint64_t)*w_conf.num_warehouses);
+        for (uint64_t i = 0; 
+             i < w_conf.num_warehouses;
+             ++i) {
+                if (i == 0)
+                        warehouse_skip[i] = 0;
+                else if (i == 1)
+                        warehouse_skip[i] = 10;
+                else if (i == 2)
+                        warehouse_skip[i] = 20;
+                else if (i == 3)
+                        warehouse_skip[i] = 30;
+                else if (i == 4)
+                        warehouse_skip[i] = 1;
+                else if (i == 5)
+                        warehouse_skip[i] = 11;
+                else if (i == 6)
+                        warehouse_skip[i] = 21;
+                else if (i == 7)
+                        warehouse_skip[i] = 31;
+                else if (i == 8)
+                        warehouse_skip[i] = 2;
+                else if (i == 9)
+                        warehouse_skip[i] = 12;
+                else 
+                        assert(false);
+        }
         inputs = setup_occ_input(occ_config, w_conf, 1);
         pin_memory();
         result = run_occ_workers(input_queues, output_queues, workers,
