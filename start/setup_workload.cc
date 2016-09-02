@@ -37,6 +37,7 @@ txn* generate_new_order(workload_config conf, __attribute__((unused)) uint32_t t
         //assert(thread < conf.num_warehouses);
         w_index = (uint64_t)rand() % conf.num_warehouses;
         
+        w_id = (uint64_t)rand() % conf.num_warehouses;
         w_id = warehouse_skip[w_index];
         d_id = (uint32_t)rand() % NUM_DISTRICTS;
         assert(d_id < NUM_DISTRICTS);

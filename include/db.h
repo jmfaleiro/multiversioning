@@ -93,6 +93,13 @@ class translator {
         virtual void *read(uint64_t key, uint32_t table) = 0;
         virtual void* insert_ref(uint64_t key, uint32_t table) = 0;
         virtual void remove(uint64_t key, uint32_t table) = 0;
+
+#ifdef 	RUNTIME_PIPELINING
+
+        virtual void release_piece(uint32_t piece_num);
+
+#endif
+
         virtual int rand() = 0;
         virtual uint64_t gen_guid() = 0;
 };
@@ -110,6 +117,13 @@ class txn {
         void* get_insert_ref(uint64_t key, uint32_t table_id);
         void* insert_record(uint64_t key, uint32_t table_id);
         void remove_record(uint64_t key, uint32_t table_id);
+
+#ifdef 	RUNTIME_PIPELINING
+
+        void release_piece(uint32_t piece_num);
+
+#endif 
+
         int txn_rand();
         uint64_t guid();
 

@@ -171,7 +171,8 @@ uint64_t OCCAction::stable_copy(uint64_t key, uint32_t table_id, void **rec_ptr,
                 warehouse = tpcc_util::get_warehouse_key(key);
                 tbl = OCCWorker::mgr_array[warehouse]->get_table(table_id);
         } else {
-                tbl = OCCWorker::mgr_array[0]->get_table(table_id);
+                // tbl = OCCWorker::mgr_array[0]->get_table(table_id);
+                assert(false);
         }
 
         //        tbl = tbl_mgr->get_table(table_id);
@@ -279,7 +280,8 @@ void* OCCAction::insert_ref(uint64_t key, uint32_t table_id)
         record->key = key;
         record->next = NULL;
         value = (void*)record->value;
-        tbl = tbl_mgr->get_conc_table(table_id);
+        tbl = OCCWorker::mgr_array[0]->get_conc_table(table_id);
+        //        tbl = tbl_mgr->get_conc_table(table_id);
         assert(tbl != NULL);
         success = tbl->Put(record, lck);
         assert(success == true);
@@ -341,7 +343,8 @@ void OCCAction::undo_inserts()
         for (i = 0; i < insert_ptr; ++i) {
                 record = (TableRecord*)inserts[i].record_ptr;
                 table_id = inserts[i].tableId;                
-                tbl = tbl_mgr->get_conc_table(table_id);
+                tbl = OCCWorker::mgr_array[0]->get_conc_table(table_id);
+                //                tbl = tbl_mgr->get_conc_table(table_id);
                 assert(tbl != NULL);
                 lock_struct = mgr->get_struct();
                 tbl->Remove(record, lock_struct);
@@ -402,6 +405,9 @@ void* OCCAction::read(uint64_t key, uint32_t table_id)
         void *record;
         uint32_t i, num_reads;
         occ_composite_key *comp_key;
+
+        if (table_id == ITEM_TABLE) 
+                return OCCWorker::mgr_array[0]->get_table(table_id)->Get(key);
 
         num_reads = this->readset.size();
         comp_key = NULL;

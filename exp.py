@@ -24,7 +24,7 @@ fmt_multi_cc = "build/db --cc_type 0 --num_cc_threads {0} --num_txns {1} --epoch
 
 
 def main():
-    for i in range(0, 200):
+    for i in range(0, 10):
         tpcc()
 #        new_contention()
 
@@ -44,15 +44,13 @@ def main():
 
 
 def tpcc():
-    fixed_dir = "results/tpcc/fixed_10"
+    fixed_dir = "results/tpcc/fixed_wh"
     vary_dir = "results/tpcc/vary_wh"
     whs = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40]
     ntxns = 3000000
     for w in whs:
-        split_expt(fixed_dir, "split.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 20, 0, 0, 20, 10)
-#        split_expt(vary_dir, "split.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 20, 0, 0, 20, w)
-    
-
+        occ_expt(fixed_dir, "occ.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, 10)
+        rc_expt(fixed_dir, "rc.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, 10)
 
 def new_contention():
     result_dir = "results/ycsb/read_write/vary/"

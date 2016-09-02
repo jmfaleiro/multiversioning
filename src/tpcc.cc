@@ -375,7 +375,7 @@ uint32_t new_order::num_rmws()
 uint32_t new_order::num_reads()
 {
         /* Warehouse, customer, and items */
-        return 2 + _items.size();
+        return 2;// + _items.size();
 }
 
 void new_order::get_rmws(struct big_key *array)
@@ -402,7 +402,7 @@ void new_order::get_reads(struct big_key *array)
 {
         
         uint64_t c_id;
-        uint32_t i, nitems;
+        //        uint32_t i, nitems;
 
 
         array[0].key = (uint64_t)_warehouse_id;
@@ -414,12 +414,13 @@ void new_order::get_reads(struct big_key *array)
         array[1].key = c_id;
         array[1].table_id = CUSTOMER_TABLE;
         
-
+        /*
         nitems = _items.size();
         for (i = 0; i < nitems; ++i) {
                 array[2+i].key = (uint64_t)_items[i];
                 array[2+i].table_id = ITEM_TABLE;
         }
+        */
         
 }
 
@@ -589,13 +590,32 @@ bool new_order::Run()
         uint32_t order_id, i, num_items;
 
         warehouse_tax = read_warehouse(_warehouse_id);
+
+#ifdef 	RUNTIME_PIPELINING
+        release_piece(WAREHOUSE_TABLE);
+#endif
+
         update_district(&order_id, &district_tax);
+
+#ifdef 	RUNTIME_PIPELINING
+        release_piece(DISTRICT_TABLE);
+#endif
+
         customer_discount = get_customer_discount();
+
+#ifdef 	RUNTIME_PIPELINING
+        release_piece(CUSTOMER_TABLE);
+#endif
+
         insert_new_order(order_id);
         num_items = _items.size();
         for (i = 0; i < num_items; ++i) 
                 process_item(i, order_id, warehouse_tax, district_tax, 
                              customer_discount);
+        
+#ifdef 	RUNTIME_PIPELINING        
+        release_piece(STOCK_TABLE);
+#endif
 
         insert_oorder(order_id, _all_local);        
         return true;
@@ -728,8 +748,21 @@ bool payment::Run()
         char *warehouse_name, *district_name;
  
         warehouse_name = warehouse_update();
+#ifdef 	RUNTIME_PIPELINING
+        release_piece(WAREHOUSE_TABLE);
+#endif
+
         district_name = district_update();
+#ifdef 	RUNTIME_PIPELINING
+        release_piece(DISTRICT_TABLE);
+#endif
+
         customer_update();
+#ifdef 	RUNTIME_PIPELINING
+        release_piece(CUSTOMER_TABLE);
+#endif
+
+
         insert_history(warehouse_name, district_name);
         return true;
 } 

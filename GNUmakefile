@@ -1,5 +1,5 @@
 CFLAGS=-O2 -g -Wall -Wextra -Werror -std=c++0x -Wno-sign-compare 
-CFLAGS+=-DSNAPSHOT_ISOLATION=0 -DSMALL_RECORDS=0 -DREAD_COMMITTED=1
+CFLAGS+=-DSNAPSHOT_ISOLATION=0 -DSMALL_RECORDS=0 -DREAD_COMMITTED=0
 LIBS=-lnuma -lpthread -lrt -lcityhash 
 CXX=g++
 
@@ -21,7 +21,7 @@ NON_MAIN_STARTS:=$(filter-out start/main.o,$(START_OBJECTS))
 DEPSDIR:=.deps
 DEPCFLAGS=-MD -MF $(DEPSDIR)/$*.d -MP
 
-all:CFLAGS+=-DTESTING=0 -DUSE_BACKOFF=1 -fno-omit-frame-pointer
+all:CFLAGS+=-DTESTING=0 -DUSE_BACKOFF=1 -fno-omit-frame-pointer -DRUNTIME_PIPELINING
 all:env build/db
 
 test:CFLAGS+=-DTESTING=1 -DUSE_BACKOFF=1 
