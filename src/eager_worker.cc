@@ -125,6 +125,7 @@ void locking_worker::TryExec(locking_action *txn)
 {
         txn->tables = this->config.tbl_mgr;
         txn->insert_mgr = this->insert_mgr;
+        txn->lock_mgr = config.mgr;
         if (config.mgr->Lock(txn)) {
                 assert(txn->num_dependencies == 0);
                 assert(txn->bufs == NULL);

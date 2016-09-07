@@ -24,8 +24,10 @@ fmt_multi_cc = "build/db --cc_type 0 --num_cc_threads {0} --num_txns {1} --epoch
 
 
 def main():
-    for i in range(0, 200):
-        test_locking()
+    for i in range(0, 10):
+        tpcc()
+#    for i in range(0, 200):
+#        test_locking()
 #        new_contention()
 
 
@@ -49,10 +51,10 @@ def tpcc():
     whs = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40]
     ntxns = 3000000
     for w in whs:
-#        locking_expt(fixed_dir, "locking.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, 20)
+        locking_expt(fixed_dir, "locking.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, 10)
 #        occ_expt(fixed_dir, "occ.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, 20)
 #        rc_expt(fixed_dir, "rc.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, 20)
-        split_expt(fixed_dir, "split_new.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 20, 0, 0, 20, 10)
+#        split_expt(fixed_dir, "split_new.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 20, 0, 0, 20, 10)
 #        split_expt(vary_dir, "split.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 20, 0, 0, 20, w)
 
 

@@ -13,6 +13,7 @@
 class locking_action;
 class lock_manager_table;
 class locking_worker;
+class LockManager;
 
 struct locking_key {
 
@@ -106,7 +107,16 @@ class locking_action : public translator {
         uint32_t write_index;
         bool finished_execution;
         RecordBuffers *bufs;
+        LockManager *lock_mgr;
         
+
+#ifdef 	RUNTIME_PIPELINING
+        
+        uint32_t read_release;
+        uint32_t write_release;
+
+#endif
+
         std::vector<locking_key> writeset;
         std::vector<locking_key> readset;        
 
@@ -129,6 +139,12 @@ class locking_action : public translator {
         uint64_t gen_guid();
         void prepare();
         bool Run();
+
+#ifdef 	RUNTIME_PIPELINING
+
+        virtual void release_piece(uint32_t piece_num);
+
+#endif 
 };
 
 #endif // LOCKING_ACTION_H_

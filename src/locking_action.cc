@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <util.h>
 #include <eager_worker.h>
+#include <lock_manager.h>
 
 #define RECORD_VALUE_PTR(rec_ptr) ((void*)&(((uint64_t*)rec_ptr)[1]))
 
@@ -124,6 +125,8 @@ void* locking_action::write_ref(uint64_t key, uint32_t table_id)
 
 void* locking_action::read(uint64_t key, uint32_t table_id)
 {
+        return tables->get_table(table_id)->Get(key);
+        /*
         locking_key *k;
         int index;
         
@@ -133,6 +136,7 @@ void* locking_action::read(uint64_t key, uint32_t table_id)
         if (k->value == NULL) 
                 k->value = lookup(k);
         return k->value;
+        */
 }
 
 void* locking_action::insert_ref(uint64_t key, uint32_t table_id)
@@ -166,6 +170,14 @@ void locking_action::prepare()
         barrier();
         this->num_dependencies = 0;
         barrier();
+
+#ifdef 	RUNTIME_PIPELINING
+
+        this->read_release = 0;
+        this->write_release = 0;
+
+#endif
+
         this->prepared = true;
 }
 
@@ -178,3 +190,12 @@ bool locking_action::Run()
         commit_writes(commit);
         return commit;
 }
+
+#ifdef RUNTIME_PIPELINING
+
+void locking_action::release_piece(uint32_t piece_num)
+{
+        lock_mgr->ReleaseTable(this, piece_num);
+}
+
+#endif 

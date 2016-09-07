@@ -71,6 +71,54 @@ bool LockManager::Lock(locking_action *txn)
         return acquired;
 }
 
+#ifdef 	RUNTIME_PIPELINING
+
+void LockManager::ReleaseTable(locking_action *txn, uint32_t table_id)
+{
+        uint32_t i, num_writes, num_reads;
+
+        num_writes = txn->writeset.size();
+        num_reads = txn->readset.size();
+        for (i = txn->write_release; i < num_writes; ++i) {
+                //                assert(txn->writeset[i].table_id >= table_id);
+                if (txn->writeset[i].table_id <= table_id) {
+                        table->Unlock(&txn->writeset[i]);
+                        txn->write_release += 1;
+                } else {
+                        break;
+                }
+        }
+        
+        for (i = txn->read_release; i < num_reads; ++i) {
+                //                assert(txn->readset[i].table_id >= table_id);
+                if (txn->readset[i].table_id <= table_id) {
+                        table->Unlock(&txn->readset[i]);
+                        txn->read_release += 1;
+                } else {
+                        break;
+                }
+        }
+}
+
+void LockManager::Unlock(locking_action *txn)
+{
+        uint32_t i, num_writes, num_reads;
+
+        num_writes = txn->writeset.size();
+        num_reads = txn->readset.size();
+        for (i = txn->write_release; i < num_writes; ++i) {
+                //                assert(false);
+                table->Unlock(&txn->writeset[i]);
+        }
+        for (i = txn->read_release; i < num_reads; ++i) {
+                //                assert(false);
+                table->Unlock(&txn->readset[i]);
+        }
+        txn->finished_execution = true;
+}
+
+#else 
+
 void LockManager::Unlock(locking_action *txn)
 {
         uint32_t i, num_writes, num_reads;
@@ -84,3 +132,4 @@ void LockManager::Unlock(locking_action *txn)
         txn->finished_execution = true;
 }
 
+#endif
