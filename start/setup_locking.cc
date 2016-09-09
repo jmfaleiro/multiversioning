@@ -278,7 +278,6 @@ void locking_experiment(locking_config conf, workload_config w_conf)
         locking_action_batch **experiment_txns, setup_txns;
         table_mgr *tables;
         uint32_t num_tables, *num_records;
-        struct LockManagerConfig mgr_config;
         struct locking_result result;
         LockManager *lock_manager;
         locking_worker **workers;
@@ -323,14 +322,8 @@ void locking_experiment(locking_config conf, workload_config w_conf)
         }
                    
         assert(conf.num_threads > 0);
-        mgr_config = {
-                num_tables,
-                num_records,
-                0,
-                (int)conf.num_threads - 1,
-        };
         tables = setup_hash_tables(w_conf, false);
-        lock_manager = new LockManager(mgr_config);        
+        lock_manager = new LockManager(tables);        
         workers = setup_workers(inputs, outputs, lock_manager,
                                 conf.num_threads, 50, tables, num_tables, w_conf);
         result = do_measurement(conf, workers, inputs, outputs, experiment_txns,

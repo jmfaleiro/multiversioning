@@ -9,9 +9,9 @@
 #include <mcs.h>
 #include <insert_buf_mgr.h>
 #include <table_mgr.h>
+#include <mcs_rw.h>
 
 class locking_action;
-class lock_manager_table;
 class locking_worker;
 class LockManager;
 
@@ -30,8 +30,9 @@ public:
         struct locking_key *prev;
         struct locking_key *next;
         bool is_initialized;
+
         void *value;
-        mcs_struct *lock_entry;
+        mcs_rw::mcs_rw_node lock_node;
 
         bool operator==(const struct locking_key &other) const
         {

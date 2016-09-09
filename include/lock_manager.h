@@ -1,24 +1,22 @@
 #ifndef LOCK_MANAGER_HH_
 #define LOCK_MANAGER_HH_
 
-#include <lock_manager_table.h>
-//#include <locking_action.h>
 #include <deque>
 #include <pthread.h>
+#include <table_mgr.h>
+#include <locking_action.h>
 
 using namespace std;
-
-class locking_action;
 
 class LockManager {    
 
  private:
-        LockManagerTable *table;
-        uint64_t *tableSizes;
-        bool LockRecord(locking_action *txn, struct locking_key *dep);  
+        table_mgr 	*_tbl_mgr;
+        bool LockRecord(struct locking_key *k);  
+        void UnlockRecord(struct locking_key *k);
 
 public:
-    LockManager(LockManagerConfig config);
+    LockManager(table_mgr *tbl_mgr);
     virtual bool Lock(locking_action *txn);
     virtual void Unlock(locking_action *txn);
 

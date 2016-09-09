@@ -3,6 +3,7 @@
 #include <util.h>
 #include <eager_worker.h>
 #include <lock_manager.h>
+#include <locking_record.h>
 
 #define RECORD_VALUE_PTR(rec_ptr) ((void*)&(((uint64_t*)rec_ptr)[1]))
 
@@ -114,6 +115,8 @@ void* locking_action::write_ref(uint64_t key, uint32_t table_id)
         index = find_key(key, table_id, this->writeset);
         assert(index != -1 && index < this->writeset.size());
         k = &this->writeset[index];
+        return LOCKING_VALUE_PTR(k->value);
+        /*
         if (k->value == NULL) {
                 read_value = lookup(k);
                 k->value = this->bufs->GetRecord(table_id);
@@ -121,18 +124,20 @@ void* locking_action::write_ref(uint64_t key, uint32_t table_id)
                 memcpy(RECORD_VALUE_PTR(k->value), read_value, record_size);
         }
         return RECORD_VALUE_PTR(k->value);
+        */
 }
 
 void* locking_action::read(uint64_t key, uint32_t table_id)
 {
-        return tables->get_table(table_id)->Get(key);
-        /*
+        //        return tables->get_table(table_id)->Get(key);
         locking_key *k;
         int index;
         
         index = find_key(key, table_id, this->readset);
         assert(index != -1 && index < this->readset.size());
         k = &this->readset[index];
+        return LOCKING_VALUE_PTR(k->value);
+        /*
         if (k->value == NULL) 
                 k->value = lookup(k);
         return k->value;

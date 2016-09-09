@@ -13,7 +13,7 @@ locking_worker::locking_worker(locking_worker_config config,
         m_num_elems = 0;
         m_num_done = 0;
         this->bufs = new(config.cpu) RecordBuffers(rb_conf);
-        this->mgr = new(config.cpu) mcs_mgr(1000000, config.cpu);
+        this->mgr = new(config.cpu) mcs_mgr(1000, config.cpu);
         this->insert_mgr = new(config.cpu) insert_buf_mgr(config.cpu, 11, 
                                                           tpcc_record_sizes);
 }
@@ -92,8 +92,10 @@ void locking_worker::CheckReady()
         }
 }
 
-void locking_worker::give_locks(locking_action *txn)
+void locking_worker::give_locks(__attribute__((unused)) locking_action *txn)
 {
+        assert(false);
+        /*
         uint32_t num_writes, num_reads, i;
         mcs_struct *lck;
 
@@ -105,10 +107,13 @@ void locking_worker::give_locks(locking_action *txn)
         num_reads = txn->readset.size();
         for (i = 0; i < num_reads; ++i) 
                 txn->readset[i].lock_entry = lck;
+        */
 }
 
-void locking_worker::take_locks(locking_action *txn)
+void locking_worker::take_locks(__attribute__((unused)) locking_action *txn)
 {
+        assert(false);
+        /*
         uint32_t num_writes, num_reads;
         
         num_writes = txn->writeset.size();
@@ -119,6 +124,7 @@ void locking_worker::take_locks(locking_action *txn)
                 assert(num_reads > 0);
                 mgr->return_struct(txn->readset[0].lock_entry);
         }
+        */
 }
 
 void locking_worker::TryExec(locking_action *txn)

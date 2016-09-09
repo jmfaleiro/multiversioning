@@ -7,6 +7,7 @@
 #include <setup_workload.h>
 #include <unistd.h>
 #include <tpcc.h>
+#include <locking_record.h>
 
 extern uint32_t GLOBAL_RECORD_SIZE;
 
@@ -425,7 +426,7 @@ table_mgr* setup_ycsb_tables(uint64_t* num_records, workload_config w_conf,
                                        0,
                                        71,
                                        2*num_records[0],
-                                       occ? GLOBAL_RECORD_SIZE+8 : GLOBAL_RECORD_SIZE);
+                                       occ? GLOBAL_RECORD_SIZE+8 : LOCKING_RECORD_SIZE(GLOBAL_RECORD_SIZE));
         ret = new table_mgr(tables, NULL, 1);
         return ret;
 }
@@ -446,13 +447,13 @@ table_mgr* setup_small_bank_tables(uint64_t *num_records,
                                        0,
                                        71,
                                        2*num_records[0],
-                                       occ? GLOBAL_RECORD_SIZE+8 : GLOBAL_RECORD_SIZE);
+                                       occ? GLOBAL_RECORD_SIZE+8 : LOCKING_RECORD_SIZE(GLOBAL_RECORD_SIZE));
         tables[1] = setup_single_table(1, 
                                        (uint64_t)num_records[1],
                                        0,
                                        71,
                                        2*num_records[1],
-                                       occ? GLOBAL_RECORD_SIZE+8 : GLOBAL_RECORD_SIZE);
+                                       occ? GLOBAL_RECORD_SIZE+8 : LOCKING_RECORD_SIZE(GLOBAL_RECORD_SIZE));
         ret = new table_mgr(tables, NULL, 2);
         return ret;
 }
@@ -477,7 +478,7 @@ table_mgr* setup_tpcc_tables(workload_config w_conf, bool occ)
                                                         0,
                                                         71,
                                                         2*w_conf.num_warehouses,
-                                                        occ? sizeof(warehouse_record)+8 : sizeof(warehouse_record));
+                                                        occ? sizeof(warehouse_record)+8 : LOCKING_RECORD_SIZE(sizeof(warehouse_record)));
                         break;
                 case DISTRICT_TABLE:
                         rw_tbls[i] = setup_single_table((uint64_t)i,
@@ -485,7 +486,7 @@ table_mgr* setup_tpcc_tables(workload_config w_conf, bool occ)
                                                         0,
                                                         71,
                                                         2*NUM_DISTRICTS*w_conf.num_warehouses, 
-                                                        occ? sizeof(district_record)+8:sizeof(district_record));
+                                                        occ? sizeof(district_record)+8:LOCKING_RECORD_SIZE(sizeof(district_record)));
                         break;
                 case CUSTOMER_TABLE:
                          rw_tbls[i] = setup_single_table((uint64_t)i,
@@ -493,7 +494,7 @@ table_mgr* setup_tpcc_tables(workload_config w_conf, bool occ)
                                                          0,
                                                          71,
                                                          2*NUM_DISTRICTS*NUM_CUSTOMERS*w_conf.num_warehouses,
-                                                         occ? sizeof(customer_record)+8:sizeof(customer_record));
+                                                         occ? sizeof(customer_record)+8:LOCKING_RECORD_SIZE(sizeof(customer_record)));
                         break;
                 case NEW_ORDER_TABLE:
                         ins_tbls[i] = new concurrent_table(1000000);
@@ -510,7 +511,7 @@ table_mgr* setup_tpcc_tables(workload_config w_conf, bool occ)
                                                          0,
                                                          71,
                                                          2*NUM_ITEMS*w_conf.num_warehouses,
-                                                         occ? sizeof(stock_record)+8:sizeof(stock_record));
+                                                         occ? sizeof(stock_record)+8:LOCKING_RECORD_SIZE(sizeof(stock_record)));
                         break;
                 case ITEM_TABLE: 
                          rw_tbls[i] = setup_single_table((uint64_t)i,
@@ -518,7 +519,7 @@ table_mgr* setup_tpcc_tables(workload_config w_conf, bool occ)
                                                          0,
                                                          71,
                                                          2*NUM_ITEMS,
-                                                         occ? sizeof(item_record)+8:sizeof(item_record));
+                                                         occ? sizeof(item_record)+8:LOCKING_RECORD_SIZE(sizeof(item_record)));
                         break;
                 case HISTORY_TABLE:
                         ins_tbls[i] = new concurrent_table(1000000);
@@ -529,7 +530,7 @@ table_mgr* setup_tpcc_tables(workload_config w_conf, bool occ)
                                                          0,
                                                          71,
                                                          20*w_conf.num_warehouses,
-                                                         occ? sizeof(uint64_t)+8:sizeof(uint64_t));
+                                                         occ? sizeof(uint64_t)+8:LOCKING_RECORD_SIZE(sizeof(uint64_t)));
                         break;
                 case CUSTOMER_ORDER_INDEX:
                          rw_tbls[i] = setup_single_table((uint64_t)i,
@@ -537,7 +538,7 @@ table_mgr* setup_tpcc_tables(workload_config w_conf, bool occ)
                                                          0,
                                                          71,
                                                          6000*10*w_conf.num_warehouses,
-                                                         occ? sizeof(uint64_t)+8:sizeof(uint64_t));
+                                                         occ? sizeof(uint64_t)+8:LOCKING_RECORD_SIZE(sizeof(uint64_t)));
                         break;
                 default:
                         assert(false);
