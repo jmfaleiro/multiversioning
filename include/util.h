@@ -14,6 +14,11 @@ barrier() {
   asm volatile("":::"memory");
 }
 
+inline void 
+mfence() {
+  asm volatile("mfence;":::"memory");
+}
+
 // An indivisible unit of work. 
 inline void
 single_work() 
