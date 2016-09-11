@@ -10,9 +10,9 @@ namespace mcs_rw {
 struct mcs_rw_node;
 
 struct mcs_rw_lock {
-        volatile uint64_t __attribute__((__packed__, __aligned__(CACHE_LINE))) _nreaders;
-        volatile mcs_rw_node __attribute__((__packed__, __aligned__(CACHE_LINE))) *_next_writer;
-        volatile mcs_rw_node __attribute__((__packed__, __aligned__(CACHE_LINE))) *_tail;
+        volatile uint64_t __attribute__((__packed__, __aligned__(CACHE_LINE))) 	_nreaders;
+        volatile mcs_rw_node __attribute__((__packed__, __aligned__(CACHE_LINE)))  	*_next_writer;
+        volatile mcs_rw_node __attribute__((__packed__, __aligned__(CACHE_LINE))) 	*_tail;
 };
 
 typedef enum {
@@ -24,10 +24,10 @@ typedef enum {
 typedef uint64_t node_state;
 
 struct mcs_rw_node {
-        mcs_type 								_type;
-        mcs_type 								_prev_type;
-        volatile mcs_rw_node							*_next;
-        volatile node_state __attribute__((__packed__, __aligned__(CACHE_LINE))) _state;        
+        mcs_type 		_type;
+        mcs_type 		_prev_type;
+        volatile mcs_rw_node	*_next;
+        volatile node_state 	 _state;        
 };
 
 /* Get a write lock */

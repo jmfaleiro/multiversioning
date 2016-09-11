@@ -44,6 +44,7 @@ RecordBuffers::RecordBuffers(struct RecordBuffersConfig conf)
 {
         uint32_t i;
         char *temp;
+        this->conf = conf;
         temp = (char *)alloc_mem(conf.num_tables*sizeof(struct RecordBuffy*),
                                  conf.cpu);
         assert(temp != NULL);
@@ -57,6 +58,11 @@ RecordBuffers::RecordBuffers(struct RecordBuffersConfig conf)
                 temp += conf.record_sizes[i]*conf.num_buffers;
         }
         this->num_records = conf.num_buffers;
+}
+
+uint32_t RecordBuffers::GetRecordSize(uint32_t table_id)
+{
+        return conf.record_sizes[table_id];
 }
 
 void* RecordBuffers::GetRecord(uint32_t tableId)

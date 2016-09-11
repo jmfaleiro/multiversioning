@@ -26,6 +26,7 @@ class RecordBuffers {
                              uint32_t buf_size,
                              uint32_t num_bufs);
         uint32_t num_records;
+        RecordBuffersConfig conf;
  public:
         void* operator new(std::size_t sz, int cpu)
         {
@@ -36,6 +37,7 @@ class RecordBuffers {
         void* GetRecord(uint32_t tableId);
         void ReturnRecord(uint32_t tableId, void *record);
         uint32_t NumRecords() { return this->num_records; };
+        uint32_t GetRecordSize(uint32_t table_id);
 };
 
 

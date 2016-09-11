@@ -94,13 +94,12 @@ void locking_worker::CheckReady()
 
 void locking_worker::give_locks(__attribute__((unused)) locking_action *txn)
 {
-        assert(false);
-        /*
-        uint32_t num_writes, num_reads, i;
+        //        uint32_t num_writes, num_reads, i;
         mcs_struct *lck;
 
         lck = mgr->get_struct();
         txn->lck = lck;
+        /*
         num_writes = txn->writeset.size();
         for (i = 0; i < num_writes; ++i) 
                 txn->writeset[i].lock_entry = lck;
@@ -112,7 +111,9 @@ void locking_worker::give_locks(__attribute__((unused)) locking_action *txn)
 
 void locking_worker::take_locks(__attribute__((unused)) locking_action *txn)
 {
-        assert(false);
+        //        assert(false);
+        
+        mgr->return_struct(txn->lck);
         /*
         uint32_t num_writes, num_reads;
         

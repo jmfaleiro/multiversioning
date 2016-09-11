@@ -32,6 +32,7 @@ public:
         bool is_initialized;
 
         void *value;
+        void *buf;
         mcs_rw::mcs_rw_node lock_node;
 
         bool operator==(const struct locking_key &other) const

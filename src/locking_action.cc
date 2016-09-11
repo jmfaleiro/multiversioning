@@ -115,7 +115,13 @@ void* locking_action::write_ref(uint64_t key, uint32_t table_id)
         index = find_key(key, table_id, this->writeset);
         assert(index != -1 && index < this->writeset.size());
         k = &this->writeset[index];
-        return LOCKING_VALUE_PTR(k->value);
+        if (k->buf == NULL) {
+                read_value = LOCKING_VALUE_PTR(k->value);
+                k->buf = this->bufs->GetRecord(table_id);
+                record_size = this->bufs->GetRecordSize(table_id);
+                memcpy(k->buf, read_value, record_size);
+        }
+        return k->buf;
         /*
         if (k->value == NULL) {
                 read_value = lookup(k);
@@ -134,7 +140,9 @@ void* locking_action::read(uint64_t key, uint32_t table_id)
         int index;
         
         index = find_key(key, table_id, this->readset);
-        assert(index != -1 && index < this->readset.size());
+        if (index == -1)
+                return LOCKING_VALUE_PTR(tables->get_table(table_id)->Get(key));
+        //        assert(index != -1 && index < this->readset.size());
         k = &this->readset[index];
         return LOCKING_VALUE_PTR(k->value);
         /*
@@ -192,7 +200,7 @@ bool locking_action::Run()
 {
         bool commit;
         commit = this->t->Run();
-        commit_writes(commit);
+        //        commit_writes(commit);
         return commit;
 }
 

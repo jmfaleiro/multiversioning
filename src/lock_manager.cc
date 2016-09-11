@@ -1,9 +1,20 @@
 #include <lock_manager.h>
 #include <algorithm>
+#include <locking_record.h>
 
 LockManager::LockManager(table_mgr *tbl_mgr)
 {
         _tbl_mgr = tbl_mgr;
+}
+
+void LockManager::commit_write(locking_action *txn, struct locking_key *k)
+{
+        uint32_t record_sz;
+        
+        record_sz = txn->bufs->GetRecordSize(k->table_id);
+        memcpy(LOCKING_VALUE_PTR(k->value), k->buf, record_sz);
+        txn->bufs->ReturnRecord(k->table_id, k->buf);
+        k->buf = NULL;
 }
 
 bool LockManager::LockRecord(struct locking_key *k)
@@ -16,24 +27,33 @@ bool LockManager::LockRecord(struct locking_key *k)
         
         tbl = _tbl_mgr->get_table(k->table_id);
         assert(tbl != NULL);
-        record = tbl->Get(k->key);
+        if (k->is_write)
+                record = tbl->GetAlways(k->key);
+        else
+                record = tbl->Get(k->key);
         assert(record != NULL);
         k->value = record;
+        k->buf = NULL;
         lock = (mcs_rw::mcs_rw_lock*)record;
 
         if (k->is_write) 
                 acquire_writer(lock, &k->lock_node);
         else 
                 acquire_reader(lock, &k->lock_node);
+        k->is_held = true;
+        assert(k->value != NULL);
         return true;
 }
 
-void LockManager::UnlockRecord(struct locking_key *k)
+void LockManager::UnlockRecord(locking_action *txn, struct locking_key *k)
 {
-        assert(k->is_held == true);
+        assert(k->is_held == true && k->value != NULL);
         
         mcs_rw::mcs_rw_lock *lock;
         
+        if (k->buf != NULL)
+                commit_write(txn, k);
+        assert(k->buf == NULL);
         lock = (mcs_rw::mcs_rw_lock*)k->value;
         if (k->is_write)
                 release_writer(lock, &k->lock_node);
@@ -104,22 +124,23 @@ void LockManager::ReleaseTable(locking_action *txn, uint32_t table_id)
         for (i = txn->write_release; i < num_writes; ++i) {
                 //                assert(txn->writeset[i].table_id >= table_id);
                 if (txn->writeset[i].table_id <= table_id) {
-                        UnlockRecord(&txn->writeset[i]);
+                        UnlockRecord(txn, &txn->writeset[i]);
                         txn->write_release += 1;
                 } else {
                         break;
                 }
         }
-        
+        /*
         for (i = txn->read_release; i < num_reads; ++i) {
                 //                assert(txn->readset[i].table_id >= table_id);
                 if (txn->readset[i].table_id <= table_id) {
-                        UnlockRecord(&txn->readset[i]);
+                        UnlockRecord(txn, &txn->readset[i]);
                         txn->read_release += 1;
                 } else {
                         break;
                 }
         }
+        */
 }
 
 void LockManager::Unlock(locking_action *txn)
@@ -129,10 +150,10 @@ void LockManager::Unlock(locking_action *txn)
         num_writes = txn->writeset.size();
         num_reads = txn->readset.size();
         for (i = txn->write_release; i < num_writes; ++i) {
-                UnlockRecord(&txn->writeset[i]);
+                UnlockRecord(txn, &txn->writeset[i]);
         }
         for (i = txn->read_release; i < num_reads; ++i) {
-                UnlockRecord(&txn->readset[i]);
+                UnlockRecord(txn, &txn->readset[i]);
         }
         txn->finished_execution = true;
 }
@@ -146,9 +167,9 @@ void LockManager::Unlock(locking_action *txn)
         num_writes = txn->writeset.size();
         num_reads = txn->readset.size();
         for (i = 0; i < num_writes; ++i) 
-                UnlockRecord(&txn->writeset[i]);
+                UnlockRecord(txn, &txn->writeset[i]);
         for (i = 0; i < num_reads; ++i) 
-                UnlockRecord(&txn->readset[i]);
+                UnlockRecord(txn, &txn->readset[i]);
         txn->finished_execution = true;
 }
 
