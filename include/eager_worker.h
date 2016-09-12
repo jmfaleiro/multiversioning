@@ -11,6 +11,9 @@
 #include <mcs.h>
 #include <insert_buf_mgr.h>
 #include <table_mgr.h>
+#include <mcs_rw.h>
+#include <tpcc.h>
+
 
 struct locking_action_batch {
   uint32_t batchSize;
@@ -19,6 +22,20 @@ struct locking_action_batch {
 
 typedef SimpleQueue<locking_action_batch> locking_queue;
 
+#ifdef 	TPCC
+
+struct lck_warehouse {
+        mcs_rw::mcs_rw_lock 		_lock;
+        warehouse_record		_wh;
+};
+
+struct lck_district {
+        mcs_rw::mcs_rw_lock 		_lock;
+        district_record 		_dist;
+};
+
+#endif
+
 struct locking_worker_config {
   LockManager *mgr;
   locking_queue *inputQueue;
@@ -26,6 +43,13 @@ struct locking_worker_config {
   int cpu;
   uint32_t maxPending;
   table_mgr *tbl_mgr;
+
+#ifdef TPCC
+        
+        lck_warehouse	**warehouses;
+        lck_district	**district;
+
+#endif
 };
 
 class locking_worker : public Runnable {
@@ -37,6 +61,7 @@ private:
   mcs_mgr *mgr;
   insert_buf_mgr *insert_mgr;
   volatile uint32_t m_num_done;
+
 
   RecordBuffers *bufs;
   
@@ -64,6 +89,14 @@ protected:
   virtual void Init();
 
 public:
+
+#ifdef 	TPCC
+
+  lck_warehouse 		**_warehouses;
+  lck_district 			**_districts;
+
+#endif
+
 
   void* operator new(std::size_t sz, int cpu) {
     return alloc_mem(sz, cpu);

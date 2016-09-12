@@ -141,6 +141,23 @@ static locking_worker** setup_workers(locking_queue **input,
         record_sizes[1] = GLOBAL_RECORD_SIZE;
         ret = (locking_worker**)malloc(sizeof(locking_worker*)*num_threads);
         assert(ret != NULL);
+        
+#ifdef 	TPCC
+        lck_warehouse **whs;
+        lck_district **dists;
+        
+        whs = (lck_warehouse**)zmalloc(sizeof(lck_warehouse*)*40);
+        dists = (lck_district**)zmalloc(sizeof(lck_district*)*40);
+        
+        for (i = 0; i < 40; ++i) {
+                whs[i] = (lck_warehouse*)alloc_mem(sizeof(lck_warehouse), i);
+                memset(whs[i], 0x0, sizeof(lck_warehouse));
+                dists[i] = (lck_district*)alloc_mem(sizeof(lck_district)*NUM_DISTRICTS, i);
+                memset(dists[i], 0x0, sizeof(lck_district)*NUM_DISTRICTS);
+        }
+
+#endif
+
         for (i = 0; i < num_threads; ++i) {
                 struct locking_worker_config conf = {
                         mgr,
@@ -149,6 +166,12 @@ static locking_worker** setup_workers(locking_queue **input,
                         i,
                         num_pending,
                         tables,                        
+                        #ifdef 	TPCC
+                        
+                        whs,
+                        dists,
+                        
+                        #endif
                 };
                 struct RecordBuffersConfig rb_conf = setup_buffer_config(i, w_conf);
                 ret[i] = new(i) locking_worker(conf, rb_conf);

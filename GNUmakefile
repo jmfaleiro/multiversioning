@@ -21,7 +21,7 @@ NON_MAIN_STARTS:=$(filter-out start/main.o,$(START_OBJECTS))
 DEPSDIR:=.deps
 DEPCFLAGS=-MD -MF $(DEPSDIR)/$*.d -MP
 
-all:CFLAGS+=-DTESTING=0 -DUSE_BACKOFF=1 -fno-omit-frame-pointer
+all:CFLAGS+=-DTESTING=0 -DUSE_BACKOFF=1 -fno-omit-frame-pointer -DRUNTIME_PIPELINING -DTPCC 
 all:env build/db
 
 test:CFLAGS+=-DTESTING=1 -DUSE_BACKOFF=1 

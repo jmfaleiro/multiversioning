@@ -590,12 +590,21 @@ bool new_order::Run()
         uint32_t order_id, i, num_items;
 
         warehouse_tax = read_warehouse(_warehouse_id);
+
+#ifdef 	RUNTIME_PIPELINING
+        release_piece(WAREHOUSE_TABLE);
+#endif
+
         update_district(&order_id, &district_tax);
 #ifdef 	RUNTIME_PIPELINING
         release_piece(DISTRICT_TABLE);
 #endif
 
         customer_discount = get_customer_discount();
+
+#ifdef 	RUNTIME_PIPELINING
+        release_piece(CUSTOMER_TABLE);
+#endif
 
 
         insert_new_order(order_id);

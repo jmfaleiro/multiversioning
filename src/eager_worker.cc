@@ -16,6 +16,12 @@ locking_worker::locking_worker(locking_worker_config config,
         this->mgr = new(config.cpu) mcs_mgr(1000, config.cpu);
         this->insert_mgr = new(config.cpu) insert_buf_mgr(config.cpu, 11, 
                                                           tpcc_record_sizes);
+
+#ifdef 	TPCC
+        this->_warehouses = config.warehouses;
+        this->_districts = config.district;
+#endif
+        
 }
 
 void locking_worker::Init()
@@ -174,6 +180,7 @@ locking_worker::WorkerFunction()
                         // txns. If we have, exec pending txns so we get below
                         // the threshold.
                         if ((uint32_t)m_num_elems < config.maxPending) {
+                                batch.batch[i]->worker = this;
                                 give_locks(batch.batch[i]);
                                 TryExec(batch.batch[i]);
                         } else { 

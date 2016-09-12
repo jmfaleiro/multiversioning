@@ -12,7 +12,7 @@ class LockManager {
 
  private:
         table_mgr 	*_tbl_mgr;
-        bool LockRecord(struct locking_key *k);  
+        bool LockRecord(locking_action *txn, struct locking_key *k);  
         void UnlockRecord(locking_action *txn, struct locking_key *k);
         void commit_write(locking_action *txn, struct locking_key *k);
 
