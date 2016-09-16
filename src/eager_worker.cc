@@ -16,12 +16,6 @@ locking_worker::locking_worker(locking_worker_config config,
         this->mgr = new(config.cpu) mcs_mgr(1000, config.cpu);
         this->insert_mgr = new(config.cpu) insert_buf_mgr(config.cpu, 11, 
                                                           tpcc_record_sizes);
-
-#ifdef 	TPCC
-        this->_warehouses = config.warehouses;
-        this->_districts = config.district;
-#endif
-        
 }
 
 void locking_worker::Init()
@@ -138,12 +132,11 @@ void locking_worker::TryExec(locking_action *txn)
 {
         txn->tables = this->config.tbl_mgr;
         txn->insert_mgr = this->insert_mgr;
-        txn->lock_mgr = config.mgr;
+        //        txn->lock_mgr = config.mgr;
         if (config.mgr->Lock(txn)) {
                 assert(txn->num_dependencies == 0);
                 assert(txn->bufs == NULL);
                 txn->bufs = this->bufs;
-                txn->worker = this;
                 txn->Run();
                 config.mgr->Unlock(txn);                
                 take_locks(txn);

@@ -5,6 +5,8 @@
 #include <string.h>
 #include <vector>
 #include <cassert>
+#include <mcs_rw.h>
+
 
 #ifndef 	NUM_STOCK_LEVEL_ORDERS
 #define 	NUM_STOCK_LEVEL_ORDERS 		20
@@ -38,11 +40,8 @@ enum table_identifier {
 
 extern size_t *tpcc_record_sizes;
 
-class tpcc_config {
- public:
-        static uint32_t num_warehouses;
-        static uint32_t *tpcc_record_sizes;
-};
+
+
 
 class tpcc_util {
  private:
@@ -473,8 +472,22 @@ class setup_tpcc : public txn {
 // };
 // 
 
+struct lck_warehouse {
+        mcs_rw::mcs_rw_lock 		_lock;
+        warehouse_record		_wh;
+};
 
+struct lck_district {
+        mcs_rw::mcs_rw_lock 		_lock;
+        district_record 		_dist;
+};
 
-
+class tpcc_config {
+ public:
+        static uint32_t 		num_warehouses;
+        static uint32_t 		*tpcc_record_sizes;
+        static lck_warehouse 		**warehouses;
+        static lck_district 		**districts;
+};
 
 #endif 		// TPCC_H_

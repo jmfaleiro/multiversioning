@@ -40,7 +40,7 @@ void gen_random_array(void *array, size_t sz);
 
 void pin_memory();
 
-table_mgr* setup_hash_tables(workload_config w_conf, bool occ);
+table_mgr* setup_hash_tables(workload_config w_conf, ConcurrencyControl cc_type);
 
 struct big_key* setup_array(txn *t);
 

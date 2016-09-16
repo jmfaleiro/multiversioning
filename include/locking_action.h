@@ -10,10 +10,18 @@
 #include <insert_buf_mgr.h>
 #include <table_mgr.h>
 #include <mcs_rw.h>
+#include <pipelined_executor.h>
 
 class locking_action;
 class locking_worker;
 class LockManager;
+//namespace pipelined;
+//class pipelined::executor;
+
+enum locking_action_status {
+        UNEXECUTED,
+        COMPLETE,
+};
 
 struct locking_key {
 
@@ -35,6 +43,7 @@ public:
         void *value;
         void *buf;
         mcs_rw::mcs_rw_node lock_node;
+        void *txn;
 
         bool operator==(const struct locking_key &other) const
         {
@@ -91,6 +100,7 @@ class locking_action : public translator {
         friend class LockManagerTable;
         friend class LockManager;
         friend class locking_worker;
+        friend class pipelined::executor;
         
  private:
         locking_action();
@@ -110,15 +120,9 @@ class locking_action : public translator {
         uint32_t write_index;
         bool finished_execution;
         RecordBuffers *bufs;
-        LockManager *lock_mgr;
+        //        LockManager *lock_mgr;
+        volatile locking_action_status status;
         
-
-#ifdef 	RUNTIME_PIPELINING
-        
-        uint32_t read_release;
-        uint32_t write_release;
-
-#endif
 
         std::vector<locking_key> writeset;
         std::vector<locking_key> readset;        
@@ -142,12 +146,6 @@ class locking_action : public translator {
         uint64_t gen_guid();
         void prepare();
         bool Run();
-
-#ifdef 	RUNTIME_PIPELINING
-
-        virtual void release_piece(uint32_t piece_num);
-
-#endif 
 };
 
 #endif // LOCKING_ACTION_H_

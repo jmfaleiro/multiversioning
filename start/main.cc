@@ -34,12 +34,15 @@ uint32_t NUM_CC_THREADS;
 uint64_t recordSize;
 int NumProcs;
 uint32_t numLockingRecords;
-uint32_t tpcc_config::num_warehouses = 10;
+uint32_t tpcc_config::num_warehouses = 0;
 
 uint32_t setup_split::num_split_tables = 0;
 uint64_t* setup_split::split_table_sizes = NULL;
 vector<uint32_t> *setup_split::partitions_txns = NULL;
 uint64_t *setup_split::lock_table_sizes = NULL;
+
+lck_warehouse** tpcc_config::warehouses = NULL;
+lck_district** tpcc_config::districts = NULL; 
 
 int main(int argc, char **argv) {
         //        mlockall(MCL_FUTURE);

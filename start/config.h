@@ -68,6 +68,7 @@ enum ConcurrencyControl {
   OCC = 2,
   HEK = 3,
   SPLIT = 4,
+  PIPELINED = 5,
 };
 
 struct OCCConfig {

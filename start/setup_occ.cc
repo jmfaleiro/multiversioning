@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <tpcc.h>
 #include <locking_record.h>
+#include <pipelined_record.h>
 
 extern uint32_t GLOBAL_RECORD_SIZE;
 
@@ -20,6 +21,19 @@ static bool is_ycsb_exp(workload_config w_conf)
                w_conf.experiment == YCSB_UPDATE || 
                w_conf.experiment == YCSB_RW);
         return ret;
+}
+
+static size_t convert_record_sz(size_t value_sz, ConcurrencyControl cc_type)
+{
+        if (cc_type == OCC) 
+                return (value_sz + sizeof(uint64_t));
+        else if (cc_type == LOCKING)
+                return LOCKING_RECORD_SIZE(value_sz);
+        else if (cc_type == PIPELINED)
+                return PIPELINED_RECORD_SIZE(value_sz);
+        else
+                assert(false);
+        return 0;
 }
 
 OCCAction* setup_occ_action(txn *txn)
@@ -413,7 +427,7 @@ concurrent_table* setup_single_conc_table(uint64_t num_buckets)
 */
 
 table_mgr* setup_ycsb_tables(uint64_t* num_records, workload_config w_conf, 
-                             bool occ)
+                             ConcurrencyControl cc_type)
 {
         assert(is_ycsb_exp(w_conf) == true);
 
@@ -421,19 +435,16 @@ table_mgr* setup_ycsb_tables(uint64_t* num_records, workload_config w_conf,
         Table **tables;
         
         tables = (Table**)zmalloc(sizeof(Table*));
-        tables[0] = setup_single_table(0, 
-                                       (uint64_t)num_records[0],
-                                       0,
-                                       71,
+        tables[0] = setup_single_table(0, (uint64_t)num_records[0], 0, 71, 
                                        2*num_records[0],
-                                       occ? GLOBAL_RECORD_SIZE+8 : LOCKING_RECORD_SIZE(GLOBAL_RECORD_SIZE));
+                                       convert_record_sz(GLOBAL_RECORD_SIZE, cc_type));
         ret = new table_mgr(tables, NULL, 1);
         return ret;
 }
 
 table_mgr* setup_small_bank_tables(uint64_t *num_records, 
                                    workload_config w_conf, 
-                                   bool occ)
+                                   ConcurrencyControl cc_type)
 {
         assert(w_conf.experiment == SMALL_BANK);
         assert(num_records[0] == num_records[1]);
@@ -442,23 +453,17 @@ table_mgr* setup_small_bank_tables(uint64_t *num_records,
         Table **tables;
 
         tables = (Table**)zmalloc(sizeof(Table*)*2);
-        tables[0] = setup_single_table(0, 
-                                       (uint64_t)num_records[0],
-                                       0,
-                                       71,
+        tables[0] = setup_single_table(0, (uint64_t)num_records[0], 0, 71,
                                        2*num_records[0],
-                                       occ? GLOBAL_RECORD_SIZE+8 : LOCKING_RECORD_SIZE(GLOBAL_RECORD_SIZE));
-        tables[1] = setup_single_table(1, 
-                                       (uint64_t)num_records[1],
-                                       0,
-                                       71,
-                                       2*num_records[1],
-                                       occ? GLOBAL_RECORD_SIZE+8 : LOCKING_RECORD_SIZE(GLOBAL_RECORD_SIZE));
+                                       convert_record_sz(GLOBAL_RECORD_SIZE, cc_type));
+        tables[1] = setup_single_table(0, (uint64_t)num_records[0], 0, 71,
+                                       2*num_records[0],
+                                       convert_record_sz(GLOBAL_RECORD_SIZE, cc_type));
         ret = new table_mgr(tables, NULL, 2);
         return ret;
 }
 
-table_mgr* setup_tpcc_tables(workload_config w_conf, bool occ)
+table_mgr* setup_tpcc_tables(workload_config w_conf, ConcurrencyControl cc_type)
 {
         assert(w_conf.experiment == TPCC_SUBSET);
         
@@ -466,6 +471,7 @@ table_mgr* setup_tpcc_tables(workload_config w_conf, bool occ)
         Table **rw_tbls;
         concurrent_table **ins_tbls;
         uint32_t i;
+        size_t record_sz;
         
         rw_tbls = (Table**)zmalloc(sizeof(Table*)*11);
         ins_tbls = (concurrent_table**)zmalloc(sizeof(concurrent_table*)*11);
@@ -474,22 +480,19 @@ table_mgr* setup_tpcc_tables(workload_config w_conf, bool occ)
                 switch (i) {
                 case WAREHOUSE_TABLE:
                         rw_tbls[i] = setup_single_table((uint64_t)i,
-                                                        1000000,
-                                                        //                                                        2*w_conf.num_warehouses,
+                                                        2*w_conf.num_warehouses,
                                                         0,
                                                         71,
-                                                        1000000,//                                                        2*w_conf.num_warehouses,
-                                                        occ? sizeof(warehouse_record)+8 : LOCKING_RECORD_SIZE(sizeof(warehouse_record)));
+                                                        2*w_conf.num_warehouses,
+                                                        convert_record_sz(sizeof(warehouse_record), cc_type));
                         break;
                 case DISTRICT_TABLE:
                         rw_tbls[i] = setup_single_table((uint64_t)i,
-                                                        1000000,
-                                                        //                                                        2*NUM_DISTRICTS*w_conf.num_warehouses,
+                                                        2*NUM_DISTRICTS*w_conf.num_warehouses,
                                                         0,
                                                         71,
-                                                        1000000,
-                                                        //                                                        2*NUM_DISTRICTS*w_conf.num_warehouses, 
-                                                        occ? sizeof(district_record)+8:LOCKING_RECORD_SIZE(sizeof(district_record)));
+                                                        2*NUM_DISTRICTS*w_conf.num_warehouses, 
+                                                        convert_record_sz(sizeof(customer_record), cc_type));
                         break;
                 case CUSTOMER_TABLE:
                          rw_tbls[i] = setup_single_table((uint64_t)i,
@@ -497,7 +500,7 @@ table_mgr* setup_tpcc_tables(workload_config w_conf, bool occ)
                                                          0,
                                                          71,
                                                          2*NUM_DISTRICTS*NUM_CUSTOMERS*w_conf.num_warehouses,
-                                                         occ? sizeof(customer_record)+8:LOCKING_RECORD_SIZE(sizeof(customer_record)));
+                                                         convert_record_sz(sizeof(customer_record), cc_type));
                         break;
                 case NEW_ORDER_TABLE:
                         ins_tbls[i] = new concurrent_table(1000000);
@@ -514,7 +517,7 @@ table_mgr* setup_tpcc_tables(workload_config w_conf, bool occ)
                                                          0,
                                                          71,
                                                          2*NUM_ITEMS*w_conf.num_warehouses,
-                                                         occ? sizeof(stock_record)+8:LOCKING_RECORD_SIZE(sizeof(stock_record)));
+                                                         convert_record_sz(sizeof(stock_record), cc_type));
                         break;
                 case ITEM_TABLE: 
                          rw_tbls[i] = setup_single_table((uint64_t)i,
@@ -522,7 +525,7 @@ table_mgr* setup_tpcc_tables(workload_config w_conf, bool occ)
                                                          0,
                                                          71,
                                                          2*NUM_ITEMS,
-                                                         occ? sizeof(item_record)+8:LOCKING_RECORD_SIZE(sizeof(item_record)));
+                                                         convert_record_sz(sizeof(item_record), cc_type));
                         break;
                 case HISTORY_TABLE:
                         ins_tbls[i] = new concurrent_table(1000000);
@@ -533,7 +536,7 @@ table_mgr* setup_tpcc_tables(workload_config w_conf, bool occ)
                                                          0,
                                                          71,
                                                          20*w_conf.num_warehouses,
-                                                         occ? sizeof(uint64_t)+8:LOCKING_RECORD_SIZE(sizeof(uint64_t)));
+                                                         convert_record_sz(sizeof(uint64_t), cc_type));
                         break;
                 case CUSTOMER_ORDER_INDEX:
                          rw_tbls[i] = setup_single_table((uint64_t)i,
@@ -541,7 +544,7 @@ table_mgr* setup_tpcc_tables(workload_config w_conf, bool occ)
                                                          0,
                                                          71,
                                                          6000*10*w_conf.num_warehouses,
-                                                         occ? sizeof(uint64_t)+8:LOCKING_RECORD_SIZE(sizeof(uint64_t)));
+                                                         convert_record_sz(sizeof(uint64_t), cc_type));
                         break;
                 default:
                         assert(false);
@@ -552,18 +555,18 @@ table_mgr* setup_tpcc_tables(workload_config w_conf, bool occ)
         return ret;
 }
 
-table_mgr* setup_hash_tables(workload_config w_conf, bool occ)
+table_mgr* setup_hash_tables(workload_config w_conf, ConcurrencyControl cc_type)
 {
         uint64_t num_records[2];
         num_records[0] = w_conf.num_records;
         num_records[1] = w_conf.num_records;
 
         if (is_ycsb_exp(w_conf) == true) 
-                return setup_ycsb_tables(num_records, w_conf, occ);
+                return setup_ycsb_tables(num_records, w_conf, cc_type);
         else if (w_conf.experiment == SMALL_BANK)
-                return setup_small_bank_tables(num_records, w_conf, occ);
+                return setup_small_bank_tables(num_records, w_conf, cc_type);
         else if (w_conf.experiment == TPCC_SUBSET) 
-                return setup_tpcc_tables(w_conf, occ);
+                return setup_tpcc_tables(w_conf, cc_type);
         else 
                 assert(false);
         return NULL;
@@ -814,7 +817,7 @@ void occ_experiment(OCCConfig occ_config, workload_config w_conf)
         output_queues = setup_queues<OCCActionBatch>(occ_config.numThreads,
                                                      1024);
         setup_txns = setup_db(w_conf);
-        tbls = setup_hash_tables(w_conf, true);
+        tbls = setup_hash_tables(w_conf, OCC);
         workers = setup_occ_workers(input_queues, output_queues, tbls,
                                     occ_config.numThreads, 
                                     occ_config.occ_epoch,

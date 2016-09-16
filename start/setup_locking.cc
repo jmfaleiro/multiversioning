@@ -166,12 +166,6 @@ static locking_worker** setup_workers(locking_queue **input,
                         i,
                         num_pending,
                         tables,                        
-                        #ifdef 	TPCC
-                        
-                        whs,
-                        dists,
-                        
-                        #endif
                 };
                 struct RecordBuffersConfig rb_conf = setup_buffer_config(i, w_conf);
                 ret[i] = new(i) locking_worker(conf, rb_conf);
@@ -345,7 +339,7 @@ void locking_experiment(locking_config conf, workload_config w_conf)
         }
                    
         assert(conf.num_threads > 0);
-        tables = setup_hash_tables(w_conf, false);
+        tables = setup_hash_tables(w_conf, LOCKING);
         lock_manager = new LockManager(tables);        
         workers = setup_workers(inputs, outputs, lock_manager,
                                 conf.num_threads, 50, tables, num_tables, w_conf);

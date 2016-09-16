@@ -184,13 +184,6 @@ void locking_action::prepare()
         this->num_dependencies = 0;
         barrier();
 
-#ifdef 	RUNTIME_PIPELINING
-
-        this->read_release = 0;
-        this->write_release = 0;
-
-#endif
-
         this->prepared = true;
 }
 
@@ -198,17 +191,12 @@ void locking_action::prepare()
 
 bool locking_action::Run()
 {
+        assert(this->status == UNEXECUTED);
         bool commit;
         commit = this->t->Run();
         //        commit_writes(commit);
+        xchgq((volatile uint64_t*)&this->status, COMPLETE);        
+        
         return commit;
 }
 
-#ifdef RUNTIME_PIPELINING
-
-void locking_action::release_piece(uint32_t piece_num)
-{
-        lock_mgr->ReleaseTable(this, piece_num);
-}
-
-#endif 

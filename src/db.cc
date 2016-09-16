@@ -1,19 +1,6 @@
 #include <db.h>
 #include <cassert>
 
-#ifdef 	RUNTIME_PIPELINING
-
-void translator::release_piece(__attribute__((unused)) uint32_t piece_num)
-{
-}
-
-void txn::release_piece(uint32_t piece_num)
-{
-        trans->release_piece(piece_num);
-}
-
-#endif
-
 txn::txn()
 {
         this->trans = NULL;

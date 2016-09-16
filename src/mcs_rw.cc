@@ -2,6 +2,9 @@
 #include <util.h>
 #include <cassert>
 
+/*
+ * Acquire write lock. 
+ */
 void mcs_rw::acquire_writer(mcs_rw_lock *lock, mcs_rw_node *node)
 {
         mcs_rw_node *pred;

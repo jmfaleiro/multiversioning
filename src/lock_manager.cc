@@ -33,11 +33,11 @@ bool LockManager::LockRecord(locking_action *txn, struct locking_key *k)
         
         if (k->table_id == WAREHOUSE_TABLE) {
                 wh_id = k->key;
-                record = txn->worker->_warehouses[wh_id];
+                record = tpcc_config::warehouses[wh_id];
         } else if (k->table_id == DISTRICT_TABLE) {
                 wh_id = tpcc_util::get_warehouse_key(k->key);
                 d_id = tpcc_util::get_district_key(k->key);
-                record = &txn->worker->_districts[wh_id][d_id];
+                record = &tpcc_config::districts[wh_id][d_id];
         } else {
                 tbl = _tbl_mgr->get_table(k->table_id);
                 assert(tbl != NULL);
@@ -140,51 +140,6 @@ bool LockManager::Lock(locking_action *txn)
         return acquired;
 }
 
-#ifdef 	RUNTIME_PIPELINING
-
-void LockManager::ReleaseTable(locking_action *txn, uint32_t table_id)
-{
-        uint32_t i, num_writes, num_reads;
-
-        num_writes = txn->writeset.size();
-        num_reads = txn->readset.size();
-        for (i = txn->write_release; i < num_writes; ++i) {
-                //                assert(txn->writeset[i].table_id >= table_id);
-                if (txn->writeset[i].table_id <= table_id) {
-                        UnlockRecord(txn, &txn->writeset[i]);
-                        txn->write_release += 1;
-                } else {
-                        break;
-                }
-        }
-        for (i = txn->read_release; i < num_reads; ++i) {
-                //                assert(txn->readset[i].table_id >= table_id);
-                if (txn->readset[i].table_id <= table_id) {
-                        UnlockRecord(txn, &txn->readset[i]);
-                        txn->read_release += 1;
-                } else {
-                        break;
-                }
-        }
-}
-
-void LockManager::Unlock(locking_action *txn)
-{
-        uint32_t i, num_writes, num_reads;
-
-        num_writes = txn->writeset.size();
-        num_reads = txn->readset.size();
-        for (i = txn->write_release; i < num_writes; ++i) {
-                UnlockRecord(txn, &txn->writeset[i]);
-        }
-        for (i = txn->read_release; i < num_reads; ++i) {
-                UnlockRecord(txn, &txn->readset[i]);
-        }
-        txn->finished_execution = true;
-}
-
-#else 
-
 void LockManager::Unlock(locking_action *txn)
 {
         uint32_t i, num_writes, num_reads;
@@ -198,4 +153,3 @@ void LockManager::Unlock(locking_action *txn)
         txn->finished_execution = true;
 }
 
-#endif
