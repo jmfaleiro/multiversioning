@@ -40,8 +40,11 @@ enum table_identifier {
 
 extern size_t *tpcc_record_sizes;
 
-
-
+enum tpcc_txn_types {
+        NEW_ORDER_TXN = 0,
+        PAYMENT_TXN = 1,
+        LOADER_TXN = 2,
+};
 
 class tpcc_util {
  private:
@@ -486,6 +489,7 @@ class tpcc_config {
  public:
         static uint32_t 		num_warehouses;
         static uint32_t 		*tpcc_record_sizes;
+        static uint32_t			*txn_sizes;
         static lck_warehouse 		**warehouses;
         static lck_district 		**districts;
 };

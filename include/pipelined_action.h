@@ -46,7 +46,8 @@ class action {
         locking_action 		**_actions;
         uint32_t 		_num_actions;
 
- public:        
+ public:  
+        action(uint32_t type, locking_action **lck_txns, uint32_t ntxns);
         uint32_t get_num_actions();
         uint32_t get_type();
         locking_action** get_actions();

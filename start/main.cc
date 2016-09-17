@@ -43,6 +43,7 @@ uint64_t *setup_split::lock_table_sizes = NULL;
 
 lck_warehouse** tpcc_config::warehouses = NULL;
 lck_district** tpcc_config::districts = NULL; 
+uint32_t* tpcc_config::txn_sizes = NULL;
 
 int main(int argc, char **argv) {
         //        mlockall(MCL_FUTURE);

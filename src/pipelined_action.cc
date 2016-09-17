@@ -32,3 +32,11 @@ locking_action** pipelined::action::get_actions()
 {
         return _actions;
 }
+
+pipelined::action::action(uint32_t type, locking_action **lck_txns, 
+                          uint32_t ntxns)
+{
+        _type = type;
+        _actions = lck_txns;
+        _num_actions = ntxns;
+}

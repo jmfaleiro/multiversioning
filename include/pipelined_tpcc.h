@@ -2,7 +2,7 @@
 #include <pipelined_action.h>
 
 namespace p_new_order {
-        
+
         class warehouse_read : public txn {
         private:
                 uint32_t 	_wh;
@@ -57,8 +57,8 @@ namespace p_new_order {
         private:
                 uint32_t 		_wh;
                 uint32_t 		_d;
-                uint32_t 		*_supplier_whs;
-                uint32_t 		*_items;
+                uint64_t 		*_supplier_whs;
+                uint64_t 		*_items;
                 uint32_t	 	*_order_quantities;
                 uint32_t 		_nitems;
 
@@ -71,8 +71,8 @@ namespace p_new_order {
                                     float c_disc);
 
         public:
-                process_items(uint32_t wh, uint32_t d, uint32_t *supplier_whs, 
-                              uint32_t *items, 
+                process_items(uint32_t wh, uint32_t d, uint64_t *supplier_whs, 
+                              uint64_t *items, 
                               uint32_t *order_quantities,
                               uint32_t nitems,
                               warehouse_read *wh_txn,
@@ -186,7 +186,8 @@ namespace p_payment {
                 district_update 	*_d_txn;
                 
         public:
-                history_ins(uint32_t wh, uint32_t d, uint32_t c_wh, uint32_t c_d,
+                history_ins(uint32_t wh, uint32_t d, uint32_t c_wh, 
+                            uint32_t c_d,
                             uint32_t c_id, 
                             uint32_t time, 
                             float h_amount,

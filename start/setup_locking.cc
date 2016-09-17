@@ -31,7 +31,7 @@ static inline double GetTime() {
 }
 
 
-static locking_action* txn_to_action(txn *t)
+locking_action* txn_to_locking_action(txn *t)
 {
         locking_action *ret;
         struct big_key *arr;
@@ -66,7 +66,7 @@ static locking_action* generate_action(workload_config w_conf, uint32_t thread)
 
         t = generate_transaction(w_conf, thread);
         assert(t != NULL);
-        ret = txn_to_action(t);
+        ret = txn_to_locking_action(t);
         assert(ret != NULL);
         return ret;
 }
@@ -142,22 +142,6 @@ static locking_worker** setup_workers(locking_queue **input,
         ret = (locking_worker**)malloc(sizeof(locking_worker*)*num_threads);
         assert(ret != NULL);
         
-#ifdef 	TPCC
-        lck_warehouse **whs;
-        lck_district **dists;
-        
-        whs = (lck_warehouse**)zmalloc(sizeof(lck_warehouse*)*40);
-        dists = (lck_district**)zmalloc(sizeof(lck_district*)*40);
-        
-        for (i = 0; i < 40; ++i) {
-                whs[i] = (lck_warehouse*)alloc_mem(sizeof(lck_warehouse), i);
-                memset(whs[i], 0x0, sizeof(lck_warehouse));
-                dists[i] = (lck_district*)alloc_mem(sizeof(lck_district)*NUM_DISTRICTS, i);
-                memset(dists[i], 0x0, sizeof(lck_district)*NUM_DISTRICTS);
-        }
-
-#endif
-
         for (i = 0; i < num_threads; ++i) {
                 struct locking_worker_config conf = {
                         mgr,
@@ -186,7 +170,7 @@ static locking_action_batch setup_db(workload_config w_conf)
         ret.batch = (locking_action**)malloc(sizeof(locking_action*)*num_txns);
         assert(ret.batch != NULL);
         for (i = 0; i < num_txns; ++i) 
-                ret.batch[i] = txn_to_action(loader_txns[i]);
+                ret.batch[i] = txn_to_locking_action(loader_txns[i]);
         return ret;
 }
 

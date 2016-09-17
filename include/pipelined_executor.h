@@ -3,14 +3,15 @@
 
 #include <runnable.hh>
 #include <concurrent_queue.h>
+#include <mcs.h>
 
 class RecordBuffers;
 class RecordBuffersConfig;
 class insert_buf_mgr;
-class mcs_mgr;
 class LockManager;
 class locking_key;
 class locking_action;
+class table_mgr;
 
 namespace pipelined {
 
@@ -40,7 +41,8 @@ typedef enum {
 } dep_type;
 
 struct executor_config {
-        LockManager 		*_mgr;
+        table_mgr 		*_tbl_mgr;
+        LockManager 		*_lck_mgr;
         int 			_cpu;
         txn_queue 		*_input;
         txn_queue		*_output;
@@ -62,15 +64,15 @@ class executor : public Runnable {
  private:
         txn_context 		_context;
         executor_config 	_conf;
-        LockManager 		*_lck_mgr;
         dep_node 		*_depnode_list;
         dependency_table 	*_dep_tbl;
         RecordBuffers 		*_record_buffers;
         insert_buf_mgr 		*_insert_buf_mgr;
-        mcs_mgr 		*_mcs_mgr;
+        mcs_struct 		_mcs_lock_struct;
 
  protected:
         virtual void StartWorking();
+        virtual void Init();
         virtual void exec_txn(action *txn);
         virtual void wait_deps(action *txn, uint32_t piece);
         virtual void add_dep(action *txn, uint32_t piece);
@@ -96,6 +98,8 @@ class executor : public Runnable {
                                             uint32_t piece);
 
  public:
+        void* operator new(std::size_t sz, int cpu);
+
         executor(executor_config conf, RecordBuffersConfig rb_conf);
 };
 

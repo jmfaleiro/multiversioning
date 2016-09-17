@@ -201,7 +201,7 @@ class ExperimentConfig {
     if ((argMap.count(CC_TYPE) == 0) || 
         ((ccType = atoi(argMap[CC_TYPE])) != MULTIVERSION && 
          ccType != LOCKING && ccType != OCC && ccType != HEK &&
-         ccType != SPLIT)) {
+         ccType != SPLIT )&& ccType != PIPELINED) {
       std::cerr << "Undefined concurrency control type\n";
       exit(-1);
     }
@@ -254,7 +254,7 @@ class ExperimentConfig {
         mvConfig.theta = (double)atof(argMap[THETA]);
       }
       this->ccType = MULTIVERSION;
-    } else if (ccType == LOCKING) {  // ccType == LOCKING
+    } else if (ccType == LOCKING || ccType == PIPELINED) {  // ccType == LOCKING
       
       if (argMap.count(NUM_LOCK_THREADS) == 0 || 
           argMap.count(NUM_TXNS) == 0 ||
@@ -299,7 +299,7 @@ class ExperimentConfig {
         lockConfig.theta = (double)atof(argMap[THETA]);
       }
 
-      this->ccType = LOCKING;
+      this->ccType = (ConcurrencyControl)ccType;
     } else if (ccType == OCC) {
 
       if (argMap.count(NUM_LOCK_THREADS) == 0 || 

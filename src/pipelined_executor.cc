@@ -5,6 +5,7 @@
 #include <record_buffer.h>
 #include <mcs.h>
 #include <insert_buf_mgr.h>
+#include <tpcc.h>
 
 using namespace pipelined;
 
@@ -15,9 +16,17 @@ executor::executor(executor_config conf, RecordBuffersConfig rb_conf)
 {
         _conf = conf;
         _record_buffers = new(conf._cpu) RecordBuffers(rb_conf);
-        _mcs_mgr = new(conf._cpu) mcs_mgr(1000, conf._cpu);
         _insert_buf_mgr = new(conf._cpu) insert_buf_mgr(conf._cpu, 11, 
                                                         tpcc_record_sizes);
+}
+
+void* executor::operator new(std::size_t sz, int cpu)
+{
+        return alloc_mem(sz, cpu);
+}
+
+void executor::Init()
+{
 }
 
 void executor::init_depnodes()
@@ -53,6 +62,7 @@ void executor::StartWorking()
         action *txn;
         action_batch cur_batch;
         uint32_t i;
+        bool loading;
 
         while (true) {
                 cur_batch = _conf._input->DequeueBlocking();
@@ -81,15 +91,23 @@ void executor::exec_txn(action *txn)
         uint32_t npieces;
         uint32_t i;
         
+        prepare(txn);
         npieces = txn->get_num_actions();
         sub_actions = txn->get_actions();
-        for (i = 0; i < npieces; ++i) {
-                wait_deps(txn, i);
-                _lck_mgr->Lock(sub_actions[i]);
-                sub_actions[i]->Run();
-                add_dep(txn, i);
-                _lck_mgr->Unlock(sub_actions[i]);
-                get_deps(txn, i);
+        if (txn->get_type() == LOADER_TXN) {
+                assert(npieces == 1);
+                _conf._lck_mgr->Lock(sub_actions[0]);
+                sub_actions[0]->Run();
+                _conf._lck_mgr->Unlock(sub_actions[0]);
+        } else {
+                for (i = 0; i < npieces; ++i) {
+                        wait_deps(txn, i);
+                        _conf._lck_mgr->Lock(sub_actions[i]);
+                        sub_actions[i]->Run();
+                        add_dep(txn, i);
+                        _conf._lck_mgr->Unlock(sub_actions[i]);
+                        get_deps(txn, i);
+                }
         }
 }
 
@@ -103,7 +121,11 @@ void executor::prepare(action *txn)
         
         for (i = 0; i < npieces; ++i) {
                 xchgq((volatile uint64_t*)&sub_actions[i]->status, UNEXECUTED);
-                
+                sub_actions[i]->tables = _conf._tbl_mgr;
+                sub_actions[i]->insert_mgr = _insert_buf_mgr;
+                sub_actions[i]->bufs = _record_buffers;
+                sub_actions[i]->lck = &_mcs_lock_struct;
+
                 nreads = sub_actions[i]->readset.size();
                 for (j = 0; j < nreads; ++j) 
                         sub_actions[i]->readset[j].txn = txn;
@@ -289,18 +311,37 @@ void executor::clear_context()
 
 dependency_table::dependency_table()
 {
-        assert(false);
-        /*
+        uint32_t new_order_size, payment_size, i, j;
+
+        new_order_size = tpcc_config::txn_sizes[NEW_ORDER_TXN];
+        payment_size = tpcc_config::txn_sizes[PAYMENT_TXN];
+        
         _tbl = (uint32_t***)zmalloc(sizeof(uint32_t**)*2);
-        _tbl[NEW_ORDER_TXN] = (uint32_t**)zmalloc(sizeof(uint32_t*)*6);
-        _tbl[PAYMENT_TXN] = (uint32_t**)zmalloc(sizeof(uint32_t*)*4);
-        */
+
+        _tbl[NEW_ORDER_TXN] = (uint32_t**)zmalloc(sizeof(uint32_t*)*new_order_size);
+        for (i = 0; i < new_order_size; ++i) {
+                _tbl[NEW_ORDER_TXN][i] = (uint32_t*)zmalloc(sizeof(uint32_t)*2);
+                _tbl[NEW_ORDER_TXN][i][NEW_ORDER_TXN] = i;
+                if (i < 3)
+                        _tbl[NEW_ORDER_TXN][i][PAYMENT_TXN] = i;
+                else
+                        _tbl[NEW_ORDER_TXN][i][PAYMENT_TXN] = 2;
+        }
+
+        _tbl[PAYMENT_TXN] = (uint32_t**)zmalloc(sizeof(uint32_t*)*payment_size);
+        for (i = 0; i < payment_size; ++i) {
+                _tbl[PAYMENT_TXN][i] = (uint32_t*)zmalloc(sizeof(uint32_t)*2);
+                _tbl[PAYMENT_TXN][i][PAYMENT_TXN] = i;
+                if (i < 3)
+                        _tbl[PAYMENT_TXN][i][NEW_ORDER_TXN] = i;
+                else 
+                        _tbl[PAYMENT_TXN][i][NEW_ORDER_TXN] = 2;
+        }
 }
 
 uint32_t dependency_table::get_dependent_piece(uint32_t dependent_type, 
                                                uint32_t dependency_type, 
                                                uint32_t piece_num)
 {
-        assert(false);
-        return 0;
+        return _tbl[dependent_type][piece_num][dependency_type];
 }

@@ -161,8 +161,8 @@ bool p_new_order::oorder_ins::Run()
 }
 
 p_new_order::process_items::process_items(uint32_t wh, uint32_t d, 
-                                          uint32_t *supplier_whs, 
-                                          uint32_t *items, 
+                                          uint64_t *supplier_whs, 
+                                          uint64_t *items, 
                                           uint32_t *order_quantities,
                                           uint32_t nitems,
                                           warehouse_read *wh_txn,
