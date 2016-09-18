@@ -38,7 +38,7 @@ public:
         struct locking_key *prev;
         struct locking_key *next;
         bool is_initialized;
-        locking_worker *_worker;
+        //        locking_worker *_worker;
 
         void *value;
         void *buf;
@@ -109,7 +109,7 @@ class locking_action : public translator {
         
         volatile uint64_t __attribute__((__aligned__(CACHE_LINE)))
                 num_dependencies;
-        locking_worker *worker;
+        Runnable *worker;
         locking_action *next;
         locking_action *prev;
         table_mgr *tables;

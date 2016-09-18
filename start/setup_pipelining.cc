@@ -213,10 +213,10 @@ static action_batch create_single_batch(uint32_t num_txns,
 
         action_array = (action**)zmalloc(sizeof(action*)*num_txns);        
         for (i = 0; i < num_txns; ++i) {
-                if (rand() % 2 == 0) 
-                        action_array[i] = setup_new_order(w_conf, thread_id);
-                else 
-                        action_array[i] = setup_payment(w_conf, thread_id);
+                //                if (rand() % 2 == 0) 
+                //                        action_array[i] = setup_new_order(w_conf, thread_id);
+                //                else 
+                action_array[i] = setup_payment(w_conf, thread_id);
         }
         ret._batch_sz = num_txns;
         ret._txns = action_array;

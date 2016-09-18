@@ -152,7 +152,7 @@ void locking_worker::DoExec(locking_action *txn)
         assert(txn->num_dependencies == 0);
         assert(txn->bufs == NULL);
         txn->bufs = this->bufs;    
-        txn->worker = this;
+        //        txn->worker = this;
         txn->Run();
         config.mgr->Unlock(txn);
         take_locks(txn);
@@ -173,7 +173,7 @@ locking_worker::WorkerFunction()
                         // txns. If we have, exec pending txns so we get below
                         // the threshold.
                         if ((uint32_t)m_num_elems < config.maxPending) {
-                                batch.batch[i]->worker = this;
+                                //                                batch.batch[i]->worker = this;
                                 give_locks(batch.batch[i]);
                                 TryExec(batch.batch[i]);
                         } else { 

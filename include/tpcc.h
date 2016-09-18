@@ -490,8 +490,8 @@ class tpcc_config {
         static uint32_t 		num_warehouses;
         static uint32_t 		*tpcc_record_sizes;
         static uint32_t			*txn_sizes;
-        static lck_warehouse 		**warehouses;
-        static lck_district 		**districts;
+        static void	 		**warehouses;
+        static void	 		***districts;
 };
 
 #endif 		// TPCC_H_
