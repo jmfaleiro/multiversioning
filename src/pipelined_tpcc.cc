@@ -15,7 +15,7 @@ uint32_t p_new_order::warehouse_read::num_reads()
 void p_new_order::warehouse_read::get_reads(big_key *array)
 {
         array[0].key = (uint64_t)_wh;
-        array[1].table_id = WAREHOUSE_TABLE;
+        array[0].table_id = WAREHOUSE_TABLE;
 }
 
 bool p_new_order::warehouse_read::Run()
