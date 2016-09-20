@@ -25,6 +25,12 @@ struct split_new_order_conf {
         bool all_local;
 };
 
+struct split_payment_conf {
+        uint32_t w_id;
+        uint32_t d_id;
+        uint32_t c_id;
+};
+
 uint64_t simple_record0, simple_record1;
 bool init = false;
 
@@ -43,17 +49,22 @@ uint32_t get_tpcc_warehouse_partition(uint32_t warehouse, uint32_t type, uint32_
 {
 
         uint32_t temp;
-        assert(type == WAREHOUSE_TABLE);
+        //        assert(type == WAREHOUSE_TABLE);
         if (type == WAREHOUSE_TABLE) {
                 return warehouse % num_partitions;
         } else if (type == STOCK_TABLE) {
-                return num_partitions - 1 - (warehouse % num_partitions);
+                return (num_partitions - 1 - (warehouse % num_partitions));
                 //                temp = warehouse % num_partitions;
                 //                return num_partitions - 1 - temp;
         }
 
         //        uint64_t temp = ((uint64_t)type << 32) | num_partitions;
         //        return Hash128to64(std::make_pair(warehouse, type)) % num_partitions;
+}
+
+uint32_t get_tpcc_history_partition(uint32_t num_partitions)
+{
+        return num_partitions - 1;
 }
 
 uint32_t get_tpcc_district_partition(uint32_t warehouse, uint32_t district, 
@@ -63,7 +74,8 @@ uint32_t get_tpcc_district_partition(uint32_t warehouse, uint32_t district,
         assert(type == DISTRICT_TABLE || type == NEW_ORDER_TABLE || 
                type == CUSTOMER_TABLE ||
                type == OORDER_TABLE ||
-               type == ORDER_LINE_TABLE);
+               type == ORDER_LINE_TABLE ||
+               type == HISTORY_TABLE);
         //        return  % num_partitions;
         /*
 
@@ -75,9 +87,20 @@ uint32_t get_tpcc_district_partition(uint32_t warehouse, uint32_t district,
                 index = warehouse*NUM_DISTRICTS + district;
                 return 2 + index % (num_partitions - 2);
         */
+        
+        /*
+        if (type == DISTRICT_TABLE || type == CUSTOMER_TABLE || type == HISTORY_TABLE) 
+                return (warehouse * NUM_DISTRICTS + district) % num_partitions;
+        else if (type == NEW_ORDER_TABLE) {
+                return (num_partitions - 1 - ((warehouse * (NUM_DISTRICTS + 3) + district) % num_partitions));
+        } else if (type == OORDER_TABLE) {
+                return (num_partitions - 1 - ((warehouse * (NUM_DISTRICTS + 3) + district + 1) % num_partitions));
+        } else if (type == ORDER_LINE_TABLE) {
+                return (num_partitions - 1 - ((warehouse * (NUM_DISTRICTS + 3) + district + 2) % num_partitions));
+        } else
+                assert(false);
+        */      
 
-
-        return (warehouse * NUM_DISTRICTS + district) % num_partitions;
         /*
         if (type == DISTRICT_TABLE)
                 return 1;
@@ -111,12 +134,14 @@ uint32_t get_tpcc_partition(uint32_t warehouse, uint32_t district, uint32_t type
                 return get_tpcc_warehouse_partition(warehouse, type, num_partitions);
         case STOCK_TABLE:
                 return get_tpcc_stock_partition(warehouse, district, type, num_partitions);
+                // return get_tpcc_warehouse_partition(warehouse, type, num_partitions);
         case DISTRICT_TABLE:
         case CUSTOMER_TABLE:
         case NEW_ORDER_TABLE:
         case ORDER_LINE_TABLE:
         case OORDER_TABLE:
-                return get_tpcc_district_partition(warehouse, district, type, num_partitions);
+        case HISTORY_TABLE:
+                return get_tpcc_district_partition(warehouse, district, type, num_partitions);                
         default:
                 assert(false);
         }
@@ -134,6 +159,19 @@ graph_node* find_node(uint32_t partition, txn_graph *graph)
                         return (*nodes)[i];
         }
         return NULL;
+}
+
+split_payment_conf gen_payment_conf(workload_config conf)
+{
+        assert(conf.experiment == TPCC_SUBSET);
+
+        split_payment_conf ret;
+
+        ret.w_id = (uint32_t)rand() % conf.num_warehouses;
+        ret.d_id = (uint32_t)rand() % NUM_DISTRICTS;
+        ret.c_id = (uint32_t)rand() % NUM_CUSTOMERS;
+        
+        return ret;
 }
 
 split_new_order_conf gen_neworder_conf(workload_config conf)
@@ -187,6 +225,72 @@ split_new_order_conf gen_neworder_conf(workload_config conf)
         return ret;
 }
 
+txn_graph* gen_payment(workload_config conf, __attribute__((unused)) uint32_t num_partitions)
+{
+        using namespace split_payment;
+        
+        uint32_t time, partition;
+        split_payment_conf p_conf;
+        float h_amount;
+        update_warehouse *wh_piece;
+        update_district *d_piece;
+        update_customer *c_piece;
+        insert_history *h_piece;
+        txn_graph *graph;
+        graph_node *wh_node, *d_node, *c_node, *h_node;
+
+        p_conf = gen_payment_conf(conf);
+        time = 0;
+        h_amount = 1.0*((uint32_t)rand() % 5000);
+
+        wh_piece = new update_warehouse(p_conf.w_id, h_amount);
+        d_piece = new update_district(p_conf.w_id, p_conf.d_id, h_amount);
+        c_piece = new update_customer(p_conf.w_id, p_conf.d_id, p_conf.c_id, 0,
+                                      false, 
+                                      h_amount);
+        h_piece = new insert_history(wh_piece, d_piece, p_conf.w_id, 
+                                     p_conf.d_id, 
+                                     p_conf.c_id,
+                                     p_conf.w_id, 
+                                     p_conf.d_id, 
+                                     0,
+                                     false,
+                                     h_amount, 
+                                     time);
+
+        graph = new txn_graph();
+
+        wh_node = new graph_node();
+        partition = get_tpcc_partition(p_conf.w_id, p_conf.d_id, WAREHOUSE_TABLE, num_partitions);
+        wh_node->app = wh_piece;
+        wh_node->partition = partition;
+        graph->add_node(wh_node);
+
+        d_node = new graph_node();
+        partition = get_tpcc_partition(p_conf.w_id, p_conf.d_id, DISTRICT_TABLE, num_partitions);
+        d_node->app = d_piece;
+        d_node->partition = partition;
+        graph->add_node(d_node);
+        
+        c_node = new graph_node();
+        partition = get_tpcc_partition(p_conf.w_id, p_conf.d_id, CUSTOMER_TABLE, num_partitions);
+        c_node->app = c_piece;
+        c_node->partition = partition;
+        graph->add_node(c_node);
+        
+        h_node = new graph_node();
+        partition = get_tpcc_partition(p_conf.w_id, p_conf.d_id, HISTORY_TABLE, num_partitions);
+        h_node->app = h_piece;
+        h_node->partition = partition;
+        graph->add_node(h_node);
+        
+        graph->add_edge(wh_node, h_node);
+        graph->add_edge(d_node, h_node);
+        graph->add_edge(c_node, h_node);
+        
+        return graph;
+}
+
 txn_graph* gen_new_order(workload_config conf, __attribute__((unused)) uint32_t num_partitions)
 {
         using namespace split_new_order;
@@ -216,13 +320,12 @@ txn_graph* gen_new_order(workload_config conf, __attribute__((unused)) uint32_t 
                                         no_conf.customer_id);
 
         
-        /*
         oorder_pc = new insert_oorder(district_pc, customer_pc, 
                                       no_conf.warehouse_id, 
                                       no_conf.district_id, 
                                       no_conf.all_local, 
                                       no_conf.num_items);
-        */
+
         for (i = 0; i < no_conf.num_items; ++i) {
                 cur_wh = get_tpcc_partition(no_conf.suppliers[i], no_conf.items[i], STOCK_TABLE, num_partitions);
                 if (warehouse_cnt.count(cur_wh) == 0) 
@@ -260,12 +363,12 @@ txn_graph* gen_new_order(workload_config conf, __attribute__((unused)) uint32_t 
                                             no_conf.num_items,
                                             &stock_pieces);
 
-        /*
+
         ol_pc = new insert_order_lines(no_conf.warehouse_id, 
                                        no_conf.district_id, 
                                        district_pc, 
                                        &stock_pieces);
-        */                             
+
         /* Turn it into a graph */
         txn_graph *graph;
         graph = new txn_graph();
@@ -317,7 +420,7 @@ txn_graph* gen_new_order(workload_config conf, __attribute__((unused)) uint32_t 
         }
         */
         
-        /*
+
         graph_node *oorder_node = new graph_node();
         oorder_node->app = oorder_pc;
         oorder_node->partition = get_tpcc_partition(no_conf.warehouse_id, 
@@ -326,11 +429,8 @@ txn_graph* gen_new_order(workload_config conf, __attribute__((unused)) uint32_t 
                                                     num_partitions);
         graph->add_node(oorder_node);
         graph->add_edge(district_node, oorder_node);
-
-        
-        */
-
-
+        graph->add_edge(customer_node, oorder_node);
+        graph->add_edge(warehouse_node, oorder_node);
 
         graph_node *new_order_node = new graph_node();
         new_order_node->app = new_order_pc;
@@ -344,12 +444,6 @@ txn_graph* gen_new_order(workload_config conf, __attribute__((unused)) uint32_t 
         graph->add_edge(warehouse_node, new_order_node);
 
 
-        assert(stock_pieces.size() == stock_nodes.size());
-        for (i = 0; i < stock_pieces.size(); ++i) 
-                graph->add_edge(stock_nodes[i], new_order_node);
-
-        /*
-
         graph_node *order_line_node = new graph_node();
         order_line_node->app = ol_pc;
         order_line_node->partition = get_tpcc_partition(no_conf.warehouse_id, 
@@ -360,8 +454,18 @@ txn_graph* gen_new_order(workload_config conf, __attribute__((unused)) uint32_t 
         graph->add_node(order_line_node);
         graph->add_edge(district_node, order_line_node);
         graph->add_edge(warehouse_node, order_line_node);
+        graph->add_edge(customer_node, order_line_node);
+
+
+        assert(stock_pieces.size() == stock_nodes.size());
+        for (i = 0; i < stock_pieces.size(); ++i) {
+                graph->add_edge(stock_nodes[i], new_order_node);
+                graph->add_edge(stock_nodes[i], order_line_node);
+                graph->add_edge(stock_nodes[i], oorder_node);
+        }
+
+
         //        graph->add_edge(new_order_node, order_line_node);
-        */
         //        assert(graph->get_nodes()->size() == + stock_nodes.size());
         return graph;
 }
@@ -847,7 +951,10 @@ txn_graph* generate_split_action(workload_config conf, uint32_t num_partitions)
         } else if (conf.experiment == YCSB_RW) {
                 return gen_read_write(my_gen, conf, num_partitions);
         } else if (conf.experiment == TPCC_SUBSET) {
-                return gen_new_order(conf, num_partitions);
+                if (rand() % 2 == 0)
+                        return gen_new_order(conf, num_partitions);
+                else 
+                        return gen_payment(conf, num_partitions);
         }
         assert(false);
 }

@@ -2,22 +2,24 @@
 #include <split_tpcc.h>
 #include <algorithm>
 
+
 split_new_order::read_warehouse::read_warehouse(uint32_t warehouse_id)
 {
         _warehouse_id = warehouse_id;
 }
-
+/*
 uint32_t split_new_order::read_warehouse::num_reads()
 {
         return 1;
 }
+
 
 void split_new_order::read_warehouse::get_reads(big_key *array)
 {
         array[0].key = (uint64_t)_warehouse_id;
         array[0].table_id = WAREHOUSE_TABLE;
 }
-
+*/
 bool split_new_order::read_warehouse::Run()
 {
         warehouse_record *wh;
@@ -36,6 +38,7 @@ split_new_order::update_district::update_district(uint32_t warehouse_id,
         _district_id = district_id;
 }
 
+/*
 uint32_t split_new_order::update_district::num_rmws()
 {
         return 1;
@@ -49,6 +52,7 @@ void split_new_order::update_district::get_rmws(big_key *array)
         array[0].key = key;
         array[0].table_id = DISTRICT_TABLE;
 }
+*/
 
 /* update_district is a "root" piece. */
 bool split_new_order::update_district::Run()
@@ -76,6 +80,7 @@ split_new_order::read_customer::read_customer(uint32_t wh_id, uint32_t d_id,
         _c_id = c_id;
 }
 
+/*
 uint32_t split_new_order::read_customer::num_reads()
 {
         return 1;
@@ -89,6 +94,7 @@ void split_new_order::read_customer::get_reads(big_key *array)
         array[0].key = key;
         array[0].table_id = CUSTOMER_TABLE;
 }
+*/
 
 /* read_customer is a "root" piece */
 bool split_new_order::read_customer::Run()
@@ -134,7 +140,7 @@ split_new_order::insert_order_lines::insert_order_lines(uint32_t wh_id,
 bool split_new_order::insert_order_lines::Run()
 {
         order_line_record order_line;
-        uint32_t i, j, order_id, num_stocks, count;
+        uint32_t i, j, order_id, num_stocks, stock_txns, count;
         update_stocks *stock_piece;
         stock_update_data *stock_data;
         item_record *item;
@@ -145,23 +151,23 @@ bool split_new_order::insert_order_lines::Run()
         order_line.ol_w_id = _wh_id;
         
         order_id = _dstrct_pc->_order_id;
-        num_stocks = _stock_pieces.size();
+        stock_txns = _stock_pieces.size();
         count = 0;
-        for (i = 0; i < num_stocks; ++i) {
+        for (i = 0; i < stock_txns; ++i) {
                 stock_piece = _stock_pieces[i];
                 num_stocks = stock_piece->_info.size();
                 for (j = 0; j < num_stocks; ++j) {
                         order_line.ol_number = count;
                         count += 1;
-                        /*
+                        
                         stock_data = &stock_piece->_info[j];
                         order_line.ol_supply_w_id = stock_data->_supplier_wh;
                         order_line.ol_quantity = stock_data->_quantity;
                         order_line.ol_i_id = stock_data->_item_id;
-                        item = (item_record*)get_read_ref((uint64_t)stock_data->_item_id, ITEM_TABLE);
-                        order_line.ol_amount = item->i_price*stock_data->_quantity;
-                        */
-                        //                        strcpy(order_line.ol_dist_info, stock_data->_district_info);
+                        //item = (item_record*)get_read_ref((uint64_t)stock_data->_item_id, ITEM_TABLE);
+                        // order_line.ol_amount = item->i_price*stock_data->_quantity;
+                        
+                        strcpy(order_line.ol_dist_info, stock_data->_district_info);
                 }
         }
         return true;
@@ -293,6 +299,19 @@ void split_new_order::insert_oorder::get_rmws(big_key *array)
 /* Depends on the execution of the update_district piece */
 bool split_new_order::insert_oorder::Run()
 {
+        uint64_t oorder_key;
+        oorder_record *oorder;
+        oorder_key = tpcc_util::create_new_order_key(_wh_id, 
+                                                     _dstrct_id,
+                                                     _dstrct_pc->_order_id);
+        oorder = (oorder_record*)insert_record(oorder_key, OORDER_TABLE);
+        oorder->o_id = _dstrct_pc->_order_id;
+        oorder->o_w_id = _wh_id;
+        oorder->o_d_id = _dstrct_id;
+        oorder->o_c_id = _cust_pc->_c_id;
+        oorder->o_carrier_id = 0;
+        oorder->o_ol_cnt = _num_items;
+        oorder->o_all_local = _all_local;        
         return true;
 }
 
@@ -404,16 +423,35 @@ void split_new_order::insert_new_order::get_rmws(big_key *array)
 bool split_new_order::insert_new_order::Run()
 {
 
-        do_oorder();
+        //        do_oorder();
         do_new_order();
-        do_order_lines();
+        //        do_order_lines();
         return true;
 }
+
+split_payment::update_warehouse::update_warehouse(uint32_t wh_id, float h_amount)
+{
+        _wh_id = wh_id;
+        _h_amount = h_amount;
+}
+
+/*
+uint32_t split_payment::update_warehouse::num_rmws()
+{
+        return 1;
+}
+
+void split_payment::update_warehouse::get_rmws(big_key *array)
+{
+        array[0].key = (uint64_t)_wh_id;
+        array[0].table_id = WAREHOUSE_TABLE;
+}
+*/
 
 /* This is a root piece */
 bool split_payment::update_warehouse::Run()
 {
-        assert(_wh_id < tpcc_config::num_warehouses);
+        //        assert(_wh_id < tpcc_config::num_warehouses);
         warehouse_record *warehouse;
         
         warehouse = (warehouse_record*)get_write_ref((uint64_t)_wh_id, 
@@ -423,10 +461,31 @@ bool split_payment::update_warehouse::Run()
         return true;
 }
 
+split_payment::update_district::update_district(uint32_t wh_id, uint32_t d_id, 
+                                                float h_amount)
+{
+        _warehouse_id = wh_id;
+        _district_id = d_id;
+        _h_amount = h_amount;
+}
+
+/*
+uint32_t split_payment::update_district::num_rmws()
+{
+        return 1;
+}
+
+void split_payment::update_district::get_rmws(big_key *array)
+{
+        array[0].key = tpcc_util::create_district_key(_warehouse_id, _district_id);
+        array[0].table_id = DISTRICT_TABLE;
+}
+*/
+
 /* This is a root piece */
 bool split_payment::update_district::Run()
 {
-        assert(_district_id >= 1 && _district_id <= 10);
+        //        assert(_district_id >= 1 && _district_id <= 10);
         district_record *district;
         uint64_t district_key;
         
@@ -438,6 +497,35 @@ bool split_payment::update_district::Run()
         _district_name = district->d_name;
         return true;
 }
+
+split_payment::update_customer::update_customer(uint32_t w_id, uint32_t d_id, 
+                                                uint32_t c_id, 
+                                                uint64_t c_name, 
+                                                bool use_name, 
+                                                float h_amount)
+{
+        _warehouse_id = w_id;
+        _district_id = d_id;
+        _customer_id = c_id;
+        _customer_name_ptr = c_name;
+        _customer_district_id = d_id;
+        _customer_warehouse_id = w_id;
+        _use_name = false;
+        _h_amount = h_amount;
+}
+
+/*
+uint32_t split_payment::update_customer::num_rmws()
+{
+        return 1;
+}
+
+void split_payment::update_customer::get_rmws(big_key *array)
+{
+        array[0].key = tpcc_util::create_district_key(_warehouse_id, _district_id);
+        array[0].table_id = CUSTOMER_TABLE;
+}
+*/
 
 /* This is a root piece */
 bool split_payment::update_customer::Run()
@@ -454,7 +542,7 @@ bool split_payment::update_customer::Run()
                                                       _district_id, 
                                                       _customer_id);
         cust = (customer_record*)get_write_ref(customer_key, 
-                                                   CUSTOMER_TABLE);
+                                               CUSTOMER_TABLE);
 
         /* Check credit */        
         if (strcmp(credit, cust->c_credit) == 0) {	
@@ -482,6 +570,31 @@ bool split_payment::update_customer::Run()
         return true;
 }
 
+split_payment::insert_history::insert_history(update_warehouse *warehouse_piece,
+                                              update_district *district_piece, 
+                                              uint32_t warehouse_id,
+                                              uint32_t district_id,
+                                              uint32_t customer_id,
+                                              uint32_t customer_warehouse_id,
+                                              uint32_t customer_district_id,
+                                              uint64_t customer_name_ptr,
+                                              bool use_name, 
+                                              float amount,
+                                              uint32_t time)
+{
+        _warehouse_piece = warehouse_piece;
+        _district_piece = district_piece;
+        _wh_id = warehouse_id;
+        _d_id = district_id;
+        _customer_id = customer_id;
+        _customer_warehouse_id = customer_warehouse_id;
+        _customer_district_id = customer_district_id;
+        _customer_name_ptr = customer_name_ptr;
+        _use_name = use_name;
+        _amount = amount;
+        _time = time;
+}
+
 /* Depends on the update_warehouse and update_district pieces */
 bool split_payment::insert_history::Run()
 {
@@ -492,7 +605,8 @@ bool split_payment::insert_history::Run()
                                  empty, 
                                  _district_piece->_district_name};
         
-        history_key = tpcc_util::create_district_key(_wh_id, _d_id);
+        //        history_key = tpcc_util::create_district_key(_wh_id, _d_id);
+        history_key = guid();
         hist = (history_record*)insert_record(history_key, HISTORY_TABLE);
         hist->h_c_id = _customer_id;
         hist->h_c_d_id = _customer_district_id;
