@@ -237,7 +237,7 @@ void executor::add_prev_write(action *txn, locking_key *start)
                 wait_inserted(pred);
         }
         
-        if (pred != NULL) {// && executor::is_unmarked_ref(pred->prev) == true) {
+        if (pred != NULL && executor::is_unmarked_ref(pred->prev) == true) {
                 assert(pred->is_write == true && pred->txn != NULL);
                 add_dep_context((pipelined::action*)pred->txn);
         }
@@ -255,8 +255,8 @@ void executor::add_prev_reads(action *txn, locking_key *start)
         for (pred = start->prev; pred != NULL && pred->is_write == false; 
              pred = executor::get_unmarked_ref(pred->prev)) {
                 assert(pred->is_write == false && pred->txn != NULL);
-                //                if (executor::is_unmarked_ref(pred->prev))
-                add_dep_context((pipelined::action*)pred->txn);
+                if (executor::is_unmarked_ref(pred->prev))
+                        add_dep_context((pipelined::action*)pred->txn);
                 wait_inserted(pred);
         }
 }
