@@ -135,8 +135,8 @@ uint32_t get_tpcc_partition(uint32_t warehouse, uint32_t district, uint32_t type
         case WAREHOUSE_TABLE:
                 return get_tpcc_warehouse_partition(warehouse, type, num_partitions);
         case STOCK_TABLE:
-                return get_tpcc_stock_partition(warehouse, district, type, num_partitions);
-                // return get_tpcc_warehouse_partition(warehouse, type, num_partitions);
+                //                return get_tpcc_stock_partition(warehouse, district, type, num_partitions);
+                return get_tpcc_warehouse_partition(warehouse, type, num_partitions);
         case DISTRICT_TABLE:
         case CUSTOMER_TABLE:
         case NEW_ORDER_TABLE:

@@ -481,7 +481,7 @@ dependency_table::dependency_table()
                 if (i < 3)
                         _tbl[NEW_ORDER_TXN][i][PAYMENT_TXN] = i;
                 else
-                        _tbl[NEW_ORDER_TXN][i][PAYMENT_TXN] = 2;
+                        _tbl[NEW_ORDER_TXN][i][PAYMENT_TXN] = 3;
         }
 
         _tbl[PAYMENT_TXN] = (uint32_t**)zmalloc(sizeof(uint32_t*)*payment_size);
@@ -491,7 +491,7 @@ dependency_table::dependency_table()
                 if (i < 3)
                         _tbl[PAYMENT_TXN][i][NEW_ORDER_TXN] = i;
                 else 
-                        _tbl[PAYMENT_TXN][i][NEW_ORDER_TXN] = 2;
+                        _tbl[PAYMENT_TXN][i][NEW_ORDER_TXN] = 5;
         }
 }
 
