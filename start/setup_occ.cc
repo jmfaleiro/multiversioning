@@ -9,6 +9,8 @@
 #include <tpcc.h>
 #include <locking_record.h>
 #include <pipelined_record.h>
+#include <occ_record.h>
+#include <rc_record.h>
 
 extern uint32_t GLOBAL_RECORD_SIZE;
 
@@ -25,8 +27,12 @@ static bool is_ycsb_exp(workload_config w_conf)
 
 static size_t convert_record_sz(size_t value_sz, ConcurrencyControl cc_type)
 {
-        if (cc_type == OCC) 
-                return (value_sz + sizeof(uint64_t));
+        if (cc_type == OCC) {
+                if (READ_COMMITTED)
+                        return RC_RECORD_SIZE(value_sz);
+                else
+                        return OCC_RECORD_SIZE(value_sz);
+        }
         else if (cc_type == LOCKING)
                 return LOCKING_RECORD_SIZE(value_sz);
         else if (cc_type == PIPELINED)
@@ -348,10 +354,7 @@ OCCWorker** setup_occ_workers(SimpleQueue<OCCActionBatch> **inputQueue,
          * XXX This is currently hardcoded for YCSB. Need to change it for 
          * TPC-C. 
          */
-        if (READ_COMMITTED)
-                lock_tables = setup_occ_lock_tables(conf, w_conf);
-        else
-                lock_tables = NULL;
+        lock_tables = NULL;
         //        lock_tables_copy = NULL;
 
         /* Copy tables */
