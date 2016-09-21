@@ -190,23 +190,23 @@ split_new_order::update_stocks::update_stocks(uint32_t wh_id, uint32_t dstrct_id
         
 }
 
-uint32_t split_new_order::update_stocks::num_rmws()
-{
-        return _info.size();
-}
+// uint32_t split_new_order::update_stocks::num_rmws()
+// {
+//         return _info.size();
+// }
 
-void split_new_order::update_stocks::get_rmws(big_key *array)
-{
-        uint32_t i, nitems;
-        
-        nitems = _info.size();
-        for (i = 0; i < nitems; ++i) {
-                array[i].key = tpcc_util::create_stock_key(_info[i]._supplier_wh, _info[i]._item_id);
-                array[i].table_id = STOCK_TABLE;
-        }
-        //        array[0].key = (uint64_t)_supplier_id;
-        //        array[0].table_id = STOCK_TABLE;
-}
+// void split_new_order::update_stocks::get_rmws(big_key *array)
+// {
+//         uint32_t i, nitems;
+//         
+//         nitems = _info.size();
+//         for (i = 0; i < nitems; ++i) {
+//                 array[i].key = tpcc_util::create_stock_key(_info[i]._supplier_wh, _info[i]._item_id);
+//                 array[i].table_id = STOCK_TABLE;
+//         }
+//         //        array[0].key = (uint64_t)_supplier_id;
+//         //        array[0].table_id = STOCK_TABLE;
+// }
 
 /* update_stocks is a "root" piece. */
 bool split_new_order::update_stocks::Run()

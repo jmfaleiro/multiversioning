@@ -165,20 +165,20 @@ public:
                 assert(strlen(stock->s_dist_10) < 25);
         }
 
-        static void init_stock(Table *tbl, uint32_t warehouse)
+        static void init_stock(Table *tbl, uint32_t warehouse, uint32_t item)
         {
-                uint32_t i;
+                //                uint32_t i;
                 stock_record record;
 
                 /* Initialize records */
-                for (i = 0; i < NUM_ITEMS; ++i) {
-                        record.s_w_id = warehouse;
-                        record.s_i_id = i;
-                        setup_stock_single(&record);
+                //                for (i = 0; i < NUM_ITEMS; ++i) {
+                record.s_w_id = warehouse;
+                record.s_i_id = item;
+                setup_stock_single(&record);
 
-                        tbl->Put(tpcc_util::create_stock_key(warehouse, i),
-                                 &record);
-                }                
+                tbl->Put(tpcc_util::create_stock_key(warehouse, item),
+                         &record);
+                        //                }                
         }
         
         static void setup_stocks(Table ***lock_tbls, Table ***data_tbls, 
@@ -211,17 +211,17 @@ public:
                         t_conf.freeListSz = sizes[i];
                         t_conf.valueSz = sizeof(split_record);
                         t_conf.recordSize = sizeof(split_record);
-                        lock_tbls[i][STOCK_TABLE] = new(i) Table(t_conf);
-                        stock[i] = (stock_record*)alloc_mem(sizeof(stock_record)*sizes[i], i);
-                        memset(stock[i], 0x0, sizeof(stock_record)*sizes[i]);
+                        //                        lock_tbls[i][STOCK_TABLE] = new(i) Table(t_conf);
+                        //                        stock[i] = (stock_record*)alloc_mem(sizeof(stock_record)*sizes[i], i);
+                        //                        memset(stock[i], 0x0, sizeof(stock_record)*sizes[i]);
 
-                        /*
+                        
                         t_conf.valueSz = sizeof(stock_record);
                         t_conf.recordSize = sizeof(stock_record);
-                        t_conf.numBuckets = 2*sizes[i]*NUM_ITEMS;
-                        t_conf.freeListSz = sizes[i]*NUM_ITEMS;
-                        */
-                        data_tbls[i][STOCK_TABLE] = NULL;
+                        t_conf.numBuckets = 2*sizes[i];
+                        t_conf.freeListSz = 2*sizes[i];
+                        
+                        data_tbls[i][STOCK_TABLE] = new(i) Table(t_conf);
                 }
 
                 /* Insert stock records */
@@ -231,7 +231,8 @@ public:
                                 index = next[cpu];
                                 next[cpu] += 1;
                                 temp = &stock[cpu][index];
-
+                                
+                                /*
                                 splt_rec.key.key = tpcc_util::create_stock_key(i, j);
                                 splt_rec.key.table_id = STOCK_TABLE;
                                 splt_rec.epoch = 0;
@@ -241,10 +242,10 @@ public:
                                 temp->s_w_id = i;
                                 temp->s_i_id = j;
                                 setup_stock_single(temp);
-
-                                lock_tbls[cpu][STOCK_TABLE]->Put(tpcc_util::create_stock_key(i, j), 
-                                                                 &splt_rec);
-                                //                                init_stock(data_tbls[cpu][STOCK_TABLE], i);
+                                */
+                                //                                lock_tbls[cpu][STOCK_TABLE]->Put(tpcc_util::create_stock_key(i, j), 
+                                //                                                                 &splt_rec);
+                                init_stock(data_tbls[cpu][STOCK_TABLE], i, j);
                         }
                 }
         }        

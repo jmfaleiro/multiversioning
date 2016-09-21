@@ -23,6 +23,11 @@ enum locking_action_status {
         COMPLETE,
 };
 
+enum locking_key_status {
+        PRE_INSERT = 0,
+        INSERT_COMPLETE = 1,
+};
+
 struct locking_key {
 
 public:
@@ -44,6 +49,8 @@ public:
         void *buf;
         mcs_rw::mcs_rw_node lock_node;
         void *txn;
+
+        volatile uint64_t dep_status;
 
         bool operator==(const struct locking_key &other) const
         {

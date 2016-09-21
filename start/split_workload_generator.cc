@@ -87,19 +87,22 @@ uint32_t get_tpcc_district_partition(uint32_t warehouse, uint32_t district,
                 index = warehouse*NUM_DISTRICTS + district;
                 return 2 + index % (num_partitions - 2);
         */
-        
-        /*
-        if (type == DISTRICT_TABLE || type == CUSTOMER_TABLE || type == HISTORY_TABLE) 
-                return (warehouse * NUM_DISTRICTS + district) % num_partitions;
+
+        if (type == DISTRICT_TABLE)
+                return (warehouse * (NUM_DISTRICTS + 6) + district) % num_partitions;
+        else if (type == CUSTOMER_TABLE)
+                return (warehouse * (NUM_DISTRICTS + 6) + district + 1) % num_partitions;
+        else if (type == HISTORY_TABLE)
+                return (warehouse * (NUM_DISTRICTS + 6) + district + 2) % num_partitions;
         else if (type == NEW_ORDER_TABLE) {
-                return (num_partitions - 1 - ((warehouse * (NUM_DISTRICTS + 3) + district) % num_partitions));
+                return (warehouse * (NUM_DISTRICTS + 6) + district + 3) % num_partitions;
         } else if (type == OORDER_TABLE) {
-                return (num_partitions - 1 - ((warehouse * (NUM_DISTRICTS + 3) + district + 1) % num_partitions));
+                return (warehouse * (NUM_DISTRICTS + 6) + district + 4) % num_partitions;
         } else if (type == ORDER_LINE_TABLE) {
-                return (num_partitions - 1 - ((warehouse * (NUM_DISTRICTS + 3) + district + 2) % num_partitions));
+                return (warehouse * (NUM_DISTRICTS + 6) + district + 5) % num_partitions;
         } else
                 assert(false);
-        */      
+
 
         /*
         if (type == DISTRICT_TABLE)
@@ -114,10 +117,9 @@ uint32_t get_tpcc_district_partition(uint32_t warehouse, uint32_t district,
                 //        return warehouse % num_partitions;
 
         uint64_t temp0, temp1;
-        
         temp1 = ((uint64_t)type << 32) | num_partitions;
         temp0 = ((((uint64_t)warehouse) << 32) | district);
-        return Hash128to64(std::make_pair(temp0, type)) % num_partitions;
+        return Hash128to64(std::make_pair(temp0, temp1)) % num_partitions;
 }
 
 uint32_t get_tpcc_stock_partition(uint32_t warehouse, uint32_t item, uint32_t type, uint32_t num_partitions)
