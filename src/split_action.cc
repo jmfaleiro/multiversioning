@@ -1,6 +1,7 @@
 #include <split_action.h>
 #include <util.h>
 #include <cassert>
+#include <runnable.hh>
 
 split_action::split_action(txn *t, uint32_t partition_id, 
                            uint64_t dependency_flag, 
@@ -12,6 +13,12 @@ split_action::split_action(txn *t, uint32_t partition_id,
         _state = (uint64_t)split_action::UNPROCESSED;
         _can_abort = can_abort;
         _is_post = is_post;
+        _worker = NULL;
+}
+
+void split_action::set_worker(Runnable *worker)
+{
+        _worker = worker;
 }
 
 split_action::split_action_state split_action::get_state()
@@ -117,7 +124,7 @@ void* split_action::read(uint64_t key, uint32_t table_id)
                         return k->_value;
                 }
         }
-        assert(index == num_reads);
+        assert(index == num_reads);        
         return _tables[table_id]->Get(key);
 }
 
@@ -150,8 +157,8 @@ int split_action::rand()
 uint64_t split_action::gen_guid()
 {
         /* XXX incomplete */
-        assert(false);
-        return 0;
+        assert(_worker != NULL);
+        _worker->gen_guid();
 }
 
 bool split_action::run()

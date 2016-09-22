@@ -4,8 +4,11 @@
 #include <eager_worker.h>
 #include <lock_manager.h>
 #include <locking_record.h>
+#include <pipelined_record.h>
 
 #define RECORD_VALUE_PTR(rec_ptr) ((void*)&(((uint64_t*)rec_ptr)[1]))
+
+extern uint32_t cc_type;
 
 locking_key::locking_key(uint64_t key, uint32_t table_id, bool is_write)
 {
@@ -116,7 +119,14 @@ void* locking_action::write_ref(uint64_t key, uint32_t table_id)
         assert(index != -1 && index < this->writeset.size());
         k = &this->writeset[index];
         if (k->buf == NULL) {
-                read_value = LOCKING_VALUE_PTR(k->value);
+                if (cc_type == 1)
+                        read_value = LOCKING_VALUE_PTR(k->value);
+                else if (cc_type == 5) 
+                        read_value = PIPELINED_VALUE_PTR(k->value);
+                else 
+                        assert(false);
+
+
                 k->buf = this->bufs->GetRecord(table_id);
                 record_size = this->bufs->GetRecordSize(table_id);
                 memcpy(k->buf, read_value, record_size);
@@ -141,10 +151,27 @@ void* locking_action::read(uint64_t key, uint32_t table_id)
         
         index = find_key(key, table_id, this->readset);
         if (index == -1)
-                return LOCKING_VALUE_PTR(tables->get_table(table_id)->Get(key));
+                if (cc_type == 1) {
+                        return LOCKING_VALUE_PTR(tables->get_table(table_id)->Get(key));
+                } else if (cc_type == 5) {
+                        return PIPELINED_VALUE_PTR(tables->get_table(table_id)->Get(key));
+                } else {
+                        assert(false);
+                        return NULL;
+                }
+
+
         //        assert(index != -1 && index < this->readset.size());
         k = &this->readset[index];
-        return LOCKING_VALUE_PTR(k->value);
+        if (cc_type == 1) {
+                return LOCKING_VALUE_PTR(k->value);
+        } else if (cc_type == 5) {
+                return PIPELINED_VALUE_PTR(k->value);
+        } else {
+                assert(false);
+                return NULL;
+        }
+
         /*
         if (k->value == NULL) 
                 k->value = lookup(k);

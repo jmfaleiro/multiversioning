@@ -3,6 +3,9 @@
 #include <locking_record.h>
 #include <tpcc.h>
 #include <eager_worker.h>
+#include <pipelined_record.h>
+
+extern uint32_t cc_type;
 
 LockManager::LockManager(table_mgr *tbl_mgr)
 {
@@ -14,7 +17,12 @@ void LockManager::commit_write(locking_action *txn, struct locking_key *k)
         uint32_t record_sz;
         
         record_sz = txn->bufs->GetRecordSize(k->table_id);
-        memcpy(LOCKING_VALUE_PTR(k->value), k->buf, record_sz);
+        if (cc_type == 1) {
+                memcpy(LOCKING_VALUE_PTR(k->value), k->buf, record_sz);
+        } else {
+                assert(cc_type == 5);
+                memcpy(PIPELINED_VALUE_PTR(k->value), k->buf, record_sz);
+        }
         txn->bufs->ReturnRecord(k->table_id, k->buf);
         k->buf = NULL;
 }
@@ -37,7 +45,7 @@ bool LockManager::LockRecord(locking_action *txn, struct locking_key *k)
         } else if (k->table_id == DISTRICT_TABLE) {
                 wh_id = tpcc_util::get_warehouse_key(k->key);
                 d_id = tpcc_util::get_district_key(k->key);
-                record = &tpcc_config::districts[wh_id][d_id];
+                record = tpcc_config::districts[wh_id][d_id];
         } else {
                 tbl = _tbl_mgr->get_table(k->table_id);
                 assert(tbl != NULL);

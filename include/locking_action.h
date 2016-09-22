@@ -23,6 +23,11 @@ enum locking_action_status {
         COMPLETE,
 };
 
+enum locking_key_status {
+        PRE_INSERT = 0,
+        INSERT_COMPLETE = 1,
+};
+
 struct locking_key {
 
 public:
@@ -38,12 +43,14 @@ public:
         struct locking_key *prev;
         struct locking_key *next;
         bool is_initialized;
-        locking_worker *_worker;
+        //        locking_worker *_worker;
 
         void *value;
         void *buf;
         mcs_rw::mcs_rw_node lock_node;
         void *txn;
+
+        volatile uint64_t dep_status;
 
         bool operator==(const struct locking_key &other) const
         {
@@ -109,7 +116,7 @@ class locking_action : public translator {
         
         volatile uint64_t __attribute__((__aligned__(CACHE_LINE)))
                 num_dependencies;
-        locking_worker *worker;
+        Runnable *worker;
         locking_action *next;
         locking_action *prev;
         table_mgr *tables;

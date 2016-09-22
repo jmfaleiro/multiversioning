@@ -11,6 +11,44 @@ using namespace pipelined;
 
 extern size_t *tpcc_record_sizes;
 
+locking_key* executor::get_marked_ref(locking_key *ref)
+{
+        uint64_t mask = 0x1;
+        return (locking_key*)(((uint64_t)ref) | mask);
+}
+
+locking_key* executor::get_unmarked_ref(locking_key *ref)
+{
+        uint64_t mask = ~(0x1);
+        return (locking_key*)(((uint64_t)ref) & mask);
+}
+
+bool executor::is_unmarked_ref(locking_key *key)
+{
+        uint64_t mask = 0x1;
+        return ((((uint64_t)key) & mask) == 0);
+}
+
+void executor::mark_deleted(locking_key *key)
+{
+        volatile locking_key **prev;
+        locking_key *prev_val, *new_val;
+        
+        assert(executor::is_unmarked_ref(key->prev) == true);
+        prev = (volatile locking_key**)(&key->prev);
+        
+        while (true) {
+                barrier();
+                prev_val = (locking_key*)(*prev);
+                barrier();
+                
+                new_val = get_marked_ref(prev_val);
+                if (cmp_and_swap((volatile uint64_t*)prev, (uint64_t)prev_val, 
+                                 (uint64_t)new_val))
+                        return;
+        }        
+}
+
 executor::executor(executor_config conf, RecordBuffersConfig rb_conf)
         : Runnable(conf._cpu)
 {
@@ -18,6 +56,8 @@ executor::executor(executor_config conf, RecordBuffersConfig rb_conf)
         _record_buffers = new(conf._cpu) RecordBuffers(rb_conf);
         _insert_buf_mgr = new(conf._cpu) insert_buf_mgr(conf._cpu, 11, 
                                                         tpcc_record_sizes);
+        _dep_tbl = new dependency_table();
+        init_depnodes();        
 }
 
 void* executor::operator new(std::size_t sz, int cpu)
@@ -53,6 +93,7 @@ dep_node* executor::alloc_depnode()
 
 void executor::return_depnodes(dep_node *head, dep_node *tail)
 {
+        assert(head != NULL && tail != NULL);
         tail->_next = _depnode_list;
         _depnode_list = head;
 }
@@ -108,7 +149,9 @@ void executor::exec_txn(action *txn)
                         _conf._lck_mgr->Unlock(sub_actions[i]);
                         get_deps(txn, i);
                 }
+                finish_txn(txn);
         }
+        clear_context();
 }
 
 void executor::prepare(action *txn)
@@ -118,13 +161,15 @@ void executor::prepare(action *txn)
 
         npieces = txn->get_num_actions();
         sub_actions = txn->get_actions();
-        
+        set_context(txn);
+
         for (i = 0; i < npieces; ++i) {
                 xchgq((volatile uint64_t*)&sub_actions[i]->status, UNEXECUTED);
                 sub_actions[i]->tables = _conf._tbl_mgr;
                 sub_actions[i]->insert_mgr = _insert_buf_mgr;
                 sub_actions[i]->bufs = _record_buffers;
                 sub_actions[i]->lck = &_mcs_lock_struct;
+                sub_actions[i]->worker = this;
 
                 nreads = sub_actions[i]->readset.size();
                 for (j = 0; j < nreads; ++j) 
@@ -136,14 +181,42 @@ void executor::prepare(action *txn)
         }
 }
 
+void executor::finish_txn(action *txn)
+{
+        uint32_t npieces, nreads, nwrites, i, j;
+        locking_action **sub_actions, *sub_txn;
+        locking_key **deplist;
+
+        npieces = txn->get_num_actions();
+        sub_actions = txn->get_actions();
+        
+        for (i = 0; i < npieces; ++i) {
+                sub_txn = sub_actions[i];
+
+                nreads = sub_actions[i]->readset.size();
+                for (j = 0; j < nreads; ++j) {
+                        deplist = get_deplist(sub_txn->readset[j].value);
+                        remove_single(&sub_txn->readset[j], deplist);
+                }
+                
+                nwrites = sub_actions[i]->writeset.size();
+                for (j = 0; j < nwrites; ++j) {
+                        deplist = get_deplist(sub_txn->writeset[j].value);
+                        remove_single(&sub_txn->writeset[j], deplist);
+                }
+        }
+}
+
 /* Get new transactions "txn" is dependent on due to the operation in "start". */
 void executor::get_operation_deps(action *txn, locking_key *start)
 {
         if (start->is_write == true) {
-                if (start->prev->is_write == true) 
-                        add_prev_write(txn, start);
-                else 
-                        add_prev_reads(txn, start);
+                if (start->prev != NULL) {
+                        if (start->prev->is_write == true) 
+                                add_prev_write(txn, start);
+                        else 
+                                add_prev_reads(txn, start);
+                }
         } else {
                 add_prev_write(txn, start);
         }
@@ -154,13 +227,18 @@ void executor::add_prev_write(action *txn, locking_key *start)
 {
         locking_key *pred;
         dep_node *cur_dep;
+        locking_action_status st;
 
-        pred = start->prev;
-        for (pred = start->prev; pred  != NULL && pred->is_write == false; pred = pred->prev) 
-                ;
+        assert(start->dep_status == (uint64_t)INSERT_COMPLETE);
+        assert(executor::is_unmarked_ref(start->prev) == true);
         
-        if (pred != NULL) {
-                assert(pred->is_write == true);
+        for (pred = start->prev; pred != NULL && pred->is_write == false; 
+             pred = executor::get_unmarked_ref(pred->prev)) {
+                wait_inserted(pred);
+        }
+        
+        if (pred != NULL && executor::is_unmarked_ref(pred->prev) == true) {
+                assert(pred->is_write == true && pred->txn != NULL);
                 add_dep_context((pipelined::action*)pred->txn);
         }
 }
@@ -171,10 +249,15 @@ void executor::add_prev_reads(action *txn, locking_key *start)
         locking_key *pred;
         dep_node *cur_dep;
 
+        assert(start->dep_status == (uint64_t)INSERT_COMPLETE);
+        assert(executor::is_unmarked_ref(start->prev) == true);
+
         for (pred = start->prev; pred != NULL && pred->is_write == false; 
-             pred = pred->prev) {
-                assert(pred->is_write == false);
-                add_dep_context((pipelined::action*)pred->txn);
+             pred = executor::get_unmarked_ref(pred->prev)) {
+                assert(pred->is_write == false && pred->txn != NULL);
+                if (executor::is_unmarked_ref(pred->prev))
+                        add_dep_context((pipelined::action*)pred->txn);
+                wait_inserted(pred);
         }
 }
 
@@ -213,7 +296,9 @@ void executor::wait_deps(action *txn, uint32_t piece)
         nodes = _context._head;
         while (nodes != NULL) {
                 dep_txn = nodes->_txn;
+                assert(dep_txn != NULL);
                 to_wait = get_dependent_piece(txn, dep_txn, piece);
+                assert(to_wait != NULL);
                 do {
                         barrier();
                         st = to_wait->status;
@@ -227,18 +312,85 @@ void executor::wait_deps(action *txn, uint32_t piece)
 locking_action* executor::get_dependent_piece(action *txn, action *dependent_piece,
                                               uint32_t piece)
 {
-        assert(false);
-        return NULL;
+        uint32_t pc_index;
+        locking_action **sub_txns;
+
+        pc_index = _dep_tbl->get_dependent_piece(txn->get_type(), 
+                                                 dependent_piece->get_type(),
+                                                 piece);
+        sub_txns = dependent_piece->get_actions();
+        return sub_txns[pc_index];
 }
 
 void executor::add_single_dep(locking_key *to_add, locking_key **head)
 {
+        assert(((uint64_t)to_add) % 2 == 0);
+        
         locking_key *pred;
         
-        to_add->next = NULL;
+        to_add->dep_status = (uint64_t)PRE_INSERT;
+        to_add->prev = NULL;
         barrier();
         pred = (locking_key*)xchgq((volatile uint64_t*)head, (uint64_t)to_add);
         to_add->prev = pred;
+        assert(((uint64_t)pred) % 2 == 0);
+        barrier();
+        to_add->dep_status = (uint64_t)INSERT_COMPLETE;
+        barrier();
+}
+
+void executor::wait_inserted(locking_key *key)
+{
+        uint64_t state;
+
+        while (true) {
+                barrier();
+                state = key->dep_status;
+                barrier();
+                
+                if (state == INSERT_COMPLETE)
+                        return;
+        }
+}
+
+void executor::remove_single(locking_key *to_remove, locking_key **head)
+{
+        volatile locking_key **cmp_ptr;
+        locking_key **iter;
+        locking_key *temp, *cmp_value;        
+        
+        executor::mark_deleted(to_remove);
+        
+ restart_remove:
+
+        cmp_ptr = (volatile locking_key**)head;
+        iter = head;
+        
+        while (true) {
+                barrier();
+                temp = *iter;
+                barrier();
+
+                if (is_unmarked_ref(temp)) {
+                        cmp_ptr = (volatile locking_key**)iter;
+                        cmp_value = temp;
+                }
+                
+                temp = get_unmarked_ref(temp);
+                if (temp == to_remove || temp == NULL) 
+                        break;
+                
+                wait_inserted(temp);
+                iter = &(temp->prev);
+        }
+
+        if (temp == to_remove) {
+                if (cmp_and_swap((volatile uint64_t*)cmp_ptr, (uint64_t)cmp_value,
+                                 (uint64_t)get_unmarked_ref(to_remove->prev)))
+                        return;
+                else
+                        goto restart_remove;
+        }
 }
 
 /*
@@ -270,6 +422,7 @@ void executor::add_dep(action *txn, uint32_t piece)
 void executor::add_dep_context(action *txn)
 {
         assert(txn != _context._txn);
+        assert(txn != NULL);
         assert((_context._head == NULL && _context._tail == NULL) ||
                (_context._head != NULL && _context._tail != NULL));
 
@@ -283,6 +436,7 @@ void executor::add_dep_context(action *txn)
                 assert(node != NULL);
 
                 node->_next = NULL;
+                node->_txn = txn;
                 if (_context._head == NULL) 
                         _context._head = node;
                 else 
@@ -293,7 +447,8 @@ void executor::add_dep_context(action *txn)
 
 void executor::set_context(action *txn)
 {
-        assert(_context._txn == NULL);
+        assert(_context._txn == NULL && _context._head == NULL && 
+               _context._tail == NULL);
         _context._txn = txn;
 }
 
@@ -304,7 +459,8 @@ void executor::clear_context()
                (_context._head != NULL && _context._tail != NULL));
         
         _context._txn = NULL;
-        return_depnodes(_context._head, _context._tail);
+        if (_context._head != NULL)
+                return_depnodes(_context._head, _context._tail);
         _context._head = NULL;
         _context._tail = NULL;
 }
@@ -325,7 +481,7 @@ dependency_table::dependency_table()
                 if (i < 3)
                         _tbl[NEW_ORDER_TXN][i][PAYMENT_TXN] = i;
                 else
-                        _tbl[NEW_ORDER_TXN][i][PAYMENT_TXN] = 2;
+                        _tbl[NEW_ORDER_TXN][i][PAYMENT_TXN] = 3;
         }
 
         _tbl[PAYMENT_TXN] = (uint32_t**)zmalloc(sizeof(uint32_t*)*payment_size);
@@ -335,7 +491,7 @@ dependency_table::dependency_table()
                 if (i < 3)
                         _tbl[PAYMENT_TXN][i][NEW_ORDER_TXN] = i;
                 else 
-                        _tbl[PAYMENT_TXN][i][NEW_ORDER_TXN] = 2;
+                        _tbl[PAYMENT_TXN][i][NEW_ORDER_TXN] = 5;
         }
 }
 

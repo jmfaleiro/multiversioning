@@ -165,20 +165,20 @@ public:
                 assert(strlen(stock->s_dist_10) < 25);
         }
 
-        static void init_stock(Table *tbl, uint32_t warehouse)
+        static void init_stock(Table *tbl, uint32_t warehouse, uint32_t item)
         {
-                uint32_t i;
+                //                uint32_t i;
                 stock_record record;
 
                 /* Initialize records */
-                for (i = 0; i < NUM_ITEMS; ++i) {
-                        record.s_w_id = warehouse;
-                        record.s_i_id = i;
-                        setup_stock_single(&record);
+                //                for (i = 0; i < NUM_ITEMS; ++i) {
+                record.s_w_id = warehouse;
+                record.s_i_id = item;
+                setup_stock_single(&record);
 
-                        tbl->Put(tpcc_util::create_stock_key(warehouse, i),
-                                 &record);
-                }                
+                tbl->Put(tpcc_util::create_stock_key(warehouse, item),
+                         &record);
+                        //                }                
         }
         
         static void setup_stocks(Table ***lock_tbls, Table ***data_tbls, 
@@ -211,17 +211,17 @@ public:
                         t_conf.freeListSz = sizes[i];
                         t_conf.valueSz = sizeof(split_record);
                         t_conf.recordSize = sizeof(split_record);
-                        lock_tbls[i][STOCK_TABLE] = new(i) Table(t_conf);
-                        stock[i] = (stock_record*)alloc_mem(sizeof(stock_record)*sizes[i], i);
-                        memset(stock[i], 0x0, sizeof(stock_record)*sizes[i]);
+                        //                        lock_tbls[i][STOCK_TABLE] = new(i) Table(t_conf);
+                        //                        stock[i] = (stock_record*)alloc_mem(sizeof(stock_record)*sizes[i], i);
+                        //                        memset(stock[i], 0x0, sizeof(stock_record)*sizes[i]);
 
-                        /*
+                        
                         t_conf.valueSz = sizeof(stock_record);
                         t_conf.recordSize = sizeof(stock_record);
-                        t_conf.numBuckets = 2*sizes[i]*NUM_ITEMS;
-                        t_conf.freeListSz = sizes[i]*NUM_ITEMS;
-                        */
-                        data_tbls[i][STOCK_TABLE] = NULL;
+                        t_conf.numBuckets = 2*sizes[i];
+                        t_conf.freeListSz = 2*sizes[i];
+                        
+                        data_tbls[i][STOCK_TABLE] = new(i) Table(t_conf);
                 }
 
                 /* Insert stock records */
@@ -231,7 +231,8 @@ public:
                                 index = next[cpu];
                                 next[cpu] += 1;
                                 temp = &stock[cpu][index];
-
+                                
+                                /*
                                 splt_rec.key.key = tpcc_util::create_stock_key(i, j);
                                 splt_rec.key.table_id = STOCK_TABLE;
                                 splt_rec.epoch = 0;
@@ -241,10 +242,10 @@ public:
                                 temp->s_w_id = i;
                                 temp->s_i_id = j;
                                 setup_stock_single(temp);
-
-                                lock_tbls[cpu][STOCK_TABLE]->Put(tpcc_util::create_stock_key(i, j), 
-                                                                 &splt_rec);
-                                //                                init_stock(data_tbls[cpu][STOCK_TABLE], i);
+                                */
+                                //                                lock_tbls[cpu][STOCK_TABLE]->Put(tpcc_util::create_stock_key(i, j), 
+                                //                                                                 &splt_rec);
+                                init_stock(data_tbls[cpu][STOCK_TABLE], i, j);
                         }
                 }
         }        
@@ -278,10 +279,10 @@ public:
                         t_conf.startCpu = i;
                         t_conf.endCpu = i+1;
                         t_conf.freeListSz = sizes[i];
-                        t_conf.valueSz = sizeof(split_record);
-                        t_conf.recordSize = sizeof(split_record);
-                        lock_tbls[i][DISTRICT_TABLE] = new(i) Table(t_conf);
-                        data_tbls[i][DISTRICT_TABLE] = NULL;
+                        t_conf.valueSz = sizeof(district_record);
+                        t_conf.recordSize = sizeof(district_record);
+                        //                        lock_tbls[i][DISTRICT_TABLE] = new(i) Table(t_conf);
+                        data_tbls[i][DISTRICT_TABLE] = new(i) Table(t_conf);
                         d_recs[i] = (district_record*)alloc_mem(sizeof(district_record)*sizes[i], i);
                         assert(sizes[i] == 0 || d_recs[i] != NULL);
                         memset(d_recs[i], 0x0, sizeof(district_record)*sizes[i]);
@@ -334,14 +335,16 @@ public:
                                 strcpy(dist_rec->d_zip, contiguous_zip);
                                 
                                 /* Insert the lock */
+                                /*
                                 splt_rec.key.key = key;
                                 splt_rec.key.table_id = DISTRICT_TABLE;
                                 splt_rec.epoch = 0;
                                 splt_rec.key_struct = NULL;
                                 splt_rec.value = (char*)dist_rec;
                                 lock_tbls[cpu][DISTRICT_TABLE]->Put(key, &splt_rec);
+                                */
                                 
-                                //                                data_tbls[cpu][DISTRICT_TABLE]->Put(key, &dist_rec);
+                                data_tbls[cpu][DISTRICT_TABLE]->Put(key, &dist_rec);
                         }
                 }
                 for (i = 0; i < s_conf.num_partitions; ++i)
@@ -596,10 +599,10 @@ public:
                         t_conf.startCpu = i;
                         t_conf.endCpu = i+1;
                         t_conf.freeListSz = sizes[i];
-                        t_conf.valueSz = sizeof(split_record);
-                        t_conf.recordSize = sizeof(split_record);
-                        lock_tbls[i][WAREHOUSE_TABLE] = new(i) Table(t_conf);
-                        data_tbls[i][WAREHOUSE_TABLE] = NULL;
+                        t_conf.valueSz = sizeof(warehouse_record);//sizeof(split_record);
+                        t_conf.recordSize = sizeof(warehouse_record);//sizeof(split_record);
+                        //                        lock_tbls[i][WAREHOUSE_TABLE] = new(i) Table(t_conf);
+                        data_tbls[i][WAREHOUSE_TABLE] = new(i) Table(t_conf);
                         wh_recs[i] = (warehouse_record*)alloc_mem(sizeof(warehouse_record)*sizes[i], i);
                         assert(sizes[i] == 0 || wh_recs[i] != NULL);
                         memset(wh_recs[i], 0x0, sizeof(warehouse_record)*sizes[i]);
@@ -631,15 +634,17 @@ public:
                         strcpy(data->w_zip, zip);                        
                         
                         /* Insert the record */
-                        //                        data_tbls[cpu][WAREHOUSE_TABLE]->Put((uint64_t)i, &data);
+                        data_tbls[cpu][WAREHOUSE_TABLE]->Put((uint64_t)i, &data);
 
                         /* Insert the lock */
+                        /*
                         splt_rec.key.key = i;
                         splt_rec.key.table_id = WAREHOUSE_TABLE;
                         splt_rec.epoch = 0;
                         splt_rec.key_struct = NULL;
                         splt_rec.value = (char*)data;
                         lock_tbls[cpu][WAREHOUSE_TABLE]->Put((uint64_t)i, &splt_rec);
+                        */
                 }
                 
                 for (i = 0; i < s_conf.num_partitions; ++i)
@@ -653,7 +658,8 @@ public:
         {
                 assert(table_id == NEW_ORDER_TABLE || 
                        table_id == OORDER_TABLE || 
-                       table_id == ORDER_LINE_TABLE);
+                       table_id == ORDER_LINE_TABLE ||
+                       table_id == HISTORY_TABLE);
                 uint32_t i, j, cpu, index, wh, d, sizes[s_conf.num_partitions];
                 split_record splt_rec;
                 uint64_t key;
@@ -713,6 +719,15 @@ public:
                                 lock_tables[cpu][table_id]->Put(key, &splt_rec);
                         }
                 }
+        }
+
+        static void setup_history(Table ***lock_tables, Table ***data_tables, 
+                                  workload_config w_conf,
+                                  split_config s_conf)
+        {
+                setup_district_key_inserts(lock_tables, data_tables, HISTORY_TABLE,
+                                           w_conf,
+                                           s_conf);
         }
 
         static void setup_new_orders(Table ***lock_tables, Table ***data_tables,
@@ -779,7 +794,7 @@ public:
                 cpus.push_back((int)new_order_p);
                 cpus.push_back(3);
                 setup_new_orders(ltabs, dtabs, w_conf, s_conf);
-                               
+                setup_history(ltabs, dtabs, w_conf, s_conf);
                 setup_oorders(ltabs, dtabs, w_conf, s_conf);
 
                 /* The rest are divided evenly among stocks and order lines */

@@ -150,13 +150,16 @@ void split_executor::Init()
 void split_executor::StartWorking()
 {
         split_action_batch batch;
+        uint32_t i;
+        //bool split_executor::try_execute(split_action *action) 
+
         
         while (true) {
                 batch = config.input_queue->DequeueBlocking();
                 schedule_batch(batch);
                 num_outstanding = 0;
                 run_batch(batch);
-                assert(num_outstanding == 0);
+                assert(num_outstanding == 0);          
                 config.output_queue->EnqueueBlocking(batch);
         }
 }
@@ -239,6 +242,7 @@ void split_executor::schedule_single(split_action *action)
         uint32_t nreads, nwrites, i;
 
         assert(action->get_state() == split_action::UNPROCESSED);
+        action->set_worker(this);
         action->transition_scheduled();
         action->_dependencies = &dep_array[dep_index];
         action->_dep_index = 0;

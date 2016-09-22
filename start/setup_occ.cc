@@ -25,7 +25,7 @@ static bool is_ycsb_exp(workload_config w_conf)
         return ret;
 }
 
-static size_t convert_record_sz(size_t value_sz, ConcurrencyControl cc_type)
+size_t convert_record_sz(size_t value_sz, ConcurrencyControl cc_type)
 {
         if (cc_type == OCC) {
                 if (READ_COMMITTED)

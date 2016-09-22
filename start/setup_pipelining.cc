@@ -70,8 +70,8 @@ static action* setup_payment(workload_config w_conf, uint32_t thread_id)
         p_payment::customer_update *c_txn;
         p_payment::history_ins *h_txn;
         
-        //        assert(thread < conf.num_warehouses);
-
+        //        assert(thread_id < w_conf.num_warehouses);
+        // w_id = thread_id;
         w_id = (uint64_t)rand() % w_conf.num_warehouses;
         assert(w_id < w_conf.num_warehouses);
 
@@ -132,8 +132,8 @@ static action* setup_new_order(workload_config w_conf, uint32_t thread_id)
         bool all_local;
 
         all_local = true;
-        // assert(thread < conf.num_warehouses);
-        //        w_id = thread;
+        //        assert(thread_id < w_conf.num_warehouses);
+        // w_id = thread_id;
         w_id = (uint64_t)rand() % w_conf.num_warehouses;
         assert(w_id < w_conf.num_warehouses);
         
@@ -170,7 +170,7 @@ static action* setup_new_order(workload_config w_conf, uint32_t thread_id)
         wh_txn = new p_new_order::warehouse_read(w_id);        
         lck_txns[0] = txn_to_locking_action(wh_txn);
         
-        /* District */
+        /* District */        
         d_txn = new p_new_order::district_update(w_id, d_id);
         lck_txns[1] = txn_to_locking_action(d_txn);
 
@@ -178,7 +178,7 @@ static action* setup_new_order(workload_config w_conf, uint32_t thread_id)
         c_txn = new p_new_order::customer_read(w_id, d_id, c_id);
         lck_txns[2] = txn_to_locking_action(c_txn);
 
-        /* Stocks/items/Order lines */
+
         temp_txn = new p_new_order::process_items(w_id, d_id, suppliers, items, 
                                                   quants, 
                                                   nitems, 
@@ -187,11 +187,11 @@ static action* setup_new_order(workload_config w_conf, uint32_t thread_id)
                                                   c_txn);
         lck_txns[3] = txn_to_locking_action(temp_txn);
         
-        /* New Order */
+
         temp_txn = new p_new_order::new_order_ins(w_id, d_id, d_txn);
         lck_txns[4] = txn_to_locking_action(temp_txn);
                 
-        /* Oorder */
+
         temp_txn = new p_new_order::oorder_ins(w_id, d_id, c_id, nitems, 
                                                all_local, 
                                                d_txn);
@@ -269,6 +269,7 @@ static executor** setup_workers(txn_queue **inputs, txn_queue **outputs,
         executor **ret;
         int i;
         
+        ret = (executor**)zmalloc(sizeof(executor*)*nthreads);
         for (i = 0; i < nthreads; ++i) {
                 struct executor_config conf = {
                         tbl_mgr,
@@ -380,7 +381,7 @@ static void write_output(locking_config conf, struct pipelining_result result,
 
         result_file << "\n";
         result_file.close();  
-        std::cout << "Time elapsed: " << result.time << " ";
+        std::cout << "Time elapsed: " << elapsed_milli << " ";
         std::cout << "Num txns: " << conf.num_txns << "\n";
 }
 

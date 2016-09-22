@@ -37,24 +37,29 @@ locking_action* txn_to_locking_action(txn *t)
         struct big_key *arr;
         uint32_t i, num_reads, num_writes, num_rmws;
 
-        arr = setup_array(t);
+
         ret = new locking_action(t);
         t->set_translator(ret);
+
+        if (t->num_reads() != 0 || t->num_rmws() != 0 || t->num_writes() != 0) {
+                arr = setup_array(t);        
+                num_reads = t->num_reads();
+                t->get_reads(arr);
+                for (i = 0; i < num_reads; ++i) 
+                        ret->add_read_key(arr[i].key, arr[i].table_id);
+
+                num_rmws = t->num_rmws();
+                t->get_rmws(arr);
+                for (i = 0; i < num_rmws; ++i) 
+                        ret->add_write_key(arr[i].key, arr[i].table_id);
+
+                num_writes = t->num_writes();
+                t->get_writes(arr);
+                for (i = 0; i < num_writes; ++i) 
+                        ret->add_write_key(arr[i].key, arr[i].table_id);
+                free(arr);
+        }
         
-        num_reads = t->num_reads();
-        t->get_reads(arr);
-        for (i = 0; i < num_reads; ++i) 
-                ret->add_read_key(arr[i].key, arr[i].table_id);
-
-        num_rmws = t->num_rmws();
-        t->get_rmws(arr);
-        for (i = 0; i < num_rmws; ++i) 
-                ret->add_write_key(arr[i].key, arr[i].table_id);
-
-        num_writes = t->num_writes();
-        t->get_writes(arr);
-        for (i = 0; i < num_writes; ++i) 
-                ret->add_write_key(arr[i].key, arr[i].table_id);
         ret->prepare();
         return ret;
 }

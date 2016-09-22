@@ -38,8 +38,8 @@ namespace split_new_order {
                 read_warehouse(uint32_t warehouse_id);
                 bool Run();
                 
-                virtual uint32_t num_reads();
-                virtual void get_reads(big_key *array);
+                //                virtual uint32_t num_reads();
+                //                virtual void get_reads(big_key *array);
         };
         
         /* Root piece */
@@ -61,8 +61,8 @@ namespace split_new_order {
                 update_district(uint32_t warehouse_id, uint32_t district_id);
                 bool Run();
                 
-                virtual uint32_t num_rmws();
-                virtual void get_rmws(big_key *array);
+                //                virtual uint32_t num_rmws();
+                //                virtual void get_rmws(big_key *array);
         };
         
         /* Root piece */
@@ -89,8 +89,8 @@ namespace split_new_order {
                               uint32_t id);
                 bool Run();
 
-                virtual uint32_t num_reads();
-                virtual void get_reads(big_key *array);
+                //                virtual uint32_t num_reads();
+                //                virtual void get_reads(big_key *array);
         };
 
         /* Must wait on update_district piece */
@@ -215,8 +215,8 @@ namespace split_new_order {
 
                 virtual bool Run();
 
-                virtual uint32_t num_rmws();
-                virtual void get_rmws(big_key *array);
+                //                virtual uint32_t num_rmws();
+                //                virtual void get_rmws(big_key *array);
         };
 };
 
@@ -239,6 +239,9 @@ namespace split_payment {
         public:
                 update_warehouse(uint32_t wh_id, float h_amount);
                 bool Run();
+
+                //                virtual uint32_t num_rmws();
+                //                virtual void get_rmws(big_key *array);
         };
 
         class update_district : public txn {
@@ -256,6 +259,9 @@ namespace split_payment {
                 update_district(uint32_t warehouse_id, uint32_t district_id, 
                                 float h_amount);
                 bool Run();
+
+                //virtual uint32_t num_rmws();
+                //virtual void get_rmws(big_key *array);
         };
 
         class update_customer : public txn {
@@ -280,6 +286,9 @@ namespace split_payment {
                                 bool use_name, 
                                 float h_amount);
                 bool Run();
+
+                //                virtual uint32_t num_rmws();
+                //                virtual void get_rmws(big_key *array);
         };
 
         class insert_history : public txn {

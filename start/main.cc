@@ -10,6 +10,7 @@
 #include <setup_mv.h>
 #include <setup_hek.h>
 #include <setup_locking.h>
+#include <setup_pipelining.h>
 #include <algorithm>
 #include <fstream>
 #include <set>
@@ -41,15 +42,60 @@ uint64_t* setup_split::split_table_sizes = NULL;
 vector<uint32_t> *setup_split::partitions_txns = NULL;
 uint64_t *setup_split::lock_table_sizes = NULL;
 
-lck_warehouse** tpcc_config::warehouses = NULL;
-lck_district** tpcc_config::districts = NULL; 
+void** tpcc_config::warehouses = NULL;
+void*** tpcc_config::districts = NULL; 
 uint32_t* tpcc_config::txn_sizes = NULL;
+
+uint32_t cc_type;
+
+extern size_t convert_record_sz(size_t value_sz, ConcurrencyControl cc_type);
+
+
+void init_tpcc_local(ConcurrencyControl cc_type, workload_config w_conf)
+{
+        assert(tpcc_config::warehouses == NULL && tpcc_config::districts == NULL);
+        uint32_t i, j;
+        size_t record_sz;
+        void *wh, **d;
+
+        if (w_conf.experiment != TPCC_SUBSET || 
+            ((cc_type != OCC) && (cc_type != LOCKING) && (cc_type != PIPELINED)))
+                return;
+
+        tpcc_config::warehouses = (void**)zmalloc(sizeof(void*)*w_conf.num_warehouses);
+        tpcc_config::districts = (void***)zmalloc(sizeof(void**)*w_conf.num_warehouses);
+
+        for (i = 0; i < w_conf.num_warehouses; ++i) {
+                /* Warehouse init */
+                record_sz = sizeof(warehouse_record);
+                record_sz = convert_record_sz(record_sz, cc_type);
+                wh = alloc_mem(record_sz, i);
+                memset(wh, 0x0, record_sz);
+                tpcc_config::warehouses[i] = wh;
+
+                /* District init */
+                d = (void**)alloc_mem(sizeof(void*)*NUM_DISTRICTS, i);
+                memset(d, 0x0, sizeof(void*)*NUM_DISTRICTS);
+                for (j = 0; j < NUM_DISTRICTS; ++j) {
+                        record_sz = sizeof(district_record);
+                        record_sz = convert_record_sz(record_sz, cc_type);
+                        d[j] = alloc_mem(record_sz, i);
+                        memset(d[j], 0x0, record_sz);
+                }
+                tpcc_config::districts[i] = d;
+        }
+        
+        tpcc_config::txn_sizes = (uint32_t*)zmalloc(sizeof(uint32_t)*2);
+        tpcc_config::txn_sizes[0] = 6;
+        tpcc_config::txn_sizes[1] = 4;
+}
 
 int main(int argc, char **argv) {
         //        mlockall(MCL_FUTURE);
   srand(time(NULL));
   ExperimentConfig cfg(argc, argv);
   std::cout << cfg.ccType << "\n";
+
 
   /* Only initialize values for tables that we're actually going to use */
   tpcc_record_sizes = (size_t*)zmalloc(sizeof(size_t)*11);
@@ -64,6 +110,9 @@ int main(int argc, char **argv) {
   tpcc_record_sizes[HISTORY_TABLE] = sizeof(history_record);
   tpcc_record_sizes[DELIVERY_TABLE] = sizeof(uint64_t);
   tpcc_record_sizes[CUSTOMER_ORDER_INDEX] = sizeof(uint64_t);  
+
+  init_tpcc_local(cfg.ccType, cfg.get_workload_config());
+  cc_type = cfg.ccType;
   
   if (cfg.ccType == MULTIVERSION) {
           split_flag = false;
@@ -81,6 +130,7 @@ int main(int argc, char **argv) {
           do_mv_experiment(cfg.mvConfig, cfg.get_workload_config());
           exit(0);
   } else if (cfg.ccType == LOCKING) {
+          
           split_flag = false;
           recordSize = cfg.lockConfig.record_size;
           assert(recordSize == 8 || recordSize == 1000);
@@ -118,6 +168,18 @@ int main(int argc, char **argv) {
           assert(recordSize == 8 || recordSize == 1000);
           GLOBAL_RECORD_SIZE = recordSize;
           setup_split::split_experiment(cfg.split_conf, cfg.get_workload_config());
+          exit(0);
+  } else if (cfg.ccType == PIPELINED) {
+
+          split_flag = false;
+          recordSize = cfg.lockConfig.record_size;
+          assert(recordSize == 8 || recordSize == 1000);
+          assert(cfg.lockConfig.distribution < 2);
+          if (cfg.lockConfig.experiment != 3)
+                  GLOBAL_RECORD_SIZE = 1000;
+          else
+                  GLOBAL_RECORD_SIZE = sizeof(SmallBankRecord);
+          pipelining_experiment(cfg.lockConfig, cfg.get_workload_config());
           exit(0);
   }
 }

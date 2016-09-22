@@ -97,6 +97,15 @@ class executor : public Runnable {
         locking_action* get_dependent_piece(action *txn, action *dependent_piece,
                                             uint32_t piece);
 
+        void remove_single(locking_key *to_remove, locking_key **head);
+        void mark_deleted(locking_key *key);
+        static inline locking_key* get_marked_ref(locking_key *ref);
+        static inline locking_key* get_unmarked_ref(locking_key *ref);
+        static inline bool is_unmarked_ref(locking_key *key);
+        void wait_inserted(locking_key *key);
+
+        void finish_txn(action *txn);
+
  public:
         void* operator new(std::size_t sz, int cpu);
 

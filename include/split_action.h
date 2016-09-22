@@ -25,6 +25,7 @@ struct split_dep {
 };
 
 class split_action;
+class Runnable;
 
 struct split_action_batch {
         split_action **actions;
@@ -112,6 +113,8 @@ class split_action : public translator {
         split_dep 			*_dependencies;
         bool 				_outstanding_flag;
 
+        Runnable 			*_worker;
+
  public:
 
         std::vector<big_key> 		_readset;
@@ -156,6 +159,8 @@ class split_action : public translator {
         void remove(uint64_t key, uint32_t table_id);
         int rand();
         uint64_t gen_guid();
+        
+        void set_worker(Runnable *worker);
 };
 
 #endif // SPLIT_ACTION_H_

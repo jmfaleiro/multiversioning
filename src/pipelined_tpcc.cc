@@ -1,4 +1,6 @@
 #include <pipelined_tpcc.h>
+#include <algorithm>
+#include <cpuinfo.h>
 
 p_new_order::warehouse_read::warehouse_read(uint32_t wh)
 {
@@ -13,7 +15,7 @@ uint32_t p_new_order::warehouse_read::num_reads()
 void p_new_order::warehouse_read::get_reads(big_key *array)
 {
         array[0].key = (uint64_t)_wh;
-        array[1].table_id = WAREHOUSE_TABLE;
+        array[0].table_id = WAREHOUSE_TABLE;
 }
 
 bool p_new_order::warehouse_read::Run()
@@ -453,10 +455,11 @@ bool p_payment::history_ins::Run()
         history_record *hist;
         static const char *empty = "    ";
         char *warehouse_name, *district_name;        
-        const char *holder[3] = {warehouse_name, empty, district_name};
  
         warehouse_name = _wh_txn->get_wh_name();
         district_name = _d_txn->get_d_name();
+
+        const char *holder[3] = {warehouse_name, empty, district_name};
 
         history_key = guid();
         hist = (history_record*)insert_record(history_key, HISTORY_TABLE);
