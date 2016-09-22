@@ -1,6 +1,7 @@
 #include <occ_action.h>
 #include <algorithm>
 #include <occ.h>
+#include <tpcc.h>
 #include <occ_record.h>
 #include <rc_record.h>
 
@@ -170,7 +171,20 @@ uint64_t OCCAction::stable_copy(uint64_t key, uint32_t table_id, void **rec_ptr,
 
         tbl = tbl_mgr->get_table(table_id);
         assert(tbl != NULL);
-        value = tbl->Get(key);
+        if (TPCC) {
+                if (table_id == WAREHOUSE_TABLE) {
+                        value = tpcc_config::warehouses[key];
+                } else if (table_id == DISTRICT_TABLE) {
+                        uint32_t d_id, w_id;
+                        w_id = tpcc_util::get_warehouse_key(key);
+                        d_id = tpcc_util::get_district_key(key);
+                        value = tpcc_config::districts[w_id][d_id];
+                } else {
+                        value = tbl->Get(key);
+                }
+        } else {
+                value = tbl->Get(key);
+        }
         *rec_ptr = value;      
         record_size = this->record_alloc->GetRecordSize(table_id);
         tid_ptr = (volatile uint64_t*)value;
@@ -421,7 +435,21 @@ void OCCAction::acquire_locks()
                 assert(this->writeset[i].is_initialized == true);
 
                 if (this->writeset[i].is_rmw == false) {
-                        value = tbl_mgr->get_table(table_id)->GetAlways(key);
+
+                        if (TPCC) {
+                                if (table_id == WAREHOUSE_TABLE) {
+                                        value = tpcc_config::warehouses[key];
+                                } else if (table_id == DISTRICT_TABLE) {
+                                        uint32_t d_id, w_id;
+                                        w_id = tpcc_util::get_warehouse_key(key);
+                                        d_id = tpcc_util::get_district_key(key);
+                                        value = tpcc_config::districts[w_id][d_id];
+                                } else {
+                                        value = tbl_mgr->get_table(table_id)->GetAlways(key);
+                                }
+                        } else {
+                                value = tbl_mgr->get_table(table_id)->GetAlways(key);
+                        }
                         this->writeset[i].record_ptr = value;
                 }
                 value = this->writeset[i].record_ptr;
