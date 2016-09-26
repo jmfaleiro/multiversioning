@@ -35,18 +35,29 @@ bool LockManager::LockRecord(locking_action *txn, struct locking_key *k)
 
         assert(k->is_held == false);
         
-#ifdef	TPCC
+        if (TPCC) {
 
-        uint64_t wh_id, d_id;
+                uint64_t wh_id, d_id;
         
-        if (k->table_id == WAREHOUSE_TABLE) {
-                wh_id = k->key;
-                record = tpcc_config::warehouses[wh_id];
-        } else if (k->table_id == DISTRICT_TABLE) {
-                wh_id = tpcc_util::get_warehouse_key(k->key);
-                d_id = tpcc_util::get_district_key(k->key);
-                record = tpcc_config::districts[wh_id][d_id];
+                if (k->table_id == WAREHOUSE_TABLE) {
+                        wh_id = k->key;
+                        record = tpcc_config::warehouses[wh_id];
+                } else if (k->table_id == DISTRICT_TABLE) {
+                        wh_id = tpcc_util::get_warehouse_key(k->key);
+                        d_id = tpcc_util::get_district_key(k->key);
+                        record = tpcc_config::districts[wh_id][d_id];
+                } else {
+                        tbl = _tbl_mgr->get_table(k->table_id);
+                        assert(tbl != NULL);
+                        if (k->is_write)
+                                record = tbl->GetAlways(k->key);
+                        else
+                                record = tbl->Get(k->key);
+                        assert(record != NULL);
+                }
         } else {
+
+
                 tbl = _tbl_mgr->get_table(k->table_id);
                 assert(tbl != NULL);
                 if (k->is_write)
@@ -56,16 +67,7 @@ bool LockManager::LockRecord(locking_action *txn, struct locking_key *k)
                 assert(record != NULL);
         }
 
-#else
-        tbl = _tbl_mgr->get_table(k->table_id);
-        assert(tbl != NULL);
-        if (k->is_write)
-                record = tbl->GetAlways(k->key);
-        else
-                record = tbl->Get(k->key);
-        assert(record != NULL);
 
-#endif
         
         k->value = record;
         k->buf = NULL;

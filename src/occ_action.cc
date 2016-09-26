@@ -216,18 +216,16 @@ uint64_t OCCAction::stable_copy(uint64_t key, uint32_t table_id, void **rec_ptr,
 
 void OCCAction::validate_single(occ_composite_key &comp_key)
 {
-        assert(!IS_LOCKED(comp_key.old_tid));
-        void *value;
+        //        assert(!IS_LOCKED(comp_key.old_tid));
         volatile uint64_t *version_ptr;
         uint64_t cur_tid;
         
-        value = OCC_TIMESTAMP_PTR(comp_key.record_ptr);
         //        value = tables[comp_key.tableId]->Get(comp_key.key);
-        version_ptr = (volatile uint64_t*)value;
+        version_ptr = (volatile uint64_t*)OCC_TIMESTAMP_PTR(comp_key.record_ptr);
         barrier();
         cur_tid = *version_ptr;
         barrier();
-
+        
         if ((GET_TIMESTAMP(cur_tid) != comp_key.old_tid) ||
             (IS_LOCKED(cur_tid) && !comp_key.is_rmw))
                 throw occ_validation_exception(VALIDATION_ERR);
@@ -239,12 +237,12 @@ void OCCAction::validate()
 
         num_reads = this->readset.size();
         for (i = 0; i < num_reads; ++i) {
-                assert(this->readset[i].is_initialized == true);
+                //                assert(this->readset[i].is_initialized == true);
                 validate_single(this->readset[i]);
         }
         num_writes = this->writeset.size();
         for (i = 0; i < num_writes; ++i) {
-                assert(this->writeset[i].is_initialized == true);
+                //                assert(this->writeset[i].is_initialized == true);
                 if (this->writeset[i].is_rmw)
                         validate_single(this->writeset[i]);
         }
@@ -406,7 +404,19 @@ void* OCCAction::read(uint64_t key, uint32_t table_id)
                         break;
                 }                
         }
-        assert(comp_key != NULL);
+
+        if (TPCC) {                
+                if (comp_key == NULL) {
+                        void *temp;
+                        temp = tbl_mgr->get_table(table_id)->Get(key);
+                        if (READ_COMMITTED)
+                                return RC_VALUE_PTR(temp);
+                        else 
+                                return OCC_VALUE_PTR(temp);
+                }
+        } else {
+                assert(comp_key != NULL);
+        }
         if (comp_key->is_initialized == false) {
                 record = this->record_alloc->GetRecord(table_id);
                 comp_key->is_initialized = true;

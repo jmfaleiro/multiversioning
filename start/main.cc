@@ -69,17 +69,17 @@ void init_tpcc_local(ConcurrencyControl cc_type, workload_config w_conf)
                 /* Warehouse init */
                 record_sz = sizeof(warehouse_record);
                 record_sz = convert_record_sz(record_sz, cc_type);
-                wh = alloc_mem(record_sz, i);
+                wh = alloc_mem(record_sz, i % 40);
                 memset(wh, 0x0, record_sz);
                 tpcc_config::warehouses[i] = wh;
 
                 /* District init */
-                d = (void**)alloc_mem(sizeof(void*)*NUM_DISTRICTS, i);
+                d = (void**)alloc_mem(sizeof(void*)*NUM_DISTRICTS, i % 40);
                 memset(d, 0x0, sizeof(void*)*NUM_DISTRICTS);
                 for (j = 0; j < NUM_DISTRICTS; ++j) {
                         record_sz = sizeof(district_record);
                         record_sz = convert_record_sz(record_sz, cc_type);
-                        d[j] = alloc_mem(record_sz, i);
+                        d[j] = alloc_mem(record_sz, i % 40);
                         memset(d[j], 0x0, record_sz);
                 }
                 tpcc_config::districts[i] = d;

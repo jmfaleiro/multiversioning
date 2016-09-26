@@ -48,6 +48,7 @@ uint32_t get_partition(uint64_t record, __attribute__((unused)) uint32_t table,
 uint32_t get_tpcc_warehouse_partition(uint32_t warehouse, uint32_t type, uint32_t num_partitions)
 {
 
+        
         uint32_t temp;
         //        assert(type == WAREHOUSE_TABLE);
         if (type == WAREHOUSE_TABLE) {
@@ -57,9 +58,10 @@ uint32_t get_tpcc_warehouse_partition(uint32_t warehouse, uint32_t type, uint32_
                 //                temp = warehouse % num_partitions;
                 //                return num_partitions - 1 - temp;
         }
+        
 
         //        uint64_t temp = ((uint64_t)type << 32) | num_partitions;
-        //        return Hash128to64(std::make_pair(warehouse, type)) % num_partitions;
+        //        return Hash128to64(std::make_pair(warehouse, temp)) % num_partitions;
 }
 
 uint32_t get_tpcc_history_partition(uint32_t num_partitions)

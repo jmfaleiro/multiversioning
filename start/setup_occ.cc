@@ -722,16 +722,21 @@ void check_tables(OCCConfig config, table_mgr *tbls)
         
         num_warehouses = tpcc_config::num_warehouses;
         for (i = 0; i < num_warehouses; ++i) {
-                record = tbls->get_table(WAREHOUSE_TABLE)->Get((uint64_t)i);
-                wh = (warehouse_record*)&(((uint64_t*)record)[1]);
+                record = tpcc_config::warehouses[i];
+                if (READ_COMMITTED)
+                        wh = (warehouse_record*)RC_VALUE_PTR(record);
+                else
+                        wh = (warehouse_record*)OCC_VALUE_PTR(record);
                 assert(wh->w_id == i);
         }
         
         for (i = 0; i < num_warehouses; ++i) {
                 for (j = 0; j < NUM_DISTRICTS; ++j) {
-                        key = tpcc_util::create_district_key(i, j);
-                        record = tbls->get_table(DISTRICT_TABLE)->Get(key);
-                        d = (district_record*)&(((uint64_t*)record)[1]);
+                        record = tpcc_config::districts[i][j];
+                        if (READ_COMMITTED)
+                                d = (district_record*)RC_VALUE_PTR(record);
+                        else 
+                                d = (district_record*)OCC_VALUE_PTR(record);
                         assert(d->d_w_id == i);
                         assert(d->d_id == j);
                 }
