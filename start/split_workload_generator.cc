@@ -48,7 +48,7 @@ uint32_t get_partition(uint64_t record, __attribute__((unused)) uint32_t table,
 uint32_t get_tpcc_warehouse_partition(uint32_t warehouse, uint32_t type, uint32_t num_partitions)
 {
 
-        
+        /*        
         uint32_t temp;
         //        assert(type == WAREHOUSE_TABLE);
         if (type == WAREHOUSE_TABLE) {
@@ -58,10 +58,10 @@ uint32_t get_tpcc_warehouse_partition(uint32_t warehouse, uint32_t type, uint32_
                 //                temp = warehouse % num_partitions;
                 //                return num_partitions - 1 - temp;
         }
-        
+        */
 
-        //        uint64_t temp = ((uint64_t)type << 32) | num_partitions;
-        //        return Hash128to64(std::make_pair(warehouse, temp)) % num_partitions;
+        uint64_t temp = ((uint64_t)type << 32) | num_partitions;
+        return Hash128to64(std::make_pair(warehouse, temp)) % num_partitions;
 }
 
 uint32_t get_tpcc_history_partition(uint32_t num_partitions)
@@ -90,6 +90,7 @@ uint32_t get_tpcc_district_partition(uint32_t warehouse, uint32_t district,
                 return 2 + index % (num_partitions - 2);
         */
 
+        /*
         if (type == DISTRICT_TABLE)
                 return (warehouse * (NUM_DISTRICTS + 6) + district) % num_partitions;
         else if (type == CUSTOMER_TABLE)
@@ -104,7 +105,7 @@ uint32_t get_tpcc_district_partition(uint32_t warehouse, uint32_t district,
                 return (warehouse * (NUM_DISTRICTS + 6) + district + 5) % num_partitions;
         } else
                 assert(false);
-
+        */
 
         /*
         if (type == DISTRICT_TABLE)
@@ -137,8 +138,8 @@ uint32_t get_tpcc_partition(uint32_t warehouse, uint32_t district, uint32_t type
         case WAREHOUSE_TABLE:
                 return get_tpcc_warehouse_partition(warehouse, type, num_partitions);
         case STOCK_TABLE:
-                //                return get_tpcc_stock_partition(warehouse, district, type, num_partitions);
-                return get_tpcc_warehouse_partition(warehouse, type, num_partitions);
+                return get_tpcc_stock_partition(warehouse, district, type, num_partitions);
+                // return get_tpcc_warehouse_partition(warehouse, type, num_partitions);
         case DISTRICT_TABLE:
         case CUSTOMER_TABLE:
         case NEW_ORDER_TABLE:
@@ -433,8 +434,8 @@ txn_graph* gen_new_order(workload_config conf, __attribute__((unused)) uint32_t 
                                                     num_partitions);
         graph->add_node(oorder_node);
         graph->add_edge(district_node, oorder_node);
-        graph->add_edge(customer_node, oorder_node);
-        graph->add_edge(warehouse_node, oorder_node);
+        //        graph->add_edge(customer_node, oorder_node);
+        //        graph->add_edge(warehouse_node, oorder_node);
 
         graph_node *new_order_node = new graph_node();
         new_order_node->app = new_order_pc;
@@ -444,8 +445,8 @@ txn_graph* gen_new_order(workload_config conf, __attribute__((unused)) uint32_t 
         //        assert(new_order_node->partition >= 2);
         graph->add_node(new_order_node);
         graph->add_edge(district_node, new_order_node);
-        graph->add_edge(customer_node, new_order_node);
-        graph->add_edge(warehouse_node, new_order_node);
+        //        graph->add_edge(customer_node, new_order_node);
+        //        graph->add_edge(warehouse_node, new_order_node);
 
 
         graph_node *order_line_node = new graph_node();
@@ -463,9 +464,9 @@ txn_graph* gen_new_order(workload_config conf, __attribute__((unused)) uint32_t 
 
         assert(stock_pieces.size() == stock_nodes.size());
         for (i = 0; i < stock_pieces.size(); ++i) {
-                graph->add_edge(stock_nodes[i], new_order_node);
+                //                graph->add_edge(stock_nodes[i], new_order_node);
                 graph->add_edge(stock_nodes[i], order_line_node);
-                graph->add_edge(stock_nodes[i], oorder_node);
+                //                graph->add_edge(stock_nodes[i], oorder_node);
         }
 
 

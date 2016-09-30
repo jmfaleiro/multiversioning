@@ -9,8 +9,12 @@ extern bool split_flag;
 
 struct TableRecord {
         struct TableRecord *next;
+        struct TableRecord *next_in;
         uint64_t key;
-        char value[0];
+        uint32_t table_id;
+        uint32_t state;
+        volatile uint64_t ref_count;
+        char *value;
 };
 
 struct TableConfig {
@@ -83,20 +87,28 @@ class Table {
     if (conf.freeListSz > 0) {
             uint32_t recordSz = sizeof(TableRecord)+conf.valueSz;
             char *data;
+            TableRecord *records;
             if (split_flag) {
-                    data = (char*)alloc_mem(conf.freeListSz*recordSz, conf.startCpu);
+                    records = (TableRecord*)alloc_mem(conf.freeListSz*sizeof(TableRecord), conf.startCpu);
+                    assert(records != NULL);
+                    data = (char*)alloc_mem(conf.freeListSz*conf.valueSz, conf.startCpu);
                     assert(data != NULL);
             } else {
-                    data = (char*)alloc_interleaved_all(conf.freeListSz*recordSz);
+                    records = (TableRecord*)alloc_interleaved_all(conf.freeListSz*sizeof(TableRecord));
+                    assert(records != NULL);
+                    data = (char*)alloc_interleaved_all(conf.freeListSz*conf.valueSz);
                     assert(data != NULL);
             }
 
-            memset(data, 0x0, conf.freeListSz*recordSz);
-            for (uint64_t i = 0; i < conf.freeListSz; ++i) {
-                    ((TableRecord*)(data + i*recordSz))->next = (TableRecord*)(data + (i+1)*recordSz);
+            memset(records, 0x0, conf.freeListSz*sizeof(TableRecord));
+            memset(data, 0x0, conf.freeListSz*conf.valueSz);
+            uint64_t i;
+            for (i = 0; i < conf.freeListSz; ++i) {
+                    records[i].next = &records[i+1];
+                    records[i].value = (data + i*conf.valueSz);
             }    
-            ((TableRecord*)(data + (conf.freeListSz-1)*recordSz))->next = NULL;    
-            freeList = (TableRecord*)data;
+            records[i-1].next = NULL;
+            freeList = records;
             //    default_value = GetRecord();
             //    memset(default_value->value, 0x0, conf.valueSz);
     }
@@ -121,6 +133,17 @@ class Table {
     rec->key = key;
     memcpy(rec->value, value, conf.valueSz);
     buckets[index] = rec;
+  }
+
+
+  virtual void PutGiven(uint64_t key, TableRecord *rec)
+  {
+    uint64_t index = 
+      Hash128to64(std::make_pair(conf.tableId, key)) % conf.numBuckets;
+    rec->next = buckets[index];
+    rec->key = key;
+    buckets[index] = rec;
+          
   }
 
   virtual void Insert(uint64_t key, TableRecord *rec)

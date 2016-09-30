@@ -10,7 +10,8 @@ split_executor::split_executor(struct split_executor_config config)
         init_dep_array();
         epoch = 1;
         _insert_mgr = new(config.cpu) insert_buf_mgr(config.cpu, 11, 
-                                                     tpcc_record_sizes);
+                                                     tpcc_record_sizes, 
+                                                     false);
 }
 
 void split_executor::init_dep_array()
@@ -135,7 +136,7 @@ void split_executor::schedule_downstream_pieces(split_action *action)
         num_rvps = action->num_downstream_rvps();
         rvps = action->get_rvps();
         /* HACK TO GET COMMITS WORKING PROPERLY. */
-        assert(num_rvps <= 1);
+        /* assert(num_rvps <= 1); */
         for (i = 0; i < num_rvps; ++i) 
                 schedule_single_rvp(action, rvps[i]);
 }

@@ -110,6 +110,7 @@ class OCCAction : public translator {
         insert_buf_mgr *insert_mgr;
         mcs_struct *lck;
 
+        conc_table_record *inserted;
         uint32_t insert_ptr;
         std::vector<occ_composite_key> inserts;
         std::vector<occ_composite_key> readset;
@@ -118,9 +119,13 @@ class OCCAction : public translator {
 
         virtual uint64_t stable_copy(uint64_t key, uint32_t table_id,
                                      void **rec_ptr, void *record_copy); 
-        virtual void validate_single(occ_composite_key &comp_key);
+        virtual bool validate_single(void *value, uint64_t read_tid, 
+                                     bool is_rmw);
+
         virtual void cleanup_single(occ_composite_key &comp_key);
-        virtual void install_single_write(occ_composite_key &comp_key);
+        virtual void install_single_write(void *record_ptr, void *value, 
+                                          mcs_struct *lck_ptr,
+                                          size_t record_sz);
         virtual void install_single_insert(occ_composite_key &comp_key);
         
  public:
@@ -142,7 +147,7 @@ class OCCAction : public translator {
 
         virtual bool run();
         virtual void acquire_locks();
-        virtual void validate();
+        virtual bool validate();
         virtual uint64_t compute_tid(uint32_t epoch, uint64_t last_tid);
         virtual void install_writes();
         virtual void release_locks();

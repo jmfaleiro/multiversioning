@@ -553,7 +553,24 @@ table_mgr* setup_tpcc_tables(workload_config w_conf, ConcurrencyControl cc_type)
                         assert(false);
                 }
         }        
-        
+
+        size_t wh_sz, d_sz;
+
+        for (i = 0; i < w_conf.num_warehouses; ++i) {
+                TableRecord *record = (TableRecord*)alloc_mem(sizeof(TableRecord), i % 40);
+                memset(record, 0x0, sizeof(TableRecord));
+
+                record->value = (char*)tpcc_config::warehouses[i];
+                rw_tbls[WAREHOUSE_TABLE]->PutGiven((uint64_t)i, record);
+                record = (TableRecord*)alloc_mem(NUM_DISTRICTS*sizeof(TableRecord), i % 40);
+                memset(record, 0x0, NUM_DISTRICTS*sizeof(TableRecord));
+                for (uint32_t j = 0; j < NUM_DISTRICTS; ++j) {
+                        uint64_t d_key = tpcc_util::create_district_key(i, j);
+                        record[j].value = (char*)tpcc_config::districts[i][j];
+                        rw_tbls[DISTRICT_TABLE]->PutGiven(d_key, &record[j]);
+                }
+        }
+
         ret = new table_mgr(rw_tbls, ins_tbls, 11);
         return ret;
 }
@@ -677,7 +694,7 @@ uint64_t wait_to_completion(__attribute__((unused)) SimpleQueue<OCCActionBatch> 
         //                output_queues[i]->DequeueBlocking();
         
         num_completed = 0;
-        sleep(30);
+        sleep(10);
         for (i = 1; i < num_workers; ++i) 
                 num_completed += workers[i]->NumCompleted();
         std::cerr << num_completed << "\n";
@@ -765,8 +782,8 @@ struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
         std::cerr << "Done populating tables\n";
 
 
-        dry_run(inputQueues, outputQueues, inputBatches[0], config.numThreads);
-        check_tables(config, tbls);
+        //        dry_run(inputQueues, outputQueues, inputBatches[0], config.numThreads);
+        //        check_tables(config, tbls);
         std::cerr << "Done dry run\n";
         barrier();
         clock_gettime(CLOCK_REALTIME, &start_time);
@@ -781,8 +798,8 @@ struct occ_result do_measurement(SimpleQueue<OCCActionBatch> **inputQueues,
         clock_gettime(CLOCK_REALTIME, &end_time);
         barrier();
         result.time_elapsed = diff_time(end_time, start_time);
-        for (i = 0; i < config.numThreads-1; ++i)
-                result.num_txns -= inputBatches[0][i].batchSize;
+        //        for (i = 0; i < config.numThreads-1; ++i)
+        //                result.num_txns -= inputBatches[0][i].batchSize;
         //        result.num_txns = config.numTxns;
         std::cout << "Num completed: " << result.num_txns << "\n";
         return result;

@@ -1125,7 +1125,7 @@ public:
                 rvps = (rendezvous_point**)zmalloc(sizeof(rendezvous_point*)*count);
                 
                 /* HACK: Needed for rvp's after_txn to work correctly */
-                assert(count <= 1);
+                /*                assert(count <= 1); */
 
                 for (i = 0; i < count; ++i) {
                         assert((node->after == NULL && node->after_t == NULL) ||

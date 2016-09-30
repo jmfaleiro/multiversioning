@@ -34,7 +34,7 @@ bool LockManager::LockRecord(locking_action *txn, struct locking_key *k)
         mcs_rw::mcs_rw_lock *lock;
 
         assert(k->is_held == false);
-        
+        /*
         if (TPCC) {
 
                 uint64_t wh_id, d_id;
@@ -55,8 +55,9 @@ bool LockManager::LockRecord(locking_action *txn, struct locking_key *k)
                                 record = tbl->Get(k->key);
                         assert(record != NULL);
                 }
-        } else {
 
+*/
+                //        } else {
 
                 tbl = _tbl_mgr->get_table(k->table_id);
                 assert(tbl != NULL);
@@ -65,7 +66,7 @@ bool LockManager::LockRecord(locking_action *txn, struct locking_key *k)
                 else
                         record = tbl->Get(k->key);
                 assert(record != NULL);
-        }
+                //        }
 
 
         
@@ -160,6 +161,7 @@ void LockManager::Unlock(locking_action *txn)
                 UnlockRecord(txn, &txn->writeset[i]);
         for (i = 0; i < num_reads; ++i) 
                 UnlockRecord(txn, &txn->readset[i]);
+        txn->finish_inserts();
         txn->finished_execution = true;
 }
 

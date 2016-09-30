@@ -24,7 +24,7 @@ DEPCFLAGS=-MD -MF $(DEPSDIR)/$*.d -MP
 all:CFLAGS+=-DTESTING=0 -DUSE_BACKOFF=1 -fno-omit-frame-pointer -DTPCC=1
 all:env build/db
 
-test:CFLAGS+=-DTESTING=1 -DUSE_BACKOFF=1 
+test:CFLAGS+=-DTESTING=1 -DUSE_BACKOFF=0 
 test:env build/tests
 
 -include $(wildcard $(DEPSDIR)/*.d)

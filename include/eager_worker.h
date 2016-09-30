@@ -40,7 +40,7 @@ private:
   mcs_mgr *mgr;
   insert_buf_mgr *insert_mgr;
   volatile uint32_t m_num_done;
-
+  lck_key_allocator *key_alloc;
 
   RecordBuffers *bufs;
   

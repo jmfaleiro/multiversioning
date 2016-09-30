@@ -99,17 +99,20 @@ int main(int argc, char **argv) {
 
   /* Only initialize values for tables that we're actually going to use */
   tpcc_record_sizes = (size_t*)zmalloc(sizeof(size_t)*11);
-  tpcc_record_sizes[WAREHOUSE_TABLE] = sizeof(warehouse_record);
-  tpcc_record_sizes[DISTRICT_TABLE] = sizeof(district_record);
-  tpcc_record_sizes[CUSTOMER_TABLE] = sizeof(customer_record);
-  tpcc_record_sizes[NEW_ORDER_TABLE] = sizeof(new_order_record);
-  tpcc_record_sizes[OORDER_TABLE] = sizeof(oorder_record);
-  tpcc_record_sizes[ORDER_LINE_TABLE] = sizeof(order_line_record);
-  tpcc_record_sizes[STOCK_TABLE] = sizeof(stock_record);
-  tpcc_record_sizes[ITEM_TABLE] = sizeof(item_record);
-  tpcc_record_sizes[HISTORY_TABLE] = sizeof(history_record);
-  tpcc_record_sizes[DELIVERY_TABLE] = sizeof(uint64_t);
-  tpcc_record_sizes[CUSTOMER_ORDER_INDEX] = sizeof(uint64_t);  
+
+  size_t convert_record_sz(size_t value_sz, ConcurrencyControl cc_type);
+
+  tpcc_record_sizes[WAREHOUSE_TABLE] = convert_record_sz(sizeof(warehouse_record), cfg.ccType);
+  tpcc_record_sizes[DISTRICT_TABLE] = convert_record_sz(sizeof(district_record), cfg.ccType);
+  tpcc_record_sizes[CUSTOMER_TABLE] = convert_record_sz(sizeof(customer_record), cfg.ccType);
+  tpcc_record_sizes[NEW_ORDER_TABLE] = convert_record_sz(sizeof(new_order_record), cfg.ccType);
+  tpcc_record_sizes[OORDER_TABLE] = convert_record_sz(sizeof(oorder_record), cfg.ccType);
+  tpcc_record_sizes[ORDER_LINE_TABLE] = convert_record_sz(sizeof(order_line_record), cfg.ccType);
+  tpcc_record_sizes[STOCK_TABLE] = convert_record_sz(sizeof(stock_record), cfg.ccType);
+  tpcc_record_sizes[ITEM_TABLE] = convert_record_sz(sizeof(item_record), cfg.ccType);
+  tpcc_record_sizes[HISTORY_TABLE] = convert_record_sz(sizeof(history_record), cfg.ccType);
+  tpcc_record_sizes[DELIVERY_TABLE] = convert_record_sz(sizeof(uint64_t), cfg.ccType);
+  tpcc_record_sizes[CUSTOMER_ORDER_INDEX] = convert_record_sz(sizeof(uint64_t), cfg.ccType);
 
   init_tpcc_local(cfg.ccType, cfg.get_workload_config());
   cc_type = cfg.ccType;

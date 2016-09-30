@@ -103,6 +103,19 @@ public:
         }
 };
 
+class lck_key_allocator {
+ private:
+        locking_key 		*_free_list;
+        uint32_t 		_cursor;
+        uint32_t 		_sz;
+        
+ public:
+        void* operator new(std::size_t sz, int cpu);        
+        lck_key_allocator(uint32_t sz, int cpu);
+        locking_key* get();
+        void reset();
+};
+
 class locking_action : public translator {
         friend class LockManagerTable;
         friend class LockManager;
@@ -119,6 +132,8 @@ class locking_action : public translator {
         Runnable *worker;
         locking_action *next;
         locking_action *prev;
+        lck_key_allocator	*key_alloc;
+
         table_mgr *tables;
         insert_buf_mgr *insert_mgr;
         bool prepared;
@@ -130,7 +145,7 @@ class locking_action : public translator {
         //        LockManager *lock_mgr;
         volatile locking_action_status status;
         
-
+        locking_key 		*inserted;
         std::vector<locking_key> writeset;
         std::vector<locking_key> readset;        
 
@@ -153,6 +168,7 @@ class locking_action : public translator {
         uint64_t gen_guid();
         void prepare();
         bool Run();
+        void finish_inserts();
 };
 
 #endif // LOCKING_ACTION_H_

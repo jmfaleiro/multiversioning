@@ -19,6 +19,7 @@ void Runnable::rand_init()
 
 Runnable::Runnable(int cpu_number) {
         m_start_signal = 0;
+        m_guid_counter = 0;
         m_cpu_number = cpu_number;
         rand_init();
 }
@@ -77,6 +78,6 @@ uint64_t Runnable::gen_guid()
         temp = m_guid_counter;
         m_guid_counter += 1;
         
-        ret = (((uint64_t)temp) << 32) | m_cpu_number;
+        ret = (((uint64_t)temp) << 8) | m_cpu_number;
         return ret;
 }

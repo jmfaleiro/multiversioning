@@ -10,7 +10,8 @@ OCCWorker::OCCWorker(OCCWorkerConfig conf, struct RecordBuffersConfig rb_conf)
         this->bufs = new(conf.cpu) RecordBuffers(rb_conf);
         this->mgr = new(conf.cpu) mcs_mgr(NUM_MCS_LOCKS, conf.cpu);
         this->insert_mgr = new(conf.cpu) insert_buf_mgr(conf.cpu, 11, 
-                                                        tpcc_record_sizes);
+                                                        tpcc_record_sizes,
+                                                        true);
 }
 
 void OCCWorker::Init()
@@ -170,29 +171,26 @@ bool OCCWorker::RunSingle(OCCAction *action)
         action->insert_mgr = insert_mgr;
         action->lck = mgr->get_struct();
 
-        try {
-                action->run();
-                action->acquire_locks();
-                barrier();
-                epoch = *config.epoch_ptr;
-                barrier();                        
-                if (!READ_COMMITTED) {
-                        action->validate();
-                }
+        action->inserted = NULL;
+        action->run();
+        action->acquire_locks();
+        barrier();
+        epoch = *config.epoch_ptr;
+        barrier();                        
+        
+        if (action->validate() == true) {
                 this->last_tid = action->compute_tid(epoch,
                                                      this->last_tid);
                 action->install_writes();
                 action->cleanup();
                 fetch_and_increment(&config.num_completed);
                 validated = true;
-        } catch(const occ_validation_exception &e) {
-                assert(!READ_COMMITTED || e.err == INSERT_ERR);
+        } else {
+                action->release_locks();
                 action->undo_inserts();
-                if (e.err == VALIDATION_ERR)
-                        action->release_locks();
                 action->cleanup();
                 validated = false;
-        }        
+        }
         mgr->return_struct(action->lck);        
         return validated;
 }

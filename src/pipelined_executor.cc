@@ -55,7 +55,8 @@ executor::executor(executor_config conf, RecordBuffersConfig rb_conf)
         _conf = conf;
         _record_buffers = new(conf._cpu) RecordBuffers(rb_conf);
         _insert_buf_mgr = new(conf._cpu) insert_buf_mgr(conf._cpu, 11, 
-                                                        tpcc_record_sizes);
+                                                        tpcc_record_sizes,
+                                                        true);
         _dep_tbl = new dependency_table();
         init_depnodes();        
 }

@@ -15,7 +15,9 @@ locking_worker::locking_worker(locking_worker_config config,
         this->bufs = new(config.cpu) RecordBuffers(rb_conf);
         this->mgr = new(config.cpu) mcs_mgr(1000, config.cpu);
         this->insert_mgr = new(config.cpu) insert_buf_mgr(config.cpu, 11, 
-                                                          tpcc_record_sizes);
+                                                          tpcc_record_sizes,
+                                                          true);
+        this->key_alloc = new(config.cpu) lck_key_allocator(100, config.cpu);
 }
 
 void locking_worker::Init()
@@ -134,6 +136,7 @@ void locking_worker::TryExec(locking_action *txn)
         txn->insert_mgr = this->insert_mgr;
         txn->worker = this;
         txn->bufs = this->bufs;
+        txn->key_alloc = this->key_alloc;
         barrier();
         txn->status = UNEXECUTED;
         barrier();

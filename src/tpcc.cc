@@ -375,7 +375,7 @@ uint32_t new_order::num_rmws()
 uint32_t new_order::num_reads()
 {
         /* Warehouse, customer, and items */
-        return 2;// + _items.size();
+        return 2;
 }
 
 void new_order::get_rmws(struct big_key *array)
@@ -400,14 +400,13 @@ void new_order::get_rmws(struct big_key *array)
 
 void new_order::get_reads(struct big_key *array)
 {
-        
+
         uint64_t c_id;
         //        uint32_t i, nitems;
 
 
         array[0].key = (uint64_t)_warehouse_id;
         array[0].table_id = WAREHOUSE_TABLE;
-
 
         c_id = tpcc_util::create_customer_key(_warehouse_id, _district_id, 
                                               _customer_id);
@@ -567,9 +566,9 @@ void new_order::process_item(uint32_t item_number, uint32_t order_id,
         item_amount = item->i_price*(1+w_tax+d_tax)*(1-c_disc);
         item_amount *= _order_quantities[item_number];
         order_line_key = tpcc_util::create_order_line_key(_warehouse_id, 
-                                                         _district_id, 
-                                                         order_id, 
-                                                         item_number);
+                                                          _district_id, 
+                                                          order_id, 
+                                                          item_number);
         
         order_line = (order_line_record*)insert_record(order_line_key, 
                                                        ORDER_LINE_TABLE);
@@ -653,7 +652,7 @@ void payment::insert_history(char *warehouse_name, char *district_name)
         static const char *empty = "    ";
         const char *holder[3] = {warehouse_name, empty, district_name};
  
-        history_key = guid();
+        history_key = tpcc_util::create_history_key(_warehouse_id, _district_id, guid());
         hist = (history_record*)insert_record(history_key, HISTORY_TABLE);
         hist->h_c_id = _customer_id;
         hist->h_c_d_id = _customer_district_id;
@@ -700,8 +699,8 @@ void payment::customer_update()
                 w_id_str[17], h_amount_str[17];
         
         customer_key = tpcc_util::create_customer_key(_customer_warehouse_id, 
-                                                     _customer_district_id,
-                                                     _customer_id);
+                                                      _customer_district_id,
+                                                      _customer_id);
 
         cust = (customer_record*)get_write_ref(customer_key, CUSTOMER_TABLE);
         if (strcmp(credit, cust->c_credit) == 0) {
@@ -735,7 +734,6 @@ bool payment::Run()
         insert_history(warehouse_name, district_name);
         return true;
 } 
-
  
 // stock_level::stock_level(uint32_t warehouse_id, uint32_t district_id)
 // {

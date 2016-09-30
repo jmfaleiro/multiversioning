@@ -78,7 +78,7 @@ void* split_action::insert_ref(uint64_t key, uint32_t table_id)
         TableRecord *record;
         Table *tbl;
 
-        record = _insert_mgr->get_insert_record(table_id);
+        record = _insert_mgr->get_table_record(table_id);
         record->key = key;
         record->next = NULL;
         tbl = _tables[table_id];

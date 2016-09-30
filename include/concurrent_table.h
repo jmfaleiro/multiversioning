@@ -3,150 +3,41 @@
 
 #include <mcs.h>
 #include <table.h>
+#include <util.h>
 
-/*
 struct conc_table_record {
-        uint64_t key;
-        uint64_t tid;
-        void *value;
         struct conc_table_record *next;
+        struct conc_table_record *next_in;
+        uint64_t key;
+        uint32_t table_id;
+        uint32_t state;
+        volatile uint64_t ref_count;
+        char *value;
+        struct conc_table_record *inserted_record;
 };
-*/
 
 struct concurrent_table_bckt {
         volatile mcs_struct __attribute__((__packed__, __aligned__(CACHE_LINE))) *_lock_tail;
-        TableRecord 		*_records;
+        conc_table_record 		*_records;
 }__attribute__((__packed__, __aligned__(CACHE_LINE)));
 
 class concurrent_table {
- private:
+ protected:
 
-        TableConfig 		conf;
-        uint64_t 		_salt;
-        uint64_t 		_tbl_sz;
-        concurrent_table_bckt 		*_buckets;
+        TableConfig 			conf;
+        uint64_t 			_salt;
+        uint64_t 			_tbl_sz;
+        concurrent_table_bckt 		***_buckets;
 
-        concurrent_table_bckt* get_bucket(uint64_t key)
-        {
-                uint64_t index;
-                
-                index = Hash128to64(std::make_pair(key, _salt)) % _tbl_sz;
-                return &_buckets[index];
-        }
+        virtual concurrent_table_bckt* get_bucket(uint64_t key);
         
  public:
         
-        concurrent_table(uint64_t num_buckets)
-        {
-                _buckets = (concurrent_table_bckt*)zmalloc(sizeof(concurrent_table_bckt)*num_buckets);
-                _salt = (uint64_t)rand();
-                _tbl_sz = num_buckets;
-        }
-
-        virtual void* LockedGet(uint64_t key, mcs_struct *lock_struct) 
-        {
-                concurrent_table_bckt *bucket;
-                TableRecord *iter;
-                void *ret;
-                
-                ret = NULL;
-                bucket = get_bucket(key);
-                lock_struct->_tail_ptr = &bucket->_lock_tail;
-                mcs_mgr::lock(lock_struct);
-                iter = bucket->_records;
-                while (iter != NULL) {
-                        if (iter->key == key) {
-                                ret = iter->value;
-                                break;
-                        }
-                        iter = iter->next;
-                }
-                if (iter == NULL) 
-                        mcs_mgr::unlock(lock_struct);
-                return ret;
-        }
-        
-        virtual void* Get(uint64_t key, mcs_struct *lock_struct) 
-        {
-                concurrent_table_bckt *bucket;
-                TableRecord *iter;
-                void *ret;
-                
-                ret = NULL;
-                bucket = get_bucket(key);
-                lock_struct->_tail_ptr = &bucket->_lock_tail;
-                mcs_mgr::lock(lock_struct);
-                iter = bucket->_records;
-                while (iter != NULL && iter->key > key) 
-                        iter = iter->next;
-
-                if (iter != NULL && iter->key == key)                         
-                        ret = iter->value;
-
-                mcs_mgr::unlock(lock_struct);                
-                return ret;
-        }
-
-        virtual bool Put(TableRecord *value, mcs_struct *lock_struct)
-        {
-                //                bool success;
-                concurrent_table_bckt *bucket;
-                //                conc_table_record *iter, **prev;
-
-                bucket = get_bucket(value->key);
-                //                success = false;
-                lock_struct->_tail_ptr = &bucket->_lock_tail;
-                mcs_mgr::lock(lock_struct);
-                
-                /* Search for a duplicate */
-                value->next = bucket->_records;
-                bucket->_records = value;
-                /*
-                prev = &bucket->_records;
-                iter = bucket->_records;
-                while (iter != NULL && iter->key > value->key) {
-                        prev = &iter->next;
-                        iter = iter->next;                        
-                }
-                
-                if (iter == NULL || iter->key < value->key) {
-                        success = true;
-                        value->next = iter;
-                        *prev = value;
-                }
-                */
-                mcs_mgr::unlock(lock_struct);
-                return true;
-        }
-        
-        virtual void Remove(TableRecord *rec, mcs_struct *lock_struct) 
-        {
-                concurrent_table_bckt *bucket;
-                TableRecord *iter, **prev;
-                uint64_t key;
-                assert(rec != NULL);
-
-                key = rec->key;
-                bucket = get_bucket(key);
-                lock_struct->_tail_ptr = &bucket->_lock_tail;
-                mcs_mgr::lock(lock_struct);
-                
-                prev = &bucket->_records;
-                iter = bucket->_records;
-                while (iter != NULL && iter != rec) {
-                        prev = &iter->next;
-                        iter = iter->next;
-                }
-
-                /* Shouldn't be asked to remove a non-existent record */
-                assert(iter == rec);
-                
-                /* Remove it */
-                *prev = iter->next;
-
-                mcs_mgr::unlock(lock_struct);
-                iter->next = NULL;
-        }
+        concurrent_table(uint64_t num_buckets);
+        virtual bool Get(uint64_t key, mcs_struct *lock_struct, 
+                         conc_table_record **value);
+        virtual bool RemoveRecord(conc_table_record *record, mcs_struct *lock_struct);
+        virtual bool Put(conc_table_record *value, mcs_struct *lock_struct);
 };
 
 #endif 		// CONCURRENT_TABLE_H_

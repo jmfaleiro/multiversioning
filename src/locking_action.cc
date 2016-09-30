@@ -10,6 +10,31 @@
 
 extern uint32_t cc_type;
 
+void* lck_key_allocator::operator new(std::size_t sz, int cpu)
+{
+        return alloc_mem(sz, cpu);
+}
+
+lck_key_allocator::lck_key_allocator(uint32_t sz, int cpu)
+{
+        _free_list = (locking_key*)alloc_mem(sizeof(locking_key)*sz, cpu);
+        memset(_free_list, 0x0, sz);
+        _cursor = 0;
+        _sz = sz;
+}
+
+locking_key* lck_key_allocator::get()
+{
+        assert(_cursor < _sz - 1);
+        _cursor += 1;
+        return &_free_list[_cursor-1];
+}
+
+void lck_key_allocator::reset()
+{
+        _cursor = 0;        
+}
+
 locking_key::locking_key(uint64_t key, uint32_t table_id, bool is_write)
 {
         this->key = key;
@@ -181,18 +206,46 @@ void* locking_action::read(uint64_t key, uint32_t table_id)
 
 void* locking_action::insert_ref(uint64_t key, uint32_t table_id)
 {
-        TableRecord *record;
+        conc_table_record *record;
         concurrent_table *tbl;
         bool success;        
-
+        locking_key *wrapper;
+        
+        /* Get a wrapper to remember a reference to the inserted record */
+        wrapper = key_alloc->get();        
+        wrapper->next = inserted;
+        inserted = wrapper;
+        
+        /* Allocate a record to insert, and remember a reference to it */
         record = insert_mgr->get_insert_record(table_id);
         record->key = key;
         record->next = NULL;
+        wrapper->value = record;
+        
+        /* Insert the new record */
+        acquire_writer((mcs_rw::mcs_rw_lock*)record->value, &wrapper->lock_node);
         tbl = tables->get_conc_table(table_id);
         assert(tbl != NULL);
         success = tbl->Put(record, lck);
         assert(success == true);
         return record->value;
+}
+
+/* Called at the end of a txn. Release write locks on inserted records */
+void locking_action::finish_inserts()
+{
+        assert(this->status == COMPLETE);
+        locking_key *iter, *temp;
+        mcs_rw::mcs_rw_lock *record_ptr;
+
+        iter = inserted;
+        while (iter != NULL) {
+                record_ptr = (mcs_rw::mcs_rw_lock*)((conc_table_record*)iter->value)->value;
+                release_writer(record_ptr, &iter->lock_node);
+                temp = iter;
+                iter = iter->next;
+        }
+        key_alloc->reset();
 }
 
 void locking_action::remove(__attribute__((unused)) uint64_t key, 
@@ -213,8 +266,6 @@ void locking_action::prepare()
 
         this->prepared = true;
 }
-
-
 
 bool locking_action::Run()
 {

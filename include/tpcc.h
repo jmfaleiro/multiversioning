@@ -48,11 +48,12 @@ enum tpcc_txn_types {
 
 class tpcc_util {
  private:
+        static const uint32_t s_history_shift = 	24;
         static const uint32_t s_customer_shift =  	24;
         static const uint32_t s_district_shift = 	16;
-        static const uint32_t s_new_order_shift =	24;
-        static const uint32_t s_order_shift = 		24;
-        static const uint32_t s_order_line_shift = 	56;
+        static const uint32_t s_new_order_shift =	32;
+        static const uint32_t s_order_shift = 		32;
+        static const uint32_t s_order_line_shift = 	24;
         static const uint32_t s_stock_shift = 		16;
 
         static const uint64_t s_customer_mask = 	0x000000FFFF000000;
@@ -98,6 +99,17 @@ class tpcc_util {
                     ((uint64_t)warehouse_id)				|
                     (((uint64_t)district_id) << s_district_shift)	|
                     (((uint64_t)customer_id) << s_customer_shift)		
+                    );
+        }
+
+        static inline uint64_t create_history_key(uint32_t warehouse_id, 
+                                                  uint32_t district_id, 
+                                                  uint32_t guid)
+        {
+            return (
+                    ((uint64_t)warehouse_id)				|
+                    (((uint64_t)district_id) << s_district_shift)	|
+                    (((uint64_t)guid) << s_history_shift)		
                     );
         }
 

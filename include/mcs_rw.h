@@ -10,7 +10,7 @@ namespace mcs_rw {
 struct mcs_rw_node;
 
 struct mcs_rw_lock {
-        volatile uint64_t __attribute__((__packed__, __aligned__(CACHE_LINE))) 	_nreaders;
+        volatile uint64_t __attribute__((__packed__, __aligned__(CACHE_LINE))) 		_nreaders;
         volatile mcs_rw_node __attribute__((__packed__, __aligned__(CACHE_LINE)))  	*_next_writer;
         volatile mcs_rw_node __attribute__((__packed__, __aligned__(CACHE_LINE))) 	*_tail;
 };
