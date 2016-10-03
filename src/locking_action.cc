@@ -32,6 +32,7 @@ locking_key* lck_key_allocator::get()
 
 void lck_key_allocator::reset()
 {
+        memset(_free_list, 0x0, sizeof(locking_key)*_sz);
         _cursor = 0;        
 }
 
@@ -124,7 +125,7 @@ void locking_action::commit_writes(bool commit)
                 if (k->value != NULL) {
                         if (commit) {
                                 value = lookup(k);
-                                record_size = tables->get_table(k->table_id)->RecordSize();                        
+                                record_size = tables->get_table(k->table_id)->RecordSize();
                                 memcpy(k->value, k->buf->value, record_size);
                         }
                         this->bufs->ReturnRecord(k->table_id, k->buf);
@@ -209,7 +210,9 @@ void* locking_action::insert_ref(uint64_t key, uint32_t table_id)
         conc_table_record *record;
         concurrent_table *tbl;
         bool success;        
-        locking_key *wrapper;
+        locking_key *wrapper, *iter;
+        mcs_rw::mcs_rw_lock *record_ptr;
+        void *ret_value;
         
         /* Get a wrapper to remember a reference to the inserted record */
         wrapper = key_alloc->get();        
@@ -223,12 +226,30 @@ void* locking_action::insert_ref(uint64_t key, uint32_t table_id)
         wrapper->value = record;
         
         /* Insert the new record */
+        //        memset(record->value, 0x0, sizeof(mcs_rw::mcs_rw_lock));
         acquire_writer((mcs_rw::mcs_rw_lock*)record->value, &wrapper->lock_node);
         tbl = tables->get_conc_table(table_id);
         assert(tbl != NULL);
         success = tbl->Put(record, lck);
         assert(success == true);
-        return record->value;
+
+        /* XXX REMOVE THIS 
+        iter = inserted;
+        while (iter != NULL) {
+                record_ptr = (mcs_rw::mcs_rw_lock*)(((conc_table_record*)iter->value))->value;
+                assert(record_ptr->_tail == &iter->lock_node);
+                iter = iter->next;
+        }
+        */
+        
+        ret_value = NULL;
+        if (cc_type == 1)
+                ret_value = LOCKING_VALUE_PTR(record->value);
+        else if (cc_type == 5) 
+                ret_value = PIPELINED_VALUE_PTR(record->value);
+        else 
+                assert(false);
+        return ret_value;
 }
 
 /* Called at the end of a txn. Release write locks on inserted records */
@@ -238,9 +259,17 @@ void locking_action::finish_inserts()
         locking_key *iter, *temp;
         mcs_rw::mcs_rw_lock *record_ptr;
 
+        /* XXX REMOVE THIS 
         iter = inserted;
         while (iter != NULL) {
-                record_ptr = (mcs_rw::mcs_rw_lock*)((conc_table_record*)iter->value)->value;
+                record_ptr = (mcs_rw::mcs_rw_lock*)((conc_table_record*)(iter->value))->value;
+                assert(record_ptr->_tail == &iter->lock_node);
+                iter = iter->next;
+        }
+        */
+        iter = inserted;
+        while (iter != NULL) {
+                record_ptr = (mcs_rw::mcs_rw_lock*)(((conc_table_record*)iter->value))->value;
                 release_writer(record_ptr, &iter->lock_node);
                 temp = iter;
                 iter = iter->next;

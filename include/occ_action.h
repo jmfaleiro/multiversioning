@@ -58,13 +58,7 @@ class occ_composite_key {
         void *record_ptr;
 
         occ_composite_key(uint32_t tableId, uint64_t key, bool is_rmw);
-        void* GetValue() const ;
-        uint64_t GetTimestamp();
-        bool ValidateRead();
 
-        void* StartRead();
-        bool FinishRead();
-        
         bool operator==(const occ_composite_key &other) const {
                 return other.tableId == this->tableId && other.key == this->key;
         }

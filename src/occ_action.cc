@@ -28,18 +28,10 @@ void OCCAction::acquire_single(volatile uint64_t *lock_ptr)
                         break;
                 }
                 if (USE_BACKOFF) {
-//                         if (READ_COMMITTED) {
-//                                 barrier();
-//                                 for (i = 0; i < 100; ++i) 
-//                                         single_work();
-//                                 barrier();
-//                                 do_pause();
-//                         } else {
                          temp = backoff;
                          while (temp-- > 0)
                                  single_work();
                          backoff = backoff*2;
-                         //                        }
                 }
         }
 }
@@ -52,9 +44,9 @@ void OCCAction::release_single(volatile uint64_t *lock_word)
         old_tid = *lock_word;
         barrier();
 
-        assert(GET_LOCK_HOLDER(old_tid) == cpu_id);
-        xchgq(lock_word, GET_TIMESTAMP(old_tid));
+        old_tid = xchgq(lock_word, GET_TIMESTAMP(old_tid));
         assert(IS_LOCKED(old_tid));
+        assert(GET_LOCK_HOLDER(old_tid) == cpu_id);
 }
 
 occ_composite_key::occ_composite_key(uint32_t table_id, uint64_t key,
@@ -65,48 +57,6 @@ occ_composite_key::occ_composite_key(uint32_t table_id, uint64_t key,
         this->is_rmw = is_rmw;
         this->is_locked = false;
         this->is_initialized = false;
-}
-
-void* occ_composite_key::GetValue() const
-{
-        assert(false);
-        return NULL;
-}
-
-void* occ_composite_key::StartRead()
-{
-        assert(false);
-        return NULL;
-
-        //        return (void*)&((uint64_t*)value)[1];
-}
-
-bool occ_composite_key::FinishRead()
-{
-        return true;
-        /*
-        assert(!IS_LOCKED(this->old_tid));
-        volatile uint64_t tid;
-        bool is_valid = false;
-        barrier();        
-        tid = *(volatile uint64_t*)value;
-        barrier();
-        is_valid = (tid == this->old_tid);
-        assert(!is_valid || !IS_LOCKED(tid));
-        return is_valid;
-                //        return true;
-                */
-}
-
-uint64_t occ_composite_key::GetTimestamp()
-{
-        return old_tid;        
-}
-
-bool occ_composite_key::ValidateRead()
-{
-        assert(false);
-        return false;
 }
 
 void OCCAction::add_read_key(uint32_t tableId, uint64_t key) 
@@ -655,6 +605,7 @@ void OCCAction::install_writes()
         /* Inserts */
         iter = inserted;
         while (iter != NULL) {
+                
                 assert(!READ_COMMITTED);
                 record_sz = this->record_alloc->GetRecordSize(iter->table_id);
                 install_single_write(iter->inserted_record->value, 

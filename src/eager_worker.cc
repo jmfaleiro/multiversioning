@@ -1,6 +1,6 @@
 #include <eager_worker.h>
 
-extern size_t *tpcc_record_sizes;
+extern size_t *insert_tpcc_record_sizes;
 
 
 locking_worker::locking_worker(locking_worker_config config,
@@ -15,7 +15,7 @@ locking_worker::locking_worker(locking_worker_config config,
         this->bufs = new(config.cpu) RecordBuffers(rb_conf);
         this->mgr = new(config.cpu) mcs_mgr(1000, config.cpu);
         this->insert_mgr = new(config.cpu) insert_buf_mgr(config.cpu, 11, 
-                                                          tpcc_record_sizes,
+                                                          insert_tpcc_record_sizes,
                                                           true);
         this->key_alloc = new(config.cpu) lck_key_allocator(100, config.cpu);
 }

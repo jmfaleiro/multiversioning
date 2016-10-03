@@ -102,9 +102,6 @@ int main(int argc, char **argv) {
   tpcc_record_sizes = (size_t*)zmalloc(sizeof(size_t)*11);
   insert_tpcc_record_sizes = (size_t*)zmalloc(sizeof(size_t)*11);
 
-  
-  size_t convert_record_sz(size_t value_sz, ConcurrencyControl cc_type);
-
   tpcc_record_sizes[WAREHOUSE_TABLE] = sizeof(warehouse_record);
   tpcc_record_sizes[DISTRICT_TABLE] = sizeof(district_record);
   tpcc_record_sizes[CUSTOMER_TABLE] = sizeof(customer_record);
@@ -117,6 +114,7 @@ int main(int argc, char **argv) {
   tpcc_record_sizes[DELIVERY_TABLE] = sizeof(uint64_t);
   tpcc_record_sizes[CUSTOMER_ORDER_INDEX] = sizeof(uint64_t);
 
+  
   insert_tpcc_record_sizes[WAREHOUSE_TABLE] = convert_record_sz(sizeof(warehouse_record), cfg.ccType);
   insert_tpcc_record_sizes[DISTRICT_TABLE] = convert_record_sz(sizeof(district_record), cfg.ccType);
   insert_tpcc_record_sizes[CUSTOMER_TABLE] = convert_record_sz(sizeof(customer_record), cfg.ccType);

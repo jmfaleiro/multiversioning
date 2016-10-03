@@ -18,10 +18,10 @@ void LockManager::commit_write(locking_action *txn, struct locking_key *k)
         
         record_sz = txn->bufs->GetRecordSize(k->table_id);
         if (cc_type == 1) {
-                memcpy(LOCKING_VALUE_PTR(k->value), k->buf, record_sz);
+                memcpy(LOCKING_VALUE_PTR(k->value), k->buf->value, record_sz);
         } else {
                 assert(cc_type == 5);
-                memcpy(PIPELINED_VALUE_PTR(k->value), k->buf, record_sz);
+                memcpy(PIPELINED_VALUE_PTR(k->value), k->buf->value, record_sz);
         }
         txn->bufs->ReturnRecord(k->table_id, k->buf);
         k->buf = NULL;
@@ -34,42 +34,14 @@ bool LockManager::LockRecord(locking_action *txn, struct locking_key *k)
         mcs_rw::mcs_rw_lock *lock;
 
         assert(k->is_held == false);
-        /*
-        if (TPCC) {
+        tbl = _tbl_mgr->get_table(k->table_id);
+        assert(tbl != NULL);
+        if (k->is_write)
+                record = tbl->GetAlways(k->key);
+        else
+                record = tbl->Get(k->key);
+        assert(record != NULL);
 
-                uint64_t wh_id, d_id;
-        
-                if (k->table_id == WAREHOUSE_TABLE) {
-                        wh_id = k->key;
-                        record = tpcc_config::warehouses[wh_id];
-                } else if (k->table_id == DISTRICT_TABLE) {
-                        wh_id = tpcc_util::get_warehouse_key(k->key);
-                        d_id = tpcc_util::get_district_key(k->key);
-                        record = tpcc_config::districts[wh_id][d_id];
-                } else {
-                        tbl = _tbl_mgr->get_table(k->table_id);
-                        assert(tbl != NULL);
-                        if (k->is_write)
-                                record = tbl->GetAlways(k->key);
-                        else
-                                record = tbl->Get(k->key);
-                        assert(record != NULL);
-                }
-
-*/
-                //        } else {
-
-                tbl = _tbl_mgr->get_table(k->table_id);
-                assert(tbl != NULL);
-                if (k->is_write)
-                        record = tbl->GetAlways(k->key);
-                else
-                        record = tbl->Get(k->key);
-                assert(record != NULL);
-                //        }
-
-
-        
         k->value = record;
         k->buf = NULL;
         lock = (mcs_rw::mcs_rw_lock*)record;
@@ -86,10 +58,11 @@ bool LockManager::LockRecord(locking_action *txn, struct locking_key *k)
 void LockManager::UnlockRecord(locking_action *txn, struct locking_key *k)
 {
         assert(k->is_held == true && k->value != NULL);
+        assert(k->is_write == false || k->buf != NULL);
         
         mcs_rw::mcs_rw_lock *lock;
-        
-        if (k->buf != NULL)
+
+        if (k->is_write)
                 commit_write(txn, k);
         assert(k->buf == NULL);
         lock = (mcs_rw::mcs_rw_lock*)k->value;
