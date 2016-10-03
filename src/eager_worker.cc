@@ -132,6 +132,7 @@ void locking_worker::take_locks(__attribute__((unused)) locking_action *txn)
 
 void locking_worker::TryExec(locking_action *txn)
 {
+        txn->inserted = NULL;
         txn->tables = this->config.tbl_mgr;
         txn->insert_mgr = this->insert_mgr;
         txn->worker = this;

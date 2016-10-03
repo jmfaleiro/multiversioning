@@ -33,8 +33,8 @@ txn* generate_new_order(workload_config conf, __attribute__((unused)) uint32_t t
         
         //assert(thread < conf.num_warehouses);
         //        temp = conf.num_warehouses % 4;
-        //        w_id = thread;// + 40 * temp;
-        w_id = (uint64_t)rand() % conf.num_warehouses;
+        w_id = thread;// + 40 * temp;
+        //        w_id = (uint64_t)rand() % conf.num_warehouses;
         assert(w_id < conf.num_warehouses);
         
         d_id = (uint32_t)rand() % NUM_DISTRICTS;
@@ -52,7 +52,8 @@ txn* generate_new_order(workload_config conf, __attribute__((unused)) uint32_t t
                 items[i] = gen_unique_key(&item_gen, &seen_items);
                 quants[i] = 1 + ((uint32_t)rand() % 10);
                 //                suppliers[i] = w_id;
-                temp = rand() % 100;
+                //                temp = rand() % 100;
+                temp = 1;
                 if (temp == 0) {                        
 
                         do {
@@ -72,8 +73,8 @@ txn* generate_payment(workload_config conf, __attribute__((unused)) uint32_t thr
         uint32_t w_id, d_id, c_id, c_w_id, c_d_id, time; //temp;
         float h_amount;
         //        assert(thread < conf.num_warehouses);
-        //       w_id = thread;
-        w_id = (uint64_t)rand() % conf.num_warehouses;
+        w_id = thread;
+        //        w_id = (uint64_t)rand() % conf.num_warehouses;
         assert(w_id < conf.num_warehouses);
 
         d_id = (uint32_t)rand() % NUM_DISTRICTS;

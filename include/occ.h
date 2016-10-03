@@ -12,6 +12,8 @@
 #define NUM_MCS_LOCKS	1000
 
 extern size_t *tpcc_record_sizes;
+extern size_t *insert_tpcc_record_sizes;
+
 
 struct OCCActionBatch {
         uint32_t batchSize;

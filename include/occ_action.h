@@ -9,14 +9,15 @@
 #include <insert_buf_mgr.h>
 #include <table_mgr.h>
 
-#define TIMESTAMP_MASK (0xFFFFFFFFFFFFFFF0)
+#define TIMESTAMP_MASK (0xFFFFFFFFFFFFFF00)
 #define EPOCH_MASK (0xFFFFFFFF00000000)
 
+#define GET_LOCK_HOLDER(tid) (tid & ~(TIMESTAMP_MASK))
 #define CREATE_TID(epoch, counter) ((((uint64_t)epoch)<<32) | (((uint64_t)counter)<<4))
 #define GET_TIMESTAMP(tid) ((tid) & TIMESTAMP_MASK)
 #define GET_EPOCH(tid) ((tid & EPOCH_MASK)>>32)
 #define GET_COUNTER(tid) (GET_TIMESTAMP(tid) & ~EPOCH_MASK)
-#define IS_LOCKED(tid) ((tid & ~(TIMESTAMP_MASK)) == 1)
+#define IS_LOCKED(tid) ((tid & ~(TIMESTAMP_MASK)) != 0)
 #define RECORD_TID_PTR(rec_ptr) ((volatile uint64_t*)rec_ptr)
 #define RECORD_VALUE_PTR(rec_ptr) ((void*)&(((uint64_t*)rec_ptr)[1]))
 #define OCC_RECORD_SIZE(value_sz) (sizeof(uint64_t)+value_sz)
@@ -52,7 +53,7 @@ class occ_composite_key {
         bool is_rmw;
         bool is_locked;
         bool is_initialized;
-        void *value;
+        RecordBuffy *buffer;
         void *lock;
         void *record_ptr;
 
@@ -112,6 +113,7 @@ class OCCAction : public translator {
 
         conc_table_record *inserted;
         uint32_t insert_ptr;
+        uint32_t cpu_id;
         std::vector<occ_composite_key> inserts;
         std::vector<occ_composite_key> readset;
         std::vector<occ_composite_key> writeset;
@@ -127,6 +129,10 @@ class OCCAction : public translator {
                                           mcs_struct *lck_ptr,
                                           size_t record_sz);
         virtual void install_single_insert(occ_composite_key &comp_key);
+
+        inline bool try_acquire_single(volatile uint64_t *lock_ptr);
+        inline void acquire_single(volatile uint64_t *lock_ptr);
+        inline void release_single(volatile uint64_t *lock_word);
         
  public:
         
@@ -147,6 +153,7 @@ class OCCAction : public translator {
 
         virtual bool run();
         virtual void acquire_locks();
+        virtual void check_locks();
         virtual bool validate();
         virtual uint64_t compute_tid(uint32_t epoch, uint64_t last_tid);
         virtual void install_writes();

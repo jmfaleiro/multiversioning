@@ -125,10 +125,10 @@ void locking_action::commit_writes(bool commit)
                         if (commit) {
                                 value = lookup(k);
                                 record_size = tables->get_table(k->table_id)->RecordSize();                        
-                                memcpy(value, RECORD_VALUE_PTR(k->value), record_size);
+                                memcpy(k->value, k->buf->value, record_size);
                         }
-                        this->bufs->ReturnRecord(k->table_id, k->value);
-                        k->value = NULL;
+                        this->bufs->ReturnRecord(k->table_id, k->buf);
+                        k->buf = NULL;
                 }
         }
 }
@@ -154,9 +154,9 @@ void* locking_action::write_ref(uint64_t key, uint32_t table_id)
 
                 k->buf = this->bufs->GetRecord(table_id);
                 record_size = this->bufs->GetRecordSize(table_id);
-                memcpy(k->buf, read_value, record_size);
+                memcpy(k->buf->value, read_value, record_size);
         }
-        return k->buf;
+        return k->buf->value;
         /*
         if (k->value == NULL) {
                 read_value = lookup(k);

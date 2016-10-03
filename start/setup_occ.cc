@@ -694,7 +694,7 @@ uint64_t wait_to_completion(__attribute__((unused)) SimpleQueue<OCCActionBatch> 
         //                output_queues[i]->DequeueBlocking();
         
         num_completed = 0;
-        sleep(10);
+        sleep(30);
         for (i = 1; i < num_workers; ++i) 
                 num_completed += workers[i]->NumCompleted();
         std::cerr << num_completed << "\n";

@@ -34,8 +34,8 @@ class RecordBuffers {
         }
 
         RecordBuffers(struct RecordBuffersConfig conf);        
-        void* GetRecord(uint32_t tableId);
-        void ReturnRecord(uint32_t tableId, void *record);
+        RecordBuffy* GetRecord(uint32_t tableId);
+        void ReturnRecord(uint32_t tableId, RecordBuffy *record);
         uint32_t NumRecords() { return this->num_records; };
         uint32_t GetRecordSize(uint32_t table_id);
 };

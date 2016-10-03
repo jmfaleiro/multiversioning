@@ -65,7 +65,7 @@ uint32_t RecordBuffers::GetRecordSize(uint32_t table_id)
         return conf.record_sizes[table_id];
 }
 
-void* RecordBuffers::GetRecord(uint32_t tableId)
+RecordBuffy* RecordBuffers::GetRecord(uint32_t tableId)
 {
         RecordBuffy *ret;
         assert(record_lists[tableId] != NULL && num_records > 0);
@@ -76,7 +76,7 @@ void* RecordBuffers::GetRecord(uint32_t tableId)
         return ret;
 }
 
-void RecordBuffers::ReturnRecord(uint32_t tableId, void *record)
+void RecordBuffers::ReturnRecord(uint32_t tableId, RecordBuffy *record)
 {
         RecordBuffy *ret;
         ret = (RecordBuffy*)record;

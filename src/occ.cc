@@ -10,7 +10,7 @@ OCCWorker::OCCWorker(OCCWorkerConfig conf, struct RecordBuffersConfig rb_conf)
         this->bufs = new(conf.cpu) RecordBuffers(rb_conf);
         this->mgr = new(conf.cpu) mcs_mgr(NUM_MCS_LOCKS, conf.cpu);
         this->insert_mgr = new(conf.cpu) insert_buf_mgr(conf.cpu, 11, 
-                                                        tpcc_record_sizes,
+                                                        insert_tpcc_record_sizes,
                                                         true);
 }
 
@@ -170,7 +170,8 @@ bool OCCWorker::RunSingle(OCCAction *action)
         action->tbl_mgr = config.tbl_mgr;
         action->insert_mgr = insert_mgr;
         action->lck = mgr->get_struct();
-
+        action->cpu_id = (uint32_t)config.cpu;
+        
         action->inserted = NULL;
         action->run();
         action->acquire_locks();

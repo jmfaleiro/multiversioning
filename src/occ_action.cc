@@ -5,7 +5,7 @@
 #include <occ_record.h>
 #include <rc_record.h>
 
-static bool try_acquire_single(volatile uint64_t *lock_ptr)
+bool OCCAction::try_acquire_single(volatile uint64_t *lock_ptr)
 {
         volatile uint64_t cmp_tid, locked_tid;
         barrier();
@@ -13,11 +13,11 @@ static bool try_acquire_single(volatile uint64_t *lock_ptr)
         barrier();
         if (IS_LOCKED(cmp_tid))
                 return false;        
-        locked_tid = (cmp_tid | 1);
+        locked_tid = (cmp_tid | cpu_id);
         return cmp_and_swap(lock_ptr, cmp_tid, locked_tid);
 }
 
-static void acquire_single(volatile uint64_t *lock_ptr)
+void OCCAction::acquire_single(volatile uint64_t *lock_ptr)
 {
         uint32_t backoff, temp;
          if (USE_BACKOFF) 
@@ -44,19 +44,16 @@ static void acquire_single(volatile uint64_t *lock_ptr)
         }
 }
 
-static void release_single(volatile uint64_t *lock_word)
+void OCCAction::release_single(volatile uint64_t *lock_word)
 {
         uint64_t old_tid, xchged_tid;
-        
-        while (true) {
-                barrier();
-                old_tid = *lock_word;
-                barrier();
-                xchged_tid = GET_TIMESTAMP(old_tid);
-                if (cmp_and_swap(lock_word, old_tid, xchged_tid))
-                        break;
-        }
-        
+
+        barrier();
+        old_tid = *lock_word;
+        barrier();
+
+        assert(GET_LOCK_HOLDER(old_tid) == cpu_id);
+        xchgq(lock_word, GET_TIMESTAMP(old_tid));
         assert(IS_LOCKED(old_tid));
 }
 
@@ -72,23 +69,14 @@ occ_composite_key::occ_composite_key(uint32_t table_id, uint64_t key,
 
 void* occ_composite_key::GetValue() const
 {
-        uint64_t *temp = (uint64_t*)value;
-        return &temp[1];
+        assert(false);
+        return NULL;
 }
 
 void* occ_composite_key::StartRead()
 {
-
-        volatile uint64_t *tid_ptr;
-        tid_ptr = (volatile uint64_t*)value;
-        while (true) {
-                barrier();
-                this->old_tid = *tid_ptr;
-                barrier();
-                if (!IS_LOCKED(this->old_tid))
-                        break;
-        }
-        return (void*)&tid_ptr[1];
+        assert(false);
+        return NULL;
 
         //        return (void*)&((uint64_t*)value)[1];
 }
@@ -117,17 +105,8 @@ uint64_t occ_composite_key::GetTimestamp()
 
 bool occ_composite_key::ValidateRead()
 {
-        assert(!IS_LOCKED(old_tid));
-        volatile uint64_t *version_ptr;
-        volatile uint64_t cur_tid;
-        version_ptr = (volatile uint64_t*)value;
-        barrier();
-        cur_tid = *version_ptr;
-        barrier();
-        if ((GET_TIMESTAMP(cur_tid) != old_tid) ||
-            (IS_LOCKED(cur_tid) && !is_rmw))
-                return false;
-        return true;
+        assert(false);
+        return false;
 }
 
 void OCCAction::add_read_key(uint32_t tableId, uint64_t key) 
@@ -218,6 +197,8 @@ bool OCCAction::validate_single(void *value, uint64_t read_tid, bool is_rmw)
                 barrier();
         }
 
+        if (is_rmw)
+                assert(IS_LOCKED(cur_tid));
         if ((GET_TIMESTAMP(cur_tid) != read_tid) ||
             (IS_LOCKED(cur_tid) && is_rmw == false))
                 return false;
@@ -230,31 +211,34 @@ bool OCCAction::validate()
         uint32_t num_reads, num_writes, i;
         conc_table_record *iter;
         concurrent_table *tbl;
-
+        
         if (!READ_COMMITTED) {
                 num_reads = this->readset.size();
                 for (i = 0; i < num_reads; ++i) {
                         assert(this->readset[i].is_initialized == true);
                         if (validate_single(this->readset[i].record_ptr, 
                                             this->readset[i].old_tid, 
-                                            false) == false)
+                                            false) == false) {
                                 return false;
+                        }
                 }
                 num_writes = this->writeset.size();
                 for (i = 0; i < num_writes; ++i) {
                         assert(this->writeset[i].is_initialized == true);
                         if (this->writeset[i].is_rmw == true && validate_single(this->writeset[i].record_ptr,
                                                                                 this->writeset[i].old_tid,
-                                                                                true) == false)
+                                                                                true) == false) {
                                 return false;
+                        }
                 }        
         }
 
         /* Validate inserts */
         iter = inserted;
         while (iter != NULL) {
-                if (validate_single(iter->inserted_record->value, 0, true) == false)
+                if (validate_single(iter->inserted_record->value, 0, true) == false) {
                         return false;
+                }
                 iter = iter->next_in;
         }
 
@@ -272,7 +256,7 @@ void OCCAction::create_inserts(uint32_t n_inserts)
         k.is_rmw = false;
         k.is_locked = false;
         k.is_initialized = false;
-        k.value = NULL;
+        k.buffer = NULL;
         k.lock = NULL;
         k.record_ptr = NULL;
         
@@ -323,7 +307,7 @@ void OCCAction::remove(__attribute__((unused)) uint64_t key,
 void* OCCAction::write_ref(uint64_t key, uint32_t table_id)
 {
         uint64_t tid;
-        void *record;
+        RecordBuffy *record;
         uint32_t i, num_writes;
         occ_composite_key *comp_key;        
 
@@ -339,14 +323,14 @@ void* OCCAction::write_ref(uint64_t key, uint32_t table_id)
         if (comp_key->is_initialized == false) {
                 record = this->record_alloc->GetRecord(table_id);
                 comp_key->is_initialized = true;
-                comp_key->value = record;
+                comp_key->buffer = record;
                 if (writeset[i].is_rmw == true) {
                         tid = stable_copy(key, table_id, &comp_key->record_ptr, 
-                                          record);
+                                          record->value);
                         comp_key->old_tid = tid;
                 }
         } 
-        return comp_key->value;
+        return comp_key->buffer->value;
 }
 
 int OCCAction::rand()
@@ -362,10 +346,9 @@ uint64_t OCCAction::gen_guid()
 void* OCCAction::read(uint64_t key, uint32_t table_id)
 {
         uint64_t tid;
-        void *record;
+        RecordBuffy *record;
         uint32_t i, num_reads;
         occ_composite_key *comp_key;
-
 
         num_reads = this->readset.size();
         comp_key = NULL;
@@ -392,11 +375,22 @@ void* OCCAction::read(uint64_t key, uint32_t table_id)
         if (comp_key->is_initialized == false) {
                 record = this->record_alloc->GetRecord(table_id);
                 comp_key->is_initialized = true;
-                comp_key->value = record;
-                tid = stable_copy(key, table_id, &comp_key->record_ptr, record);
+                comp_key->buffer = record;
+                tid = stable_copy(key, table_id, &comp_key->record_ptr, record->value);
                 comp_key->old_tid = tid;
         }
-        return RECORD_VALUE_PTR(comp_key->value);
+        return RECORD_VALUE_PTR(comp_key->buffer->value);
+}
+
+void OCCAction::check_locks()
+{
+        uint32_t i, num_writes;
+
+        num_writes = writeset.size();
+        for (i = 0; i < num_writes; ++i) {
+                assert(IS_LOCKED(*(volatile uint64_t*)writeset[i].record_ptr));
+                assert(GET_LOCK_HOLDER(*(volatile uint64_t*)writeset[i].record_ptr) == cpu_id);
+        }
 }
 
 void OCCAction::acquire_locks()
@@ -433,6 +427,9 @@ void OCCAction::acquire_locks()
                         mcs_mgr::lock(cur_lock);
                 } else {
                         acquire_single((volatile uint64_t*)OCC_TIMESTAMP_PTR(value));
+                        assert(IS_LOCKED(*(volatile uint64_t*)writeset[i].record_ptr));
+                        assert(GET_LOCK_HOLDER(*(volatile uint64_t*)writeset[i].record_ptr) == cpu_id);
+
                 }                        
                 this->writeset[i].is_locked = true;
         }
@@ -449,6 +446,7 @@ void OCCAction::acquire_locks()
                 success = tbl->Get(iter->key, lck, &record);
                 
                 /* Must get a successful return here */
+                assert(record->key == iter->key);
                 assert(success == true);
 
                 acquire_single((volatile uint64_t*)OCC_TIMESTAMP_PTR(record->value));
@@ -478,30 +476,34 @@ void OCCAction::release_locks()
         }
 
         iter = inserted;
+        i = 0;
         while (iter != NULL) {
                 assert(!READ_COMMITTED);
                 assert(iter->inserted_record != NULL);
                 rec = iter;
                 release_single((volatile uint64_t*)OCC_TIMESTAMP_PTR(rec->inserted_record->value));
+
                 tbl = tbl_mgr->get_conc_table(iter->table_id);
                 iter = iter->next_in;
-                
+
                 if (tbl->RemoveRecord(rec->inserted_record, this->lck)) {
                         assert(!IS_LOCKED(*OCC_TIMESTAMP_PTR(rec->inserted_record->value)));
                         insert_mgr->return_insert_record(rec->inserted_record, 
                                                          rec->table_id);
-                } else if (rec->inserted_record != rec) {
-                        assert(!IS_LOCKED(*OCC_TIMESTAMP_PTR(rec->inserted_record->value)));
+                }
+                
+                if (rec->inserted_record != rec) {
                         insert_mgr->return_insert_record(rec, rec->table_id);
                 }
+                i += 1;
         }
 }
 
 void OCCAction::cleanup_single(occ_composite_key &comp_key)
 {
         //        assert(comp_key.value != NULL);
-        this->record_alloc->ReturnRecord(comp_key.tableId, comp_key.value);
-        comp_key.value = NULL;
+        this->record_alloc->ReturnRecord(comp_key.tableId, comp_key.buffer);
+        comp_key.buffer = NULL;
         comp_key.is_initialized = false;        
         
 }
@@ -546,8 +548,9 @@ uint64_t OCCAction::compute_tid(uint32_t epoch, uint64_t last_tid)
                         max_tid = cur_tid;
 
         }
-        max_tid += 0x10;
-        this->tid = max_tid;
+        max_tid += 0x100;
+        assert(max_tid > last_tid);
+        this->tid = max_tid;        
         assert(!IS_LOCKED(max_tid));
         return max_tid;
 }
@@ -628,6 +631,7 @@ void OCCAction::install_writes()
         uint32_t i, num_writes;
         conc_table_record *iter, *temp;
         size_t record_sz;
+        uint64_t lock_tid;
 
         /* Writes to pre-existing records */
         num_writes = this->writeset.size();
@@ -636,12 +640,12 @@ void OCCAction::install_writes()
                 record_sz = this->record_alloc->GetRecordSize(this->writeset[i].tableId);
                 if (READ_COMMITTED) {
                         install_single_write(this->writeset[i].record_ptr, 
-                                             this->writeset[i].value, 
+                                             this->writeset[i].buffer->value, 
                                              (mcs_struct*)this->writeset[i].lock,
                                              record_sz);
                 } else {
                         install_single_write(this->writeset[i].record_ptr, 
-                                             this->writeset[i].value, 
+                                             this->writeset[i].buffer->value, 
                                              NULL,
                                              record_sz);
                 }
@@ -652,6 +656,7 @@ void OCCAction::install_writes()
         iter = inserted;
         while (iter != NULL) {
                 assert(!READ_COMMITTED);
+                record_sz = this->record_alloc->GetRecordSize(iter->table_id);
                 install_single_write(iter->inserted_record->value, 
                                      OCC_VALUE_PTR(iter->value),
                                      NULL,

@@ -46,7 +46,7 @@ public:
         //        locking_worker *_worker;
 
         void *value;
-        void *buf;
+        RecordBuffy *buf;
         mcs_rw::mcs_rw_node lock_node;
         void *txn;
 

@@ -73,7 +73,7 @@ bool concurrent_table::RemoveRecord(conc_table_record *record,
         conc_table_record *iter, **prev;
         bool success;
 
-        //        if ((temp = fetch_and_decrement(&record->ref_count)) > 0)
+        //        if (fetch_and_decrement(&record->ref_count) > 0)
         //                return false;
                 
         success = false;
@@ -108,7 +108,8 @@ bool concurrent_table::Put(conc_table_record *record_ptr, mcs_struct *lock_struc
         bool success;
         concurrent_table_bckt *bucket;
         conc_table_record *iter, **prev;
-        
+
+        record_ptr->ref_count = 1;
         record_ptr->next = NULL;
         success = false;
         bucket = get_bucket(record_ptr->key);
@@ -123,16 +124,16 @@ bool concurrent_table::Put(conc_table_record *record_ptr, mcs_struct *lock_struc
                 iter = iter->next;                        
         }
                 
-        if (iter == NULL || iter->key < record_ptr->key) {
+        if (iter == NULL || iter->key < record_ptr->key) {                
                 record_ptr->next = iter;
                 *prev = record_ptr;
                 success = true;
-                record_ptr->ref_count = 1;
         } else {
                 assert(iter != NULL && iter->key == record_ptr->key);
                 assert(iter != record_ptr);
                 success = false;
                 fetch_and_increment(&iter->ref_count);
+                record_ptr->ref_count = 0;
         }                
 
         mcs_mgr::unlock(lock_struct);
