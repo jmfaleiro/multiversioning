@@ -71,7 +71,7 @@ static action* setup_payment(workload_config w_conf, uint32_t thread_id)
         p_payment::history_ins *h_txn;
         
         //        assert(thread_id < w_conf.num_warehouses);
-        // w_id = thread_id;
+        //        w_id = thread_id;
         w_id = (uint64_t)rand() % w_conf.num_warehouses;
         assert(w_id < w_conf.num_warehouses);
 
@@ -133,7 +133,7 @@ static action* setup_new_order(workload_config w_conf, uint32_t thread_id)
 
         all_local = true;
         //        assert(thread_id < w_conf.num_warehouses);
-        // w_id = thread_id;
+        //        w_id = thread_id;
         w_id = (uint64_t)rand() % w_conf.num_warehouses;
         assert(w_id < w_conf.num_warehouses);
         

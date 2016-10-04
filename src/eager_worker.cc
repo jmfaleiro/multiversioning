@@ -17,7 +17,7 @@ locking_worker::locking_worker(locking_worker_config config,
         this->insert_mgr = new(config.cpu) insert_buf_mgr(config.cpu, 11, 
                                                           insert_tpcc_record_sizes,
                                                           true);
-        this->key_alloc = new(config.cpu) lck_key_allocator(100, config.cpu);
+        this->key_alloc = new(config.cpu) array_allocator<locking_key>(100, config.cpu);
 }
 
 void locking_worker::Init()

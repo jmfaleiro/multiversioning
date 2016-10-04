@@ -8,6 +8,7 @@
 #include <mcs.h>
 #include <insert_buf_mgr.h>
 #include <table_mgr.h>
+#include <array_allocator.h>
 
 #define TIMESTAMP_MASK (0xFFFFFFFFFFFFFF00)
 #define EPOCH_MASK (0xFFFFFFFF00000000)
@@ -54,6 +55,7 @@ class occ_composite_key {
         bool is_locked;
         bool is_initialized;
         RecordBuffy *buffer;
+        conc_table_record *ins_buffer;
         void *lock;
         void *record_ptr;
 
@@ -87,6 +89,7 @@ class occ_composite_key {
 };
 
 
+
 class OCCAction : public translator {
         friend class OCCWorker;
 
@@ -105,6 +108,7 @@ class OCCAction : public translator {
         insert_buf_mgr *insert_mgr;
         mcs_struct *lck;
 
+        array_allocator<occ_composite_key> *key_allocator;
         conc_table_record *inserted;
         uint32_t insert_ptr;
         uint32_t cpu_id;

@@ -63,6 +63,19 @@ void init_tpcc_local(ConcurrencyControl cc_type, workload_config w_conf)
             ((cc_type != OCC) && (cc_type != LOCKING) && (cc_type != PIPELINED)))
                 return;
 
+        insert_tpcc_record_sizes[WAREHOUSE_TABLE] = convert_record_sz(sizeof(warehouse_record), cc_type);
+        insert_tpcc_record_sizes[DISTRICT_TABLE] = convert_record_sz(sizeof(district_record), cc_type);
+        insert_tpcc_record_sizes[CUSTOMER_TABLE] = convert_record_sz(sizeof(customer_record), cc_type);
+        insert_tpcc_record_sizes[NEW_ORDER_TABLE] = convert_record_sz(sizeof(new_order_record), cc_type);
+        insert_tpcc_record_sizes[OORDER_TABLE] = convert_record_sz(sizeof(oorder_record), cc_type);
+        insert_tpcc_record_sizes[ORDER_LINE_TABLE] = convert_record_sz(sizeof(order_line_record), cc_type);
+        insert_tpcc_record_sizes[STOCK_TABLE] = convert_record_sz(sizeof(stock_record), cc_type);
+        insert_tpcc_record_sizes[ITEM_TABLE] = convert_record_sz(sizeof(item_record), cc_type);
+        insert_tpcc_record_sizes[HISTORY_TABLE] = convert_record_sz(sizeof(history_record), cc_type);
+        insert_tpcc_record_sizes[DELIVERY_TABLE] = convert_record_sz(sizeof(uint64_t), cc_type);
+        insert_tpcc_record_sizes[CUSTOMER_ORDER_INDEX] = convert_record_sz(sizeof(uint64_t), cc_type);
+
+        
         tpcc_config::warehouses = (void**)zmalloc(sizeof(void*)*w_conf.num_warehouses);
         tpcc_config::districts = (void***)zmalloc(sizeof(void**)*w_conf.num_warehouses);
 
@@ -115,18 +128,6 @@ int main(int argc, char **argv) {
   tpcc_record_sizes[CUSTOMER_ORDER_INDEX] = sizeof(uint64_t);
 
   
-  insert_tpcc_record_sizes[WAREHOUSE_TABLE] = convert_record_sz(sizeof(warehouse_record), cfg.ccType);
-  insert_tpcc_record_sizes[DISTRICT_TABLE] = convert_record_sz(sizeof(district_record), cfg.ccType);
-  insert_tpcc_record_sizes[CUSTOMER_TABLE] = convert_record_sz(sizeof(customer_record), cfg.ccType);
-  insert_tpcc_record_sizes[NEW_ORDER_TABLE] = convert_record_sz(sizeof(new_order_record), cfg.ccType);
-  insert_tpcc_record_sizes[OORDER_TABLE] = convert_record_sz(sizeof(oorder_record), cfg.ccType);
-  insert_tpcc_record_sizes[ORDER_LINE_TABLE] = convert_record_sz(sizeof(order_line_record), cfg.ccType);
-  insert_tpcc_record_sizes[STOCK_TABLE] = convert_record_sz(sizeof(stock_record), cfg.ccType);
-  insert_tpcc_record_sizes[ITEM_TABLE] = convert_record_sz(sizeof(item_record), cfg.ccType);
-  insert_tpcc_record_sizes[HISTORY_TABLE] = convert_record_sz(sizeof(history_record), cfg.ccType);
-  insert_tpcc_record_sizes[DELIVERY_TABLE] = convert_record_sz(sizeof(uint64_t), cfg.ccType);
-  insert_tpcc_record_sizes[CUSTOMER_ORDER_INDEX] = convert_record_sz(sizeof(uint64_t), cfg.ccType);
-
   
   init_tpcc_local(cfg.ccType, cfg.get_workload_config());
   cc_type = cfg.ccType;

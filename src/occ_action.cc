@@ -216,7 +216,7 @@ void OCCAction::create_inserts(uint32_t n_inserts)
 
 void* OCCAction::insert_ref(uint64_t key, uint32_t table_id)
 {
-
+        occ_composite_key *ins;
         conc_table_record *record;
         concurrent_table *tbl;
         bool success;        
@@ -225,12 +225,18 @@ void* OCCAction::insert_ref(uint64_t key, uint32_t table_id)
         record->key = key;
         record->next = NULL;
 
-        record->next_in = inserted;
-        inserted = record;
-        record->table_id = table_id;
-        record->state = 0;
-        *OCC_TIMESTAMP_PTR(record->value) = 0;
-        assert(*OCC_TIMESTAMP_PTR(record->value) == 0);
+        ins = key_allocator->get();
+
+        ins->ins_buffer = record;
+        ins->key = key;
+        ins->tableId = table_id;
+        
+        if (READ_COMMITTED) {
+                memset(record->value, 0x0, RC_RECORD_SIZE(0));
+        } else {
+                memset(record->value, 0x0, OCC_RECORD_SIZE(0));
+        }
+
         record->ref_count = 0;
         tbl = tbl_mgr->get_conc_table(table_id);
         assert(tbl != NULL);
@@ -345,9 +351,10 @@ void OCCAction::check_locks()
 
 void OCCAction::acquire_locks()
 {
-        uint32_t i, num_writes, table_id;
+        uint32_t i, num_inserts, num_writes, table_id;
         uint64_t key;
-        conc_table_record *iter, *record;
+        occ_composite_key *ins_ptrs;
+        conc_table_record *record;
         mcs_struct *cur_lock;
         concurrent_table *tbl;
         bool success;        
@@ -385,30 +392,36 @@ void OCCAction::acquire_locks()
         }
 
         /* Inserts */
-        iter = inserted;
-        
-        while (iter != NULL) {           
+        ins_ptrs = key_allocator->get_records(&num_inserts);
+        for (i = 0; i < num_inserts; ++i) {
                 record = NULL;
                 
                 /* Logic for read committed hasn't yet been implemented. */
-                assert(!READ_COMMITTED);                
-                tbl = tbl_mgr->get_conc_table(iter->table_id);
-                success = tbl->Get(iter->key, lck, &record);
+                //                assert(!READ_COMMITTED);                
+                tbl = tbl_mgr->get_conc_table(ins_ptrs[i].tableId);
+                success = tbl->Get(ins_ptrs[i].key, lck, &record);
                 
                 /* Must get a successful return here */
-                assert(record->key == iter->key);
+                assert(record->key == ins_ptrs[i].key);
                 assert(success == true);
 
-                acquire_single((volatile uint64_t*)OCC_TIMESTAMP_PTR(record->value));
-                iter->inserted_record = record;
-                iter = iter->next_in;
+                if (READ_COMMITTED) {
+                        cur_lock = mgr->get_struct();
+                        ins_ptrs[i].lock = cur_lock;
+                        cur_lock->_tail_ptr = (volatile mcs_struct**)RC_LOCK_PTR(record->value);
+                        mcs_mgr::lock(cur_lock);                        
+                } else {
+                        acquire_single((volatile uint64_t*)OCC_TIMESTAMP_PTR(record->value));
+                }
+                ins_ptrs[i].record_ptr = record;
         }
 }
 
 void OCCAction::release_locks()
 {
-        uint32_t i, num_writes;
+        uint32_t i, num_inserts, num_writes;
         concurrent_table *tbl;
+        occ_composite_key *ins_ptrs;
         conc_table_record *rec, *iter;
 
         num_writes = this->writeset.size();
@@ -424,6 +437,29 @@ void OCCAction::release_locks()
                 }
                 this->writeset[i].is_locked = false;
         }
+
+
+        ins_ptrs = key_allocator->get_records(&num_inserts);
+        for (i = 0; i < num_inserts; ++i) {
+                assert(ins_ptrs[i].record_ptr != NULL);
+
+                if (READ_COMMITTED) {
+                        mcs_mgr::unlock((mcs_struct*)ins_ptrs[i].lock);
+                        this->mgr->return_struct((mcs_struct*)ins_ptrs[i].lock);
+                } else {
+                        release_single((volatile uint64_t*)OCC_TIMESTAMP_PTR(((conc_table_record*)ins_ptrs[i].record_ptr)->value));
+                }
+
+                tbl = tbl_mgr->get_conc_table(ins_ptrs[i].tableId);
+                if (tbl->RemoveRecord((conc_table_record*)ins_ptrs[i].record_ptr, this->lck)) {
+                        insert_mgr->return_insert_record((conc_table_record*)ins_ptrs[i].record_ptr, ins_ptrs[i].tableId);
+                }
+                
+                if (ins_ptrs[i].ins_buffer != ins_ptrs[i].record_ptr) {
+                        insert_mgr->return_insert_record(ins_ptrs[i].ins_buffer, rec->table_id);
+                }
+        }
+        /*
 
         iter = inserted;
         i = 0;
@@ -447,6 +483,7 @@ void OCCAction::release_locks()
                 }
                 i += 1;
         }
+        */
 }
 
 void OCCAction::cleanup_single(occ_composite_key &comp_key)
@@ -578,8 +615,9 @@ void OCCAction::install_single_insert(occ_composite_key &comp_key)
 
 void OCCAction::install_writes()
 {
-        uint32_t i, num_writes;
-        conc_table_record *iter, *temp;
+        uint32_t i, num_ins, num_writes;
+        occ_composite_key *ins_ptrs;
+        conc_table_record *record, *buffer;
         size_t record_sz;
         uint64_t lock_tid;
 
@@ -603,18 +641,48 @@ void OCCAction::install_writes()
         }
 
         /* Inserts */
+        ins_ptrs = key_allocator->get_records(&num_ins);
+        for (i = 0; i < num_ins; ++i) {
+                record_sz = this->record_alloc->GetRecordSize(ins_ptrs[i].tableId);
+                record = (conc_table_record*)ins_ptrs[i].record_ptr;
+                buffer = ins_ptrs[i].ins_buffer;
+                if (READ_COMMITTED) {
+                        install_single_write(record->value,
+                                             RC_VALUE_PTR(buffer->value),
+                                             (mcs_struct*)ins_ptrs[i].lock,
+                                             record_sz);
+                        
+                } else {
+                        install_single_write(record->value,
+                                             OCC_VALUE_PTR(buffer->value),
+                                             NULL,
+                                             record_sz);
+                }
+
+                if (record != buffer) 
+                        insert_mgr->return_insert_record(buffer, ins_ptrs[i].tableId);
+        }
+
+        /*
         iter = inserted;
-        while (iter != NULL) {
-                
-                assert(!READ_COMMITTED);
-                record_sz = this->record_alloc->GetRecordSize(iter->table_id);
-                install_single_write(iter->inserted_record->value, 
-                                     OCC_VALUE_PTR(iter->value),
-                                     NULL,
-                                     record_sz);
+        while (iter != NULL) {                
+
+
+                if (READ_COMMITTED) {
+                        install_single_write(iter->inserted_record->value, 
+                                             RC_VALUE_PTR(iter->value),
+                                             NULL,
+                                             record_sz);
+                } else {
+                        install_single_write(iter->inserted_record->value, 
+                                             OCC_VALUE_PTR(iter->value),
+                                             NULL,
+                                             record_sz);
+                }
                 temp = iter;
                 iter = iter->next_in;
                 if (temp != temp->inserted_record)
                         insert_mgr->return_insert_record(temp, temp->table_id);
         }
+        */
 }

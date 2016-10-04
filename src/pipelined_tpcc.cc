@@ -461,7 +461,8 @@ bool p_payment::history_ins::Run()
 
         const char *holder[3] = {warehouse_name, empty, district_name};
 
-        history_key = guid();
+        history_key = tpcc_util::create_history_key(_wh, _d, guid());
+
         hist = (history_record*)insert_record(history_key, HISTORY_TABLE);
         hist->h_c_id = _c;
         hist->h_c_d_id = _c_d;

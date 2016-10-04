@@ -11,6 +11,7 @@
 #include <table_mgr.h>
 #include <mcs_rw.h>
 #include <pipelined_executor.h>
+#include <array_allocator.h>
 
 class locking_action;
 class locking_worker;
@@ -103,19 +104,6 @@ public:
         }
 };
 
-class lck_key_allocator {
- private:
-        locking_key 		*_free_list;
-        uint32_t 		_cursor;
-        uint32_t 		_sz;
-        
- public:
-        void* operator new(std::size_t sz, int cpu);        
-        lck_key_allocator(uint32_t sz, int cpu);
-        locking_key* get();
-        void reset();
-};
-
 class locking_action : public translator {
         friend class LockManagerTable;
         friend class LockManager;
@@ -132,7 +120,7 @@ class locking_action : public translator {
         Runnable *worker;
         locking_action *next;
         locking_action *prev;
-        lck_key_allocator	*key_alloc;
+        array_allocator<locking_key>	*key_alloc;
 
         table_mgr *tables;
         insert_buf_mgr *insert_mgr;

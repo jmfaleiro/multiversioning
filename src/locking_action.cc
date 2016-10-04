@@ -10,32 +10,6 @@
 
 extern uint32_t cc_type;
 
-void* lck_key_allocator::operator new(std::size_t sz, int cpu)
-{
-        return alloc_mem(sz, cpu);
-}
-
-lck_key_allocator::lck_key_allocator(uint32_t sz, int cpu)
-{
-        _free_list = (locking_key*)alloc_mem(sizeof(locking_key)*sz, cpu);
-        memset(_free_list, 0x0, sz);
-        _cursor = 0;
-        _sz = sz;
-}
-
-locking_key* lck_key_allocator::get()
-{
-        assert(_cursor < _sz - 1);
-        _cursor += 1;
-        return &_free_list[_cursor-1];
-}
-
-void lck_key_allocator::reset()
-{
-        memset(_free_list, 0x0, sizeof(locking_key)*_sz);
-        _cursor = 0;        
-}
-
 locking_key::locking_key(uint64_t key, uint32_t table_id, bool is_write)
 {
         this->key = key;
@@ -216,8 +190,8 @@ void* locking_action::insert_ref(uint64_t key, uint32_t table_id)
         
         /* Get a wrapper to remember a reference to the inserted record */
         wrapper = key_alloc->get();        
-        wrapper->next = inserted;
-        inserted = wrapper;
+        //        wrapper->next = inserted;
+        //        inserted = wrapper;
         
         /* Allocate a record to insert, and remember a reference to it */
         record = insert_mgr->get_insert_record(table_id);
@@ -259,20 +233,13 @@ void locking_action::finish_inserts()
         locking_key *iter, *temp;
         mcs_rw::mcs_rw_lock *record_ptr;
 
-        /* XXX REMOVE THIS 
-        iter = inserted;
-        while (iter != NULL) {
-                record_ptr = (mcs_rw::mcs_rw_lock*)((conc_table_record*)(iter->value))->value;
-                assert(record_ptr->_tail == &iter->lock_node);
-                iter = iter->next;
-        }
-        */
-        iter = inserted;
-        while (iter != NULL) {
-                record_ptr = (mcs_rw::mcs_rw_lock*)(((conc_table_record*)iter->value))->value;
-                release_writer(record_ptr, &iter->lock_node);
-                temp = iter;
-                iter = iter->next;
+        uint32_t max, i;
+        locking_key *ins_records;
+
+        ins_records = key_alloc->get_records(&max);
+        for (i = 0; i < max; ++i) {
+                record_ptr = (mcs_rw::mcs_rw_lock*)((conc_table_record*)ins_records[i].value)->value;
+                release_writer(record_ptr, &ins_records[i].lock_node);
         }
         key_alloc->reset();
 }

@@ -260,8 +260,8 @@ namespace split_payment {
                                 float h_amount);
                 bool Run();
 
-                //virtual uint32_t num_rmws();
-                //virtual void get_rmws(big_key *array);
+                //                virtual uint32_t num_rmws();
+                //                virtual void get_rmws(big_key *array);
         };
 
         class update_customer : public txn {

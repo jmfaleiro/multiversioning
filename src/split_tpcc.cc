@@ -3,16 +3,17 @@
 #include <algorithm>
 
 
+
 split_new_order::read_warehouse::read_warehouse(uint32_t warehouse_id)
 {
         _warehouse_id = warehouse_id;
 }
+
 /*
 uint32_t split_new_order::read_warehouse::num_reads()
 {
         return 1;
 }
-
 
 void split_new_order::read_warehouse::get_reads(big_key *array)
 {
@@ -20,6 +21,7 @@ void split_new_order::read_warehouse::get_reads(big_key *array)
         array[0].table_id = WAREHOUSE_TABLE;
 }
 */
+
 bool split_new_order::read_warehouse::Run()
 {
         warehouse_record *wh;
@@ -190,23 +192,25 @@ split_new_order::update_stocks::update_stocks(uint32_t wh_id, uint32_t dstrct_id
         
 }
 
-// uint32_t split_new_order::update_stocks::num_rmws()
-// {
-//         return _info.size();
-// }
+/*
+uint32_t split_new_order::update_stocks::num_rmws()
+{
+        return _info.size();
+}
 
-// void split_new_order::update_stocks::get_rmws(big_key *array)
-// {
-//         uint32_t i, nitems;
-//         
-//         nitems = _info.size();
-//         for (i = 0; i < nitems; ++i) {
-//                 array[i].key = tpcc_util::create_stock_key(_info[i]._supplier_wh, _info[i]._item_id);
-//                 array[i].table_id = STOCK_TABLE;
-//         }
-//         //        array[0].key = (uint64_t)_supplier_id;
-//         //        array[0].table_id = STOCK_TABLE;
-// }
+void split_new_order::update_stocks::get_rmws(big_key *array)
+{
+        uint32_t i, nitems;
+         
+        nitems = _info.size();
+        for (i = 0; i < nitems; ++i) {
+                array[i].key = tpcc_util::create_stock_key(_info[i]._supplier_wh, _info[i]._item_id);
+                array[i].table_id = STOCK_TABLE;
+        }
+        //        array[0].key = (uint64_t)_supplier_id;
+        //        array[0].table_id = STOCK_TABLE;
+}
+*/
 
 /* update_stocks is a "root" piece. */
 bool split_new_order::update_stocks::Run()
@@ -287,7 +291,6 @@ split_new_order::insert_oorder::insert_oorder(update_district *dstrct_pc,
 uint32_t split_new_order::insert_oorder::num_rmws()
 {
         return 1;
-        //        return 0;
 }
 
 void split_new_order::insert_oorder::get_rmws(big_key *array)
@@ -410,7 +413,6 @@ split_new_order::insert_new_order::insert_new_order(update_district *dstrct_pc,
 uint32_t split_new_order::insert_new_order::num_rmws()
 {
         return 1;
-        //        return 0;
 }
 
 void split_new_order::insert_new_order::get_rmws(big_key *array)
@@ -422,10 +424,7 @@ void split_new_order::insert_new_order::get_rmws(big_key *array)
 /* Depends on the execution of the update_district piece. */
 bool split_new_order::insert_new_order::Run()
 {
-
-        //        do_oorder();
         do_new_order();
-        //        do_order_lines();
         return true;
 }
 
@@ -434,7 +433,6 @@ split_payment::update_warehouse::update_warehouse(uint32_t wh_id, float h_amount
         _wh_id = wh_id;
         _h_amount = h_amount;
 }
-
 /*
 uint32_t split_payment::update_warehouse::num_rmws()
 {

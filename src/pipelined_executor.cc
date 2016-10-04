@@ -9,7 +9,7 @@
 
 using namespace pipelined;
 
-extern size_t *tpcc_record_sizes;
+extern size_t *insert_tpcc_record_sizes;
 
 locking_key* executor::get_marked_ref(locking_key *ref)
 {
@@ -55,9 +55,10 @@ executor::executor(executor_config conf, RecordBuffersConfig rb_conf)
         _conf = conf;
         _record_buffers = new(conf._cpu) RecordBuffers(rb_conf);
         _insert_buf_mgr = new(conf._cpu) insert_buf_mgr(conf._cpu, 11, 
-                                                        tpcc_record_sizes,
+                                                        insert_tpcc_record_sizes,
                                                         true);
         _dep_tbl = new dependency_table();
+        _key_alloc = new(conf._cpu) lck_key_allocator(100, conf._cpu);
         init_depnodes();        
 }
 
@@ -170,6 +171,8 @@ void executor::prepare(action *txn)
                 sub_actions[i]->insert_mgr = _insert_buf_mgr;
                 sub_actions[i]->bufs = _record_buffers;
                 sub_actions[i]->lck = &_mcs_lock_struct;
+                sub_actions[i]->key_alloc = _key_alloc;
+                sub_actions[i]->inserted = NULL;
                 sub_actions[i]->worker = this;
 
                 nreads = sub_actions[i]->readset.size();
@@ -478,21 +481,30 @@ dependency_table::dependency_table()
         _tbl[NEW_ORDER_TXN] = (uint32_t**)zmalloc(sizeof(uint32_t*)*new_order_size);
         for (i = 0; i < new_order_size; ++i) {
                 _tbl[NEW_ORDER_TXN][i] = (uint32_t*)zmalloc(sizeof(uint32_t)*2);
-                _tbl[NEW_ORDER_TXN][i][NEW_ORDER_TXN] = i;
-                if (i < 3)
-                        _tbl[NEW_ORDER_TXN][i][PAYMENT_TXN] = i;
-                else
-                        _tbl[NEW_ORDER_TXN][i][PAYMENT_TXN] = 3;
+                //               _tbl[NEW_ORDER_TXN][i][NEW_ORDER_TXN] = i;
+               _tbl[NEW_ORDER_TXN][i][NEW_ORDER_TXN] = 0;
+               if (i < 3) {
+                       // _tbl[NEW_ORDER_TXN][i][PAYMENT_TXN] = i;
+                        _tbl[NEW_ORDER_TXN][i][PAYMENT_TXN] = 0;
+               } else {
+                       // _tbl[NEW_ORDER_TXN][i][PAYMENT_TXN] = 3;
+                        _tbl[NEW_ORDER_TXN][i][PAYMENT_TXN] = 0;
+               }
         }
 
         _tbl[PAYMENT_TXN] = (uint32_t**)zmalloc(sizeof(uint32_t*)*payment_size);
         for (i = 0; i < payment_size; ++i) {
                 _tbl[PAYMENT_TXN][i] = (uint32_t*)zmalloc(sizeof(uint32_t)*2);
-                _tbl[PAYMENT_TXN][i][PAYMENT_TXN] = i;
-                if (i < 3)
-                        _tbl[PAYMENT_TXN][i][NEW_ORDER_TXN] = i;
-                else 
-                        _tbl[PAYMENT_TXN][i][NEW_ORDER_TXN] = 5;
+                // _tbl[PAYMENT_TXN][i][PAYMENT_TXN] = i;
+                _tbl[PAYMENT_TXN][i][PAYMENT_TXN] = 0;
+                if (i < 3) {
+                        //                        _tbl[PAYMENT_TXN][i][NEW_ORDER_TXN] = i;
+                        _tbl[PAYMENT_TXN][i][NEW_ORDER_TXN] = 0;
+                } else {
+                        //                        _tbl[PAYMENT_TXN][i][NEW_ORDER_TXN] = 5;
+                        _tbl[PAYMENT_TXN][i][NEW_ORDER_TXN] = 0;
+
+                }
         }
 }
 

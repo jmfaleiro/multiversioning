@@ -8,6 +8,7 @@
 #include <exception>
 #include <record_buffer.h>
 #include <table_mgr.h>
+#include <array_allocator.h>
 
 #define NUM_MCS_LOCKS	1000
 
@@ -46,14 +47,15 @@ struct OCCWorkerConfig {
 
 class OCCWorker : public Runnable {
  private:        
-        OCCWorkerConfig 	config;
-        uint64_t 		incr_timestamp;
-        uint64_t 		last_tid;
-        uint32_t 		last_epoch;
-        uint32_t 		txn_counter;
-        RecordBuffers 		*bufs;
-        mcs_mgr 		*mgr;
-        insert_buf_mgr		*insert_mgr;
+        OCCWorkerConfig 			config;
+        uint64_t 				incr_timestamp;
+        uint64_t 				last_tid;
+        uint32_t 				last_epoch;
+        uint32_t 				txn_counter;
+        RecordBuffers 				*bufs;
+        mcs_mgr 				*mgr;
+        insert_buf_mgr				*insert_mgr;
+        array_allocator<occ_composite_key> 	*key_allocator;        
         
         virtual bool RunSingle(OCCAction *action);
         virtual uint32_t exec_pending(OCCAction **action_list);

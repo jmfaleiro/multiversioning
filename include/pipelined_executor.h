@@ -4,6 +4,8 @@
 #include <runnable.hh>
 #include <concurrent_queue.h>
 #include <mcs.h>
+#include <array_allocator.h>
+//#include <locking_action.h>
 
 class RecordBuffers;
 class RecordBuffersConfig;
@@ -12,6 +14,8 @@ class LockManager;
 class locking_key;
 class locking_action;
 class table_mgr;
+
+typedef array_allocator<locking_key> lck_key_allocator;
 
 namespace pipelined {
 
@@ -69,6 +73,7 @@ class executor : public Runnable {
         RecordBuffers 		*_record_buffers;
         insert_buf_mgr 		*_insert_buf_mgr;
         mcs_struct 		_mcs_lock_struct;
+        lck_key_allocator 	*_key_alloc;
 
  protected:
         virtual void StartWorking();

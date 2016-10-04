@@ -12,6 +12,7 @@ OCCWorker::OCCWorker(OCCWorkerConfig conf, struct RecordBuffersConfig rb_conf)
         this->insert_mgr = new(conf.cpu) insert_buf_mgr(conf.cpu, 11, 
                                                         insert_tpcc_record_sizes,
                                                         true);
+        this->key_allocator = new(conf.cpu) array_allocator<occ_composite_key>(100, conf.cpu);
 }
 
 void OCCWorker::Init()
@@ -171,6 +172,7 @@ bool OCCWorker::RunSingle(OCCAction *action)
         action->insert_mgr = insert_mgr;
         action->lck = mgr->get_struct();
         action->cpu_id = (uint32_t)config.cpu;
+        action->key_allocator = key_allocator;
         
         action->inserted = NULL;
         action->run();
@@ -192,6 +194,7 @@ bool OCCWorker::RunSingle(OCCAction *action)
                 action->cleanup();
                 validated = false;
         }
-        mgr->return_struct(action->lck);        
+        mgr->return_struct(action->lck);
+        key_allocator->reset();
         return validated;
 }
