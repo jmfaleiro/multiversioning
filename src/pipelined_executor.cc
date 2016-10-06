@@ -242,7 +242,6 @@ void executor::add_prev_write(action *txn, locking_key *start)
         }
         
         if (pred != NULL && executor::is_unmarked_ref(pred->prev) == true) {
-                assert(pred->is_write == true && pred->txn != NULL);
                 add_dep_context((pipelined::action*)pred->txn);
         }
 }
@@ -258,7 +257,6 @@ void executor::add_prev_reads(action *txn, locking_key *start)
 
         for (pred = start->prev; pred != NULL && pred->is_write == false; 
              pred = executor::get_unmarked_ref(pred->prev)) {
-                assert(pred->is_write == false && pred->txn != NULL);
                 if (executor::is_unmarked_ref(pred->prev))
                         add_dep_context((pipelined::action*)pred->txn);
                 wait_inserted(pred);
@@ -481,29 +479,23 @@ dependency_table::dependency_table()
         _tbl[NEW_ORDER_TXN] = (uint32_t**)zmalloc(sizeof(uint32_t*)*new_order_size);
         for (i = 0; i < new_order_size; ++i) {
                 _tbl[NEW_ORDER_TXN][i] = (uint32_t*)zmalloc(sizeof(uint32_t)*2);
-                //               _tbl[NEW_ORDER_TXN][i][NEW_ORDER_TXN] = i;
-               _tbl[NEW_ORDER_TXN][i][NEW_ORDER_TXN] = 0;
+                _tbl[NEW_ORDER_TXN][i][NEW_ORDER_TXN] = i;
                if (i < 3) {
-                       // _tbl[NEW_ORDER_TXN][i][PAYMENT_TXN] = i;
-                        _tbl[NEW_ORDER_TXN][i][PAYMENT_TXN] = 0;
+                       _tbl[NEW_ORDER_TXN][i][PAYMENT_TXN] = i;
                } else {
-                       // _tbl[NEW_ORDER_TXN][i][PAYMENT_TXN] = 3;
-                        _tbl[NEW_ORDER_TXN][i][PAYMENT_TXN] = 0;
+                       _tbl[NEW_ORDER_TXN][i][PAYMENT_TXN] = 3;
                }
         }
 
         _tbl[PAYMENT_TXN] = (uint32_t**)zmalloc(sizeof(uint32_t*)*payment_size);
         for (i = 0; i < payment_size; ++i) {
                 _tbl[PAYMENT_TXN][i] = (uint32_t*)zmalloc(sizeof(uint32_t)*2);
-                // _tbl[PAYMENT_TXN][i][PAYMENT_TXN] = i;
-                _tbl[PAYMENT_TXN][i][PAYMENT_TXN] = 0;
+                _tbl[PAYMENT_TXN][i][PAYMENT_TXN] = i;
                 if (i < 3) {
-                        //                        _tbl[PAYMENT_TXN][i][NEW_ORDER_TXN] = i;
-                        _tbl[PAYMENT_TXN][i][NEW_ORDER_TXN] = 0;
+                        _tbl[PAYMENT_TXN][i][NEW_ORDER_TXN] = i;
+                        
                 } else {
-                        //                        _tbl[PAYMENT_TXN][i][NEW_ORDER_TXN] = 5;
-                        _tbl[PAYMENT_TXN][i][NEW_ORDER_TXN] = 0;
-
+                        _tbl[PAYMENT_TXN][i][NEW_ORDER_TXN] = 5;
                 }
         }
 }

@@ -360,24 +360,39 @@ static void write_output(locking_config conf, struct pipelining_result result,
         result_file << "time:" << elapsed_milli << " ";
         result_file << "txns:" << conf.num_txns << " ";
         result_file << "threads:" << conf.num_threads << " ";
-        result_file << "records:" << conf.num_records << " ";
-        result_file << "read_pct:" << conf.read_pct << " ";
-        result_file << "txn_size:" << w_conf.txn_size << " ";
-        if (conf.experiment == 0) 
-                result_file << "10rmw" << " ";
-        else if (conf.experiment == 1) 
-                result_file << "8r2rmw" << " ";
-        else if (conf.experiment == 3) 
-                result_file << "small_bank" << " ";
-        else if (conf.experiment == TPCC_SUBSET)
-                result_file << "tpcc" << " ";
- 
-        if (conf.distribution == 0) 
-                result_file << "uniform ";
-        else if (conf.distribution == 1) 
-                result_file << "zipf theta:" << conf.theta << " ";
-        else
+
+        if (conf.experiment == YCSB_10RMW || conf.experiment == YCSB_2RMW8R ||
+            conf.experiment == SMALL_BANK || conf.experiment == YCSB_UPDATE) {
+                
+                result_file << "records:" << conf.num_records << " ";
+                result_file << "read_pct:" << conf.read_pct << " ";
+                result_file << "txn_size:" << w_conf.txn_size << " ";
+
+                if (conf.distribution == 0) 
+                        result_file << "uniform ";
+                else if (conf.distribution == 1) 
+                        result_file << "zipf theta:" << conf.theta << " ";
+                else
+                        assert(false);
+
+                if (conf.experiment == YCSB_10RMW) 
+                        result_file << "10rmw" << " ";
+                else if (conf.experiment == YCSB_2RMW8R) 
+                        result_file << "8r2rmw" << " ";
+                else if (conf.experiment == SMALL_BANK) 
+                        result_file << "small_bank" << " ";
+                else if (conf.experiment == YCSB_UPDATE)
+                        result_file << "ycsb_update" << " ";
+                else
+                        assert(false);
+        } else if (conf.experiment == TPCC_SUBSET) {
+                result_file << "num_warehouses:" << w_conf.num_warehouses << " ";
+                result_file << "tpcc_subset" << " ";
+                if (w_conf.partitioned == true) 
+                        result_file << "partitioned" << " ";
+        } else {
                 assert(false);
+        }
 
         result_file << "\n";
         result_file.close();  

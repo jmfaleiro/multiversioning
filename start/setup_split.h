@@ -12,6 +12,7 @@
 #include <graph.h>
 #include <algorithm>
 #include <tpcc.h>
+#include <split_record.h>
 
 #define LCK_TBL_SZ	(((uint64_t)1) << 29)	/* 512 M */
 #define SIMPLE_SZ 	2			/* simple action size */
@@ -102,7 +103,7 @@ public:
                         t_conf.startCpu = partition;
                         t_conf.endCpu = partition+1;
                         t_conf.freeListSz = (split_table_sizes[0]*2)/s_conf.num_partitions;
-                        // t_conf.valueSz = SPLIT_RECORD_SIZE(GLOBAL_RECORD_SIZE);
+                        //                         t_conf.valueSz = SPLIT_RECORD_SZ(GLOBAL_RECORD_SIZE);
                         t_conf.valueSz = sizeof(split_record);
                         t_conf.recordSize = 0;
                         init_tbl = (Table**)zmalloc(sizeof(Table*));
@@ -1310,8 +1311,20 @@ public:
                 }
                 delete(graph);
         }
+        /*
+        static uint32_t get_schedulable(vector<split_action*> *input,
+                                        split_action **schedulable)
+        {
+                uint32_t count;
+                uint32_t i, sz;
 
-
+                count = 0;
+                sz = input->size();
+                for (i = 0; i < sz; ++i) {
+                        (*input)[i]->
+                }
+        }
+        */
         static split_action_batch* vector_to_batch(uint32_t num_partitions, 
                                                    vector<split_action*> **inputs)
         {
@@ -1526,29 +1539,40 @@ public:
                 result_file << "time:" << elapsed_milli << " ";
                 result_file << "txns:" << conf.num_txns << " ";
                 result_file << "threads:" << conf.num_partitions << " ";
-                result_file << "records:" << conf.num_records << " ";
-                result_file << "read_pct:" << conf.read_pct << " ";
-                result_file << "txn_size:" << w_conf.txn_size << " ";
-                if (conf.experiment == 0) 
-                        result_file << "test " << " ";
-                else if (conf.experiment == 1) 
-                        result_file << "rvp test" << " ";
-                else if (conf.experiment == 2) 
-                        result_file << "abort test " << " ";
-                else if (conf.experiment == 3) 
-                        result_file << "small_bank" << " ";
-                else if (conf.experiment == 4) 
-                        result_file << "ycsb_update" << " " << "abort_pos:" << w_conf.abort_pos << " ";
-                else if (conf.experiment == YCSB_RW)
-                        result_file << "ycsb_rw" << " ";
-                //                        assert(false);
- 
-                if (conf.distribution == 0) 
-                        result_file << "uniform ";
-                else if (conf.distribution == 1) 
-                        result_file << "zipf theta:" << conf.theta << " ";
-                else
+
+                if (conf.experiment == YCSB_10RMW || conf.experiment == YCSB_2RMW8R ||
+                    conf.experiment == SMALL_BANK || conf.experiment == YCSB_UPDATE) {
+                
+                        result_file << "records:" << conf.num_records << " ";
+                        result_file << "read_pct:" << conf.read_pct << " ";
+                        result_file << "txn_size:" << w_conf.txn_size << " ";
+
+                        if (conf.distribution == 0) 
+                                result_file << "uniform ";
+                        else if (conf.distribution == 1) 
+                                result_file << "zipf theta:" << conf.theta << " ";
+                        else
+                                assert(false);
+
+                        if (conf.experiment == 0) 
+                                result_file << "test " << " ";
+                        else if (conf.experiment == 1) 
+                                result_file << "rvp test" << " ";
+                        else if (conf.experiment == 2) 
+                                result_file << "abort test " << " ";
+                        else if (conf.experiment == 3) 
+                                result_file << "small_bank" << " ";
+                        else if (conf.experiment == 4) 
+                                result_file << "ycsb_update" << " " << "abort_pos:" << w_conf.abort_pos << " ";
+                        else if (conf.experiment == YCSB_RW)
+                                result_file << "ycsb_rw" << " ";
+                
+                } else if (conf.experiment == TPCC_SUBSET) {
+                        result_file << "num_warehouses:" << w_conf.num_warehouses << " ";
+                        result_file << "tpcc_subset" << " ";
+                } else {
                         assert(false);
+                }
 
                 result_file << "\n";
                 result_file.close();  

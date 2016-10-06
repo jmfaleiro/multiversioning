@@ -27,6 +27,7 @@
 
 Database DB(2);
 
+uint32_t READ_COMMITTED;
 uint64_t dbSize = ((uint64_t)1<<36);
 size_t *tpcc_record_sizes;
 size_t *insert_tpcc_record_sizes;
@@ -51,6 +52,10 @@ uint32_t cc_type;
 
 extern size_t convert_record_sz(size_t value_sz, ConcurrencyControl cc_type);
 
+struct throughput_result {
+        timespec elapsed_time;
+        uint64_t num_txns;
+};
 
 void init_tpcc_local(ConcurrencyControl cc_type, workload_config w_conf)
 {
@@ -110,7 +115,11 @@ int main(int argc, char **argv) {
   ExperimentConfig cfg(argc, argv);
   std::cout << cfg.ccType << "\n";
 
-
+  if (cfg.ccType == OCC && cfg.occConfig.read_committed == true)
+          READ_COMMITTED = 1;
+  else
+          READ_COMMITTED = 0;
+  
   /* Only initialize values for tables that we're actually going to use */
   tpcc_record_sizes = (size_t*)zmalloc(sizeof(size_t)*11);
   insert_tpcc_record_sizes = (size_t*)zmalloc(sizeof(size_t)*11);
@@ -126,7 +135,6 @@ int main(int argc, char **argv) {
   tpcc_record_sizes[HISTORY_TABLE] = sizeof(history_record);
   tpcc_record_sizes[DELIVERY_TABLE] = sizeof(uint64_t);
   tpcc_record_sizes[CUSTOMER_ORDER_INDEX] = sizeof(uint64_t);
-
   
   
   init_tpcc_local(cfg.ccType, cfg.get_workload_config());

@@ -3,6 +3,8 @@
 #include <cpuinfo.h>
 #include <algorithm>
 
+extern uint32_t READ_COMMITTED;
+
 OCCWorker::OCCWorker(OCCWorkerConfig conf, struct RecordBuffersConfig rb_conf)
         : Runnable(conf.cpu)
 {

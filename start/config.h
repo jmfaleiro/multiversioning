@@ -31,7 +31,9 @@ static struct option long_options[] = {
   {"num_outstanding", required_argument, NULL, 17},
   {"abort_pos", required_argument, NULL, 18},
   {"num_warehouses", required_argument, NULL, 19},
-  {NULL, no_argument, NULL, 20},
+  {"partitioned", no_argument, NULL, 20},
+  {"rc", no_argument, NULL, 21},
+  {NULL, no_argument, NULL, 22},
 };
 
 enum exp_codes {
@@ -60,6 +62,7 @@ struct workload_config
         uint32_t read_txn_size;
         uint32_t abort_pos;
         uint32_t num_warehouses;
+        bool partitioned;
 };
 
 enum ConcurrencyControl {
@@ -85,6 +88,7 @@ struct OCCConfig {
         uint64_t occ_epoch;
         int read_pct;
         int read_txn_size;
+        bool read_committed;
 };
 
 struct hek_config {
@@ -102,7 +106,6 @@ struct hek_config {
         int read_pct;
         int read_txn_size;
 };
-
 
 struct locking_config {
         uint32_t num_threads;
@@ -136,19 +139,18 @@ struct split_config {
 };
 
 struct MVConfig {
-  uint32_t numCCThreads;
-  uint32_t numTxns;
-  uint32_t epochSize;
-  uint32_t numRecords;
-  uint32_t numWorkerThreads;
-  uint32_t txnSize;
-  uint32_t experiment;
-  uint64_t recordSize;
-  uint32_t distribution;
-  double theta;
+        uint32_t numCCThreads;
+        uint32_t numTxns;
+        uint32_t epochSize;
+        uint32_t numRecords;
+        uint32_t numWorkerThreads;
+        uint32_t txnSize;
+        uint32_t experiment;
+        uint64_t recordSize;
+        uint32_t distribution;
+        double theta;
         int read_pct;
         int read_txn_size;
-        
 };
 
 class ExperimentConfig {
@@ -174,6 +176,8 @@ class ExperimentConfig {
     NUM_OUTSTANDING,
     ABORT_POS,
     NUM_WAREHOUSES,
+    PARTITIONED,
+    RC,
   };
   unordered_map<int, char*> argMap;
 
@@ -342,7 +346,8 @@ class ExperimentConfig {
       if (argMap.count(THETA) > 0) {
         occConfig.theta = (double)atof(argMap[THETA]);
       }
-      occConfig.occ_epoch = (uint32_t)atoi(argMap[OCC_EPOCH]);              
+      occConfig.occ_epoch = (uint32_t)atoi(argMap[OCC_EPOCH]);
+      occConfig.read_committed = (argMap.count(RC) > 0);
       this->ccType = OCC;
     } else if (ccType == HEK) {
 
@@ -443,12 +448,14 @@ class ExperimentConfig {
             this->w_conf.theta = (double)atof(argMap[THETA]);
     }
     this->w_conf.read_pct = (uint32_t)atoi(argMap[READ_PCT]);
-    this->w_conf.read_txn_size = (uint32_t)atoi(argMap[READ_TXN_SIZE]);    
+    this->w_conf.read_txn_size = (uint32_t)atoi(argMap[READ_TXN_SIZE]);
+    this->w_conf.partitioned = false;
     if (this->w_conf.experiment == TPCC_SUBSET) {
             assert(argMap.count(NUM_WAREHOUSES) > 0);
             this->w_conf.num_warehouses = (uint32_t)atoi(argMap[NUM_WAREHOUSES]);
+            this->w_conf.partitioned = (argMap.count(PARTITIONED) > 0);
     }
-            
+    
   }
 
   void ReadArgs(int argc, char **argv) {

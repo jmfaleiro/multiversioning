@@ -5,6 +5,8 @@
 #include <occ_record.h>
 #include <rc_record.h>
 
+extern uint32_t READ_COMMITTED;
+
 bool OCCAction::try_acquire_single(volatile uint64_t *lock_ptr)
 {
         volatile uint64_t cmp_tid, locked_tid;
@@ -422,7 +424,6 @@ void OCCAction::release_locks()
         uint32_t i, num_inserts, num_writes;
         concurrent_table *tbl;
         occ_composite_key *ins_ptrs;
-        conc_table_record *rec, *iter;
 
         num_writes = this->writeset.size();
         for (i = 0; i < num_writes; ++i) {
@@ -456,7 +457,7 @@ void OCCAction::release_locks()
                 }
                 
                 if (ins_ptrs[i].ins_buffer != ins_ptrs[i].record_ptr) {
-                        insert_mgr->return_insert_record(ins_ptrs[i].ins_buffer, rec->table_id);
+                        insert_mgr->return_insert_record(ins_ptrs[i].ins_buffer, ins_ptrs[i].tableId);
                 }
         }
         /*

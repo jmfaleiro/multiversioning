@@ -13,6 +13,7 @@
 #include <rc_record.h>
 
 extern uint32_t GLOBAL_RECORD_SIZE;
+extern uint32_t READ_COMMITTED;
 
 static bool is_ycsb_exp(workload_config w_conf)
 {
@@ -635,7 +636,7 @@ static OCCActionBatch setup_db(workload_config conf)
 }
 
 
-void write_occ_output(struct occ_result result, OCCConfig config, 
+void write_occ_output(struct occ_result result, OCCConfig conf, 
                       workload_config w_conf)
 {
         double elapsed_milli;
@@ -645,24 +646,49 @@ void write_occ_output(struct occ_result result, OCCConfig config,
         elapsed_milli =
                 1000.0*elapsed_time.tv_sec + elapsed_time.tv_nsec/1000000.0;
         std::cout << elapsed_milli << '\n';
-        result_file.open("occ.txt", std::ios::app | std::ios::out);
+        if (READ_COMMITTED) {
+                result_file.open("rc.txt", std::ios::app | std::ios::out);
+                result_file <<"rc ";
+        } else {
+                result_file.open("occ.txt", std::ios::app | std::ios::out);
+                result_file << "occ ";
+        }
         result_file << "time:" << elapsed_milli << " txns:" << result.num_txns;
-        result_file << " threads:" << config.numThreads << " occ ";
-        result_file << "records:" << config.numRecords << " ";
-        result_file << "read_pct:" << config.read_pct << " ";
-        result_file << "txn_size:" << w_conf.txn_size << " ";
-        if (config.experiment == 0) 
-                result_file << "10rmw" << " ";
-        else if (config.experiment == 1)
-                result_file << "8r2rmw" << " ";
-        else if (config.experiment == 2)
-                result_file << "2r8w" << " ";
-        else if (config.experiment == 3) 
-                result_file << "small_bank" << " "; 
-        if (config.distribution == 0) 
-                result_file << "uniform" << "\n";        
-        else if (config.distribution == 1) 
-                result_file << "zipf theta:" << config.theta << "\n";
+        result_file << " threads:" << conf.numThreads << " ";
+        if (conf.experiment == YCSB_10RMW || conf.experiment == YCSB_2RMW8R ||
+            conf.experiment == SMALL_BANK || conf.experiment == YCSB_UPDATE) {
+                
+                result_file << "records:" << conf.numRecords << " ";
+                result_file << "read_pct:" << conf.read_pct << " ";
+                result_file << "txn_size:" << conf.txnSize << " ";
+
+                if (conf.distribution == 0) 
+                        result_file << "uniform ";
+                else if (conf.distribution == 1) 
+                        result_file << "zipf theta:" << conf.theta << " ";
+                else
+                        assert(false);
+
+                if (conf.experiment == YCSB_10RMW) 
+                        result_file << "10rmw" << " ";
+                else if (conf.experiment == YCSB_2RMW8R) 
+                        result_file << "8r2rmw" << " ";
+                else if (conf.experiment == SMALL_BANK) 
+                        result_file << "small_bank" << " ";
+                else if (conf.experiment == YCSB_UPDATE)
+                        result_file << "ycsb_update" << " ";
+                else
+                        assert(false);
+        } else if (conf.experiment == TPCC_SUBSET) {
+                result_file << "num_warehouses:" << w_conf.num_warehouses << " ";
+                result_file << "tpcc_subset" << " ";
+                if (w_conf.partitioned == true) 
+                        result_file << "partitioned" << " ";
+        } else {
+                assert(false);
+        }
+
+        result_file << "\n";
         result_file.close();  
 }
 
