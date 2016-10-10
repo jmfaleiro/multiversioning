@@ -110,6 +110,7 @@ class executor : public Runnable {
         void wait_inserted(locking_key *key);
 
         void finish_txn(action *txn);
+        void add_prev_dep(action *txn, locking_key *start);
 
  public:
         void* operator new(std::size_t sz, int cpu);

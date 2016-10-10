@@ -180,6 +180,8 @@ p_new_order::process_items::process_items(uint32_t wh, uint32_t d,
         _wh_txn = wh_txn;
         _d_txn = d_txn;
         _c_txn = c_txn;
+
+        _dist_info = (char**)zmalloc(sizeof(char*)*nitems);
 }
 
 bool p_new_order::process_items::Run()
@@ -214,6 +216,31 @@ void p_new_order::process_items::get_rmws(big_key *array)
         }
 }
 
+uint32_t p_new_order::process_items::get_nitems()
+{
+        return _nitems;
+}
+
+uint32_t* p_new_order::process_items::get_order_quantities()
+{
+        return _order_quantities;
+}
+
+uint64_t* p_new_order::process_items::get_item_ids()
+{
+        return _items;
+}
+
+uint64_t* p_new_order::process_items::get_supplier_whs()
+{
+        return _supplier_whs;
+}
+
+char** p_new_order::process_items::get_dist_info()
+{
+        return _dist_info;
+}
+
 void p_new_order::process_items::process_single(uint32_t n, uint32_t order_id, 
                                                float w_tax, 
                                                float d_tax, 
@@ -233,8 +260,6 @@ void p_new_order::process_items::process_single(uint32_t n, uint32_t order_id,
         order_quantity = _order_quantities[n];
         supplier_warehouse = _supplier_whs[n];
         stock_key = tpcc_util::create_stock_key(supplier_warehouse, item_id);
-        
-        item = (item_record*)get_read_ref((uint64_t)item_id, ITEM_TABLE);
         stock = (stock_record*)get_write_ref(stock_key, STOCK_TABLE);
         
         /* Update inventory */
@@ -249,51 +274,84 @@ void p_new_order::process_items::process_single(uint32_t n, uint32_t order_id,
         stock->s_ytd += order_quantity;
         switch (_d) {
         case 0:
-                dist_info = stock->s_dist_01;
+                _dist_info[n] = stock->s_dist_01;
                 break;
         case 1:
-                dist_info = stock->s_dist_02;
+                _dist_info[n] = stock->s_dist_02;
                 break;
         case 2:
-                dist_info = stock->s_dist_03;
+                _dist_info[n] = stock->s_dist_03;
                 break;
         case 3:
-                dist_info = stock->s_dist_04;
+                _dist_info[n] = stock->s_dist_04;
                 break;
         case 4:
-                dist_info = stock->s_dist_05;
+                _dist_info[n] = stock->s_dist_05;
                 break;
         case 5:
-                dist_info = stock->s_dist_06;
+                _dist_info[n] = stock->s_dist_06;
                 break;
         case 6:
-                dist_info = stock->s_dist_07;
+                _dist_info[n] = stock->s_dist_07;
                 break;
         case 7:
-                dist_info = stock->s_dist_08;
+                _dist_info[n] = stock->s_dist_08;
                 break;
         case 8:
-                dist_info = stock->s_dist_09;
+                _dist_info[n] = stock->s_dist_09;
                 break;
         case 9:
-                dist_info = stock->s_dist_10;
+                _dist_info[n] = stock->s_dist_10;
                 break;
         default:
                 assert(false);
         }
+}
 
-        item_amount = item->i_price*(1+w_tax+d_tax)*(1-c_disc);
-        item_amount *= _order_quantities[n];
-        order_line_key = tpcc_util::create_order_line_key(_wh, _d, order_id, n);
-        order_line = (order_line_record*)insert_record(order_line_key, ORDER_LINE_TABLE);
-        order_line->ol_o_id = order_id;
-        order_line->ol_d_id = _d;
-        order_line->ol_w_id = _wh;
-        order_line->ol_number = n;
-        order_line->ol_supply_w_id = _supplier_whs[n];
-        order_line->ol_quantity = _order_quantities[n];
-        order_line->ol_amount = _order_quantities[n]*item->i_price;
-        strcpy(order_line->ol_dist_info, dist_info);
+p_new_order::order_line_ins::order_line_ins(uint32_t wh_id, uint32_t dstrct_id,
+                                            district_update *dist_txn,
+                                            warehouse_read *wh_txn,
+                                            process_items *items_txn)
+{
+        _wh_id = wh_id;
+        _dstrct_id = dstrct_id;
+        _dist_txn = dist_txn;
+        _wh_txn = wh_txn;
+        _items_txn = items_txn;
+}
+
+bool p_new_order::order_line_ins::Run()
+{
+        uint32_t i, nitems, order_id, *order_quantities;
+        order_line_record *record;
+        item_record *item_rec;
+        uint64_t *supplier_whs, *items, order_line_key;        
+        char **dist_info;
+        
+        order_id = _dist_txn->get_order_id();
+        nitems = _items_txn->get_nitems();
+        supplier_whs = _items_txn->get_supplier_whs();
+        order_quantities = _items_txn->get_order_quantities();
+        dist_info = _items_txn->get_dist_info();
+        items = _items_txn->get_item_ids();
+        
+        for (i = 0; i < nitems; ++i) {
+                order_line_key = tpcc_util::create_order_line_key(_wh_id,
+                                                                  _dstrct_id,
+                                                                  order_id,
+                                                                  i);
+                
+                record = (order_line_record*)insert_record(order_line_key, ORDER_LINE_TABLE);
+                record->ol_o_id = order_id;
+                record->ol_d_id = _dstrct_id;
+                record->ol_w_id = _wh_id;
+                record->ol_number = i;
+                record->ol_supply_w_id = (uint32_t)(supplier_whs[i]);
+                record->ol_quantity = order_quantities[i];
+                item_rec = (item_record*)get_read_ref(items[i], ITEM_TABLE);
+                record->ol_amount = order_quantities[i]*item_rec->i_price;
+                strcpy(record->ol_dist_info, dist_info[i]);
+        }
 }
 
 p_payment::warehouse_update::warehouse_update(uint32_t wh, float h_amount)

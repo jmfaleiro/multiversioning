@@ -26,48 +26,50 @@ fmt_multi_cc = "build/db --cc_type 0 --num_cc_threads {0} --num_txns {1} --epoch
 
 
 def main():
-    ycsb()
+    for i in range(1, 10):
+        tpcc()
     
 def tpcc():
-    fixed_dir = "results/tpcc/fixed_10"
+    fixed_dir = "results/tpcc/fixed_5"
     vary_dir = "results/tpcc/vary_wh"
+    fixed_high_dir = "results/tpcc/fixed_1"
     whs = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40]
     ntxns = 3000000
     for w in whs:
-        split_expt(vary_dir, "split.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 20, 0, 0, 20, w)
-#         occ_expt(vary_dir, "occ.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, w, True)
-#         rc_expt(vary_dir, "rc.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, w, True)
-# 
-#         locking_expt(vary_dir, "locking.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, w, True)
-#         pipelined_expt(vary_dir, "pipelined.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, w, True)
+#        split_expt(vary_dir, "split.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 20, 0, 0, 20, w)
+#        occ_expt(vary_dir, "occ.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, w, True)
+#        rc_expt(vary_dir, "rc.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, w, True)
+#        locking_expt(vary_dir, "locking.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, w, True)
+
+#         locking_expt(fixed_high_dir, "locking.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, 1, False)
+#         pipelined_expt(fixed_high_dir, "pipelined.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, 1, False)
+#         occ_expt(fixed_high_dir, "occ.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, 1, False)
+#         rc_expt(fixed_high_dir, "rc.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, 1, False)
+        split_expt(fixed_high_dir, "split.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 20, 0, 0, 20, 1)
+        
+#        pipelined_expt(vary_dir, "pipelined.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, w, True)
+
+#         locking_expt(fixed_dir, "locking.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, 5, False)
+#         pipelined_expt(fixed_dir, "pipelined.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, 5, False)
+#         occ_expt(fixed_dir, "occ.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, 5, False)
+#         rc_expt(fixed_dir, "rc.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, 5, False)
+        split_expt(fixed_dir, "split.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 20, 0, 0, 20, 5)
 
 
-#         locking_expt(fixed_dir, "locking.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, 10, False)
-#         pipelined_expt(fixed_dir, "pipelined.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, 10, False)
-#         occ_expt(fixed_dir, "occ.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, 10, False)
-#         rc_expt(fixed_dir, "rc.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 0, 20, 10, False)
-        split_expt(fixed_dir, "split.txt", w, w, ntxns, 1000000, 6, 1, 0.0, 1000, 20, 0, 0, 20, 10)
-
+        
 def ycsb():
     high_dir = "results/ycsb/update/high/"
     low_dir = "results/ycsb/update/low/"
     vary_dir = "results/ycsb/update/vary/"
     zipf_vals = [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1,0.0]
     ntxns = 3000000
-    
-    for i in range(0, 10):
-        occ_expt(low_dir, "occ.txt", 4, 40, ntxns, 1000000, 4, 1, 0.0, 1000, 0, 20, 0, False)
-        rc_expt(low_dir, "rc.txt", 4, 40, ntxns, 1000000, 4, 1, 0.0, 1000, 0, 20, 0, False)
-        split_expt(low_dir, "split.txt", 4, 40, ntxns, 1000000, 4, 1, 0.0, 1000, 20, 0, 0, 20, 10)
-        locking_expt(low_dir, "locking.txt", 4, 40, ntxns, 1000000, 4, 1, 0.0, 1000, 0, 20, 0, False)
 
-        locking_expt(high_dir, "locking.txt", 4, 40, ntxns, 1000000, 4, 1, 0.9, 1000, 0, 20, 0, False)
-        occ_expt(high_dir, "occ.txt", 4, 40, ntxns, 1000000, 4, 1, 0.9, 1000, 0, 20, 0, False)
-        rc_expt(high_dir, "rc.txt", 4, 40, ntxns, 1000000, 4, 1, 0.9, 1000, 0, 20, 0, False)
-        split_expt(high_dir, "split.txt", 4, 40, ntxns, 1000000, 4, 1, 0.9, 1000, 20, 0, 0, 20, 10)
+    for z in zipf_vals:
+        occ_expt(vary_dir, "occ.txt", 40, 40, ntxns, 1000000, 4, 1, z, 1000, 0, 20, 0, False)
+        rc_expt(vary_dir, "rc.txt", 40, 40, ntxns, 1000000, 4, 1, z, 1000, 0, 20, 0, False)
+        locking_expt(vary_dir, "locking.txt", 40, 40, ntxns, 1000000, 4, 1, z, 1000, 0, 20, 0, False)
+        split_expt(vary_dir, "split.txt", 40, 40, ntxns, 1000000, 4, 1, z, 1000, 20, 0, 0, 20, 10)
 
-    
-        
 def new_contention():
     result_dir = "results/ycsb/read_write/vary/"
     zipf_vals = [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1,0.0]
@@ -85,7 +87,6 @@ def new_contention():
 
         
 def test_locking():
-    reads_dir = "results/ycsb/read_write/vary"
     high_dir = "results/ycsb/aborts/high/"
     low_dir = "results/ycsb/aborts/low/"
 
@@ -96,9 +97,6 @@ def test_locking():
         split_expt(high_dir, "split_new.txt", 40, 40, ntxns, 1000000, 4, 1, 0.9, 1000, 20, p, 0, 20, 0)
         clean.abort_fn(os.path.join(high_dir, "split_new.txt"), os.path.join(high_dir, "split_new_out.txt"))
         
-    for t in [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]:
-        split_expt(reads_dir, "split_new.txt", 40, 40, ntxns, 1000000, 4, 1, t, 1000, 20, 0, 0, 20, 0)
-        clean.theta_fn("locking", os.path.join(reads_dir, "split_new.txt"), os.path.join(reads_dir, "split_new_out.txt"))
 
 def print_cc():
     clean.cc_fn("results.txt", "cc_out.txt")
@@ -314,7 +312,7 @@ def pipelined_expt(outdir, filename, lowThreads, highThreads, txns, records, exp
             else:
                 cmd = fmt_pipelined.format(str(i), str(txns), str(records), str(expt), str(distribution), str(theta), str(rec_size), str(read_pct), str(txn_size), str(num_warehouses), "")
             os.system(cmd)
-            os.system("cat locking.txt >>" + outfile)
+            os.system("cat pipelined.txt >>" + outfile)
             clean.clean_fn("locking", outfile, temp)
             saved_dir = os.getcwd()
             os.chdir(outdir)

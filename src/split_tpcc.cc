@@ -166,9 +166,8 @@ bool split_new_order::insert_order_lines::Run()
                         order_line.ol_supply_w_id = stock_data->_supplier_wh;
                         order_line.ol_quantity = stock_data->_quantity;
                         order_line.ol_i_id = stock_data->_item_id;
-                        //item = (item_record*)get_read_ref((uint64_t)stock_data->_item_id, ITEM_TABLE);
-                        // order_line.ol_amount = item->i_price*stock_data->_quantity;
-                        
+                        item = (item_record*)get_read_ref((uint64_t)stock_data->_item_id, ITEM_TABLE);
+                        order_line.ol_amount = item->i_price*stock_data->_quantity;
                         strcpy(order_line.ol_dist_info, stock_data->_district_info);
                 }
         }
@@ -286,7 +285,6 @@ split_new_order::insert_oorder::insert_oorder(update_district *dstrct_pc,
         _all_local = all_local;
         _num_items = num_items;
 }
-
 
 uint32_t split_new_order::insert_oorder::num_rmws()
 {

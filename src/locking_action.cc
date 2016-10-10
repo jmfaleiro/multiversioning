@@ -207,15 +207,6 @@ void* locking_action::insert_ref(uint64_t key, uint32_t table_id)
         success = tbl->Put(record, lck);
         assert(success == true);
 
-        /* XXX REMOVE THIS 
-        iter = inserted;
-        while (iter != NULL) {
-                record_ptr = (mcs_rw::mcs_rw_lock*)(((conc_table_record*)iter->value))->value;
-                assert(record_ptr->_tail == &iter->lock_node);
-                iter = iter->next;
-        }
-        */
-        
         ret_value = NULL;
         if (cc_type == 1)
                 ret_value = LOCKING_VALUE_PTR(record->value);

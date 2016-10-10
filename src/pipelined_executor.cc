@@ -214,6 +214,8 @@ void executor::finish_txn(action *txn)
 /* Get new transactions "txn" is dependent on due to the operation in "start". */
 void executor::get_operation_deps(action *txn, locking_key *start)
 {
+        add_prev_dep(txn, start);
+        /*
         if (start->is_write == true) {
                 if (start->prev != NULL) {
                         if (start->prev->is_write == true) 
@@ -224,6 +226,22 @@ void executor::get_operation_deps(action *txn, locking_key *start)
         } else {
                 add_prev_write(txn, start);
         }
+        */
+}
+
+void executor::add_prev_dep(action *txn, locking_key *start)
+{
+        locking_key *pred;
+        dep_node *cur_dep;
+        
+        assert(start->dep_status == (uint64_t)INSERT_COMPLETE);
+        assert(executor::is_unmarked_ref(start->prev) == true);
+
+        pred = start->prev;
+        if (pred != NULL && executor::is_unmarked_ref(pred->prev) == true) {
+                wait_inserted(pred);
+                add_dep_context((pipelined::action*)pred->txn);                
+        }
 }
 
 /* Add preceding writer to txn's dependency list */
@@ -231,7 +249,6 @@ void executor::add_prev_write(action *txn, locking_key *start)
 {
         locking_key *pred;
         dep_node *cur_dep;
-        locking_action_status st;
 
         assert(start->dep_status == (uint64_t)INSERT_COMPLETE);
         assert(executor::is_unmarked_ref(start->prev) == true);
@@ -293,7 +310,12 @@ void executor::wait_deps(action *txn, uint32_t piece)
         action *dep_txn;
         locking_action *to_wait;
         locking_action_status st;
-
+        bool *no_conflicts;
+        
+        no_conflicts = txn->get_no_conflicts();
+        if (no_conflicts[piece] == true)
+                return;
+        
         assert(txn == _context._txn);
         nodes = _context._head;
         while (nodes != NULL) {
@@ -419,6 +441,8 @@ void executor::add_dep(action *txn, uint32_t piece)
                 cur = &sub_txn->writeset[i];
                 add_single_dep(cur, deplist);
         }
+
+        
 }
 
 void executor::add_dep_context(action *txn)
@@ -495,7 +519,7 @@ dependency_table::dependency_table()
                         _tbl[PAYMENT_TXN][i][NEW_ORDER_TXN] = i;
                         
                 } else {
-                        _tbl[PAYMENT_TXN][i][NEW_ORDER_TXN] = 5;
+                        _tbl[PAYMENT_TXN][i][NEW_ORDER_TXN] = 6;
                 }
         }
 }

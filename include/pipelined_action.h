@@ -45,12 +45,15 @@ class action {
         uint32_t 		_type;
         locking_action 		**_actions;
         uint32_t 		_num_actions;
-
+        bool 			*_no_conflicts;
+        
  public:  
-        action(uint32_t type, locking_action **lck_txns, uint32_t ntxns);
+        action(uint32_t type, locking_action **lck_txns, uint32_t ntxns,
+               bool *no_conflicts);
         uint32_t get_num_actions();
         uint32_t get_type();
         locking_action** get_actions();
+        bool* get_no_conflicts();
 };
 
 };

@@ -105,7 +105,7 @@ void init_tpcc_local(ConcurrencyControl cc_type, workload_config w_conf)
         }
         
         tpcc_config::txn_sizes = (uint32_t*)zmalloc(sizeof(uint32_t)*2);
-        tpcc_config::txn_sizes[0] = 6;
+        tpcc_config::txn_sizes[0] = 7;
         tpcc_config::txn_sizes[1] = 4;
 }
 

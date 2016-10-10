@@ -33,10 +33,17 @@ locking_action** pipelined::action::get_actions()
         return _actions;
 }
 
+bool* pipelined::action::get_no_conflicts()
+{
+        return _no_conflicts;
+}
+
 pipelined::action::action(uint32_t type, locking_action **lck_txns, 
-                          uint32_t ntxns)
+                          uint32_t ntxns,
+                          bool *no_conflicts)
 {
         _type = type;
         _actions = lck_txns;
         _num_actions = ntxns;
+        _no_conflicts = no_conflicts;
 }

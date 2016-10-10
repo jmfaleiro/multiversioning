@@ -24,14 +24,15 @@ struct pipelining_result {
 };
 
 
-static action* locking_action_to_action(locking_action **lck_txns, uint32_t type)
+static action* locking_action_to_action(locking_action **lck_txns, uint32_t type,
+                                        bool *no_conflicts)
 {
         if (type == NEW_ORDER_TXN) 
-                return new action(type, lck_txns, 6);
+                return new action(type, lck_txns, 6, no_conflicts);
         else if (type == PAYMENT_TXN) 
-                return new action(type, lck_txns, 4);
+                return new action(type, lck_txns, 4, no_conflicts);
         else if (type == LOADER_TXN) 
-                return new action(type, lck_txns, 1);
+                return new action(type, lck_txns, 1, no_conflicts);
         else 
                 assert(false);
         
@@ -45,17 +46,22 @@ static action_batch setup_db(workload_config w_conf)
         action_batch ret;
         locking_action *lck_txn, **txn_ptrs;
         action *p_action;
+        bool *no_conflicts;
 
+        no_conflicts = (bool*)zmalloc(sizeof(bool));
+        *no_conflicts = true;
         loader_txns = NULL;
         num_txns = generate_input(w_conf, &loader_txns);
         assert(loader_txns != NULL);
         ret._batch_sz = num_txns;
         ret._txns = (action**)malloc(sizeof(action*)*num_txns);
         assert(ret._txns != NULL);
+        
         for (i = 0; i < num_txns; ++i) {
                 txn_ptrs = (locking_action**)zmalloc(sizeof(locking_action*));
                 txn_ptrs[0] = txn_to_locking_action(loader_txns[i]);
-                ret._txns[i] = locking_action_to_action(txn_ptrs, LOADER_TXN);
+                ret._txns[i] = locking_action_to_action(txn_ptrs, LOADER_TXN,
+                                                        no_conflicts);
         }
         return ret;
 }
@@ -65,6 +71,7 @@ static action* setup_payment(workload_config w_conf, uint32_t thread_id)
         uint32_t w_id, d_id, c_id, c_w_id, c_d_id, time; 
         float h_amount;
         locking_action **lck_actions;
+        bool *no_conflicts;
         p_payment::warehouse_update *w_txn;
         p_payment::district_update *d_txn;
         p_payment::customer_update *c_txn;
@@ -110,11 +117,16 @@ static action* setup_payment(workload_config w_conf, uint32_t thread_id)
                                            d_txn);
         
         lck_actions = (locking_action**)zmalloc(sizeof(locking_action*)*4);
+        no_conflicts = (bool*)zmalloc(sizeof(bool)*4);
         lck_actions[0] = txn_to_locking_action(w_txn);
+        no_conflicts[0] = false;
         lck_actions[1] = txn_to_locking_action(d_txn);
+        no_conflicts[1] = false;
         lck_actions[2] = txn_to_locking_action(c_txn);
+        no_conflicts[2] = false;
         lck_actions[3] = txn_to_locking_action(h_txn);
-        return new action(PAYMENT_TXN, lck_actions, 4);
+        no_conflicts[3] = true;
+        return new action(PAYMENT_TXN, lck_actions, 4, no_conflicts);
 }
 
 static action* setup_new_order(workload_config w_conf, uint32_t thread_id)
@@ -125,10 +137,12 @@ static action* setup_new_order(workload_config w_conf, uint32_t thread_id)
         set<uint64_t> seen_items;
         action *ret;
         locking_action **lck_txns;
-        txn *temp_txn; 
+        txn *temp_txn;
+        bool *no_conflicts;
         p_new_order::warehouse_read *wh_txn;
         p_new_order::district_update *d_txn;
         p_new_order::customer_read *c_txn;
+        p_new_order::process_items *item_txn;
         bool all_local;
 
         all_local = true;
@@ -164,41 +178,54 @@ static action* setup_new_order(workload_config w_conf, uint32_t thread_id)
                 }
         }
         
-        lck_txns = (locking_action**)zmalloc(sizeof(locking_action*)*6);
+        lck_txns = (locking_action**)zmalloc(sizeof(locking_action*)*7);
+        no_conflicts = (bool*)zmalloc(sizeof(bool)*7);
         
         /* Warehouse */
         wh_txn = new p_new_order::warehouse_read(w_id);        
         lck_txns[0] = txn_to_locking_action(wh_txn);
+        no_conflicts[0] = false;
         
         /* District */        
         d_txn = new p_new_order::district_update(w_id, d_id);
         lck_txns[1] = txn_to_locking_action(d_txn);
+        no_conflicts[1] = false;
 
         /* Customer */
         c_txn = new p_new_order::customer_read(w_id, d_id, c_id);
         lck_txns[2] = txn_to_locking_action(c_txn);
+        no_conflicts[2] = false;
 
 
-        temp_txn = new p_new_order::process_items(w_id, d_id, suppliers, items, 
+        item_txn = new p_new_order::process_items(w_id, d_id, suppliers, items, 
                                                   quants, 
                                                   nitems, 
                                                   wh_txn,
                                                   d_txn, 
                                                   c_txn);
-        lck_txns[3] = txn_to_locking_action(temp_txn);
+        lck_txns[3] = txn_to_locking_action(item_txn);
+        no_conflicts[3] = false;
         
 
         temp_txn = new p_new_order::new_order_ins(w_id, d_id, d_txn);
         lck_txns[4] = txn_to_locking_action(temp_txn);
-                
+        no_conflicts[4] = false;
 
         temp_txn = new p_new_order::oorder_ins(w_id, d_id, c_id, nitems, 
                                                all_local, 
                                                d_txn);
         lck_txns[5] = txn_to_locking_action(temp_txn);
+        no_conflicts[5] = false;
+        
+        temp_txn = new p_new_order::order_line_ins(w_id, d_id,
+                                                   d_txn, 
+                                                   wh_txn, 
+                                                   item_txn);
+        lck_txns[6] = txn_to_locking_action(temp_txn);
+        no_conflicts[6] = false;
         
         /* Create a pipelined action */
-        return new action(NEW_ORDER_TXN, lck_txns, 6);
+        return new action(NEW_ORDER_TXN, lck_txns, 7, no_conflicts);
 }
 
 

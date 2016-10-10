@@ -61,7 +61,8 @@ namespace p_new_order {
                 uint64_t 		*_items;
                 uint32_t	 	*_order_quantities;
                 uint32_t 		_nitems;
-
+                char 			**_dist_info;
+                
                 warehouse_read 		*_wh_txn;
                 district_update 	*_d_txn;
                 customer_read 		*_c_txn;
@@ -78,10 +79,17 @@ namespace p_new_order {
                               warehouse_read *wh_txn,
                               district_update *d_txn,
                               customer_read *c_txn);
-                virtual bool Run();
                 
-                virtual uint32_t num_rmws();
-                virtual void get_rmws(big_key *array);                
+                virtual bool 			Run();                
+                virtual uint32_t 		num_rmws();
+                virtual void 			get_rmws(big_key *array);
+
+                uint32_t		get_nitems();
+                uint32_t* 		get_order_quantities();
+                uint64_t* 		get_item_ids();
+                uint64_t*		get_supplier_whs();
+                char** 			get_dist_info();
+
         };
         
         class new_order_ins : public txn {
@@ -111,6 +119,23 @@ namespace p_new_order {
                 oorder_ins(uint32_t wh, uint32_t d, uint32_t c, uint32_t nitems,
                            bool all_local,
                            district_update *dist_txn);
+                virtual bool Run();
+        };
+
+        class order_line_ins : public txn {
+
+                uint32_t 			_wh_id;
+                uint32_t 			_dstrct_id;
+                district_update 		*_dist_txn;	/* order id */
+                warehouse_read			*_wh_txn;
+                process_items 			*_items_txn;	/* stock data */
+                
+        public:
+                order_line_ins(uint32_t wh_id, uint32_t dstrct_id,
+                               district_update *dist_txn,
+                               warehouse_read *wh_txn,
+                               process_items *items_txn);
+
                 virtual bool Run();
         };
 };
