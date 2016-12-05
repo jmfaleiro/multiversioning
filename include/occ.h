@@ -7,6 +7,7 @@
 #include <occ_action.h>
 #include <exception>
 #include <record_buffer.h>
+#include <log.h>
 
 struct OCCActionBatch {
         uint32_t batchSize;
@@ -62,6 +63,9 @@ class OCCWorker : public Runnable {
         
         OCCWorker(OCCWorkerConfig conf, RecordBuffersConfig rb_conf);
         virtual uint64_t NumCompleted();
+
+        // TODO: temporarily use a static variable 
+        static Log LOGGER;
 };
 
 #endif		// OCC_H_

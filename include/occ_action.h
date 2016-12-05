@@ -45,6 +45,7 @@ class occ_composite_key {
         uint32_t tableId;
         uint64_t key;
         uint64_t old_tid;
+        uint64_t precommitted_tid;
         bool is_rmw;
         bool is_locked;
         bool is_initialized;
@@ -131,6 +132,10 @@ class OCCAction : public translator {
         
         void add_read_key(uint32_t table_id, uint64_t key);
         void add_write_key(uint32_t table_id, uint64_t key, bool is_rmw);
+
+        uint64_t get_precommitted_tid(uint32_t table_id, uint64_t key);
+        void precommit_log();
+        void try_log_commit();
 }; 
 
 #endif // OCC_ACTION_H_

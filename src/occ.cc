@@ -3,6 +3,8 @@
 #include <cpuinfo.h>
 #include <algorithm>
 
+Log OCCWorker::LOGGER;
+
 OCCWorker::OCCWorker(OCCWorkerConfig conf, struct RecordBuffersConfig rb_conf)
         : Runnable(conf.cpu)
 {
@@ -167,6 +169,11 @@ bool OCCWorker::RunSingle(OCCAction *action)
                         this->last_tid = action->compute_tid(epoch,
                                                              this->last_tid);
                 }
+                // Begin: logging BEFORE install write AFTER validation
+                action->precommit_log();
+                action->try_log_commit();
+                // End
+
                 action->install_writes();
                 action->cleanup();
                 fetch_and_increment(&config.num_completed);

@@ -1,4 +1,3 @@
-
 #include <occ_action.h>
 #include <algorithm>
 #include <occ.h>
@@ -271,6 +270,7 @@ void* OCCAction::read(uint64_t key, uint32_t table_id)
                 comp_key->value = record;
                 tid = stable_copy(key, table_id, record);
                 comp_key->old_tid = tid;
+                comp_key->precommitted_tid = get_precommitted_tid(table_id, key); 
         }        
         return RECORD_VALUE_PTR(comp_key->value);
 }
@@ -411,4 +411,34 @@ void OCCAction::install_writes()
         num_writes = this->writeset.size();
         for (i = 0; i < num_writes; ++i) 
                 install_single_write(this->writeset[i]);        
+}
+
+uint64_t OCCAction::get_precommitted_tid(uint32_t table_id, uint64_t key)
+{
+        uint64_t tid;
+        tid = OCCWorker::LOGGER.get_precommitted_tid(table_id, key);
+        return tid;
+}
+
+void OCCAction::precommit_log()
+{
+        uint32_t i, num_writes;
+
+        uint32_t tableId;
+        uint64_t key, tid;
+        void *value;
+
+        num_writes = this->writeset.size();
+        for (i = 0; i < num_writes; ++i) { 
+                tableId = this->writeset[i].tableId; 
+                key     = this->writeset[i].key; 
+                tid     = this->tid;
+                value = this->tables[tableId]->GetAlways(key);
+                OCCWorker::LOGGER.append_log_records(tableId, key, tid, value);
+                OCCWorker::LOGGER.register_to_pom(tableId, key, tid);
+        }
+}
+
+void OCCAction::try_log_commit()
+{
 }
