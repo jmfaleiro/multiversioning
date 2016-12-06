@@ -14,6 +14,13 @@ OCCWorker::OCCWorker(OCCWorkerConfig conf, struct RecordBuffersConfig rb_conf)
 
 void OCCWorker::Init()
 {
+        dag = LOGGER.get_fuzzy_log_client(); 
+        std::cout << "fuzzy log client at " << &dag << std::endl;
+}
+
+OCCWorker::~OCCWorker()
+{
+        LOGGER.close_fuzzy_log_client(dag);
 }
 
 /*
@@ -169,12 +176,28 @@ bool OCCWorker::RunSingle(OCCAction *action)
                         this->last_tid = action->compute_tid(epoch,
                                                              this->last_tid);
                 }
-                // Begin: logging BEFORE install write AFTER validation
-                action->precommit_log();
-                action->try_log_commit();
+                if (MULTIKEY_LOGGING) {
+                        // Logging phase 1
+                        // Begin: precommit log
+                        //        1) append log records
+                        //        2) mark this transaction as "precommitted"
+                        action->precommit_multikey_log();
+                } else {
+                        action->commit_singlekey_log();
+                }
                 // End
 
                 action->install_writes();
+
+                if (MULTIKEY_LOGGING) {
+                        // Logging phase 2
+                        // Begin: try commit
+                        //        1) find dependency
+                        //        2) register commit callback
+                        action->try_multikey_log_commit();
+                }
+                // End
+
                 action->cleanup();
                 fetch_and_increment(&config.num_completed);
                 validated = true;

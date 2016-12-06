@@ -9,6 +9,10 @@
 #include <record_buffer.h>
 #include <log.h>
 
+extern "C" {
+  #include "fuzzy_log.h"
+}
+
 struct OCCActionBatch {
         uint32_t batchSize;
         OCCAction **batch;
@@ -45,7 +49,12 @@ class OCCWorker : public Runnable {
         uint32_t last_epoch;
         uint32_t txn_counter;
         RecordBuffers *bufs;
-        
+
+ public:
+        // Fuzzlog client
+        struct DAGHandle *dag;
+
+ private:        
         virtual bool RunSingle(OCCAction *action);
         virtual uint32_t exec_pending(OCCAction **action_list);
         virtual void UpdateEpoch();
@@ -62,6 +71,7 @@ class OCCWorker : public Runnable {
         }
         
         OCCWorker(OCCWorkerConfig conf, RecordBuffersConfig rb_conf);
+        ~OCCWorker();
         virtual uint64_t NumCompleted();
 
         // TODO: temporarily use a static variable 

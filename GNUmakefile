@@ -1,9 +1,11 @@
 CFLAGS=-O2 -g -Wall -Wextra -Werror -std=c++0x -Wno-sign-compare 
-CFLAGS+=-DSNAPSHOT_ISOLATION=0 -DSMALL_RECORDS=0 -DREAD_COMMITTED=1
-LIBS=-lnuma -lpthread -lrt -lcityhash 
+CFLAGS+=-DSNAPSHOT_ISOLATION=0 -DSMALL_RECORDS=0 -DREAD_COMMITTED=0 -DMULTIKEY_LOGGING=0
+LIBS=-lnuma -lpthread -lrt -lcityhash -lc_link -ldl 
 CXX=g++
 
-LIBPATH=./libs/lib/
+DELOS_LIB=$(DELOS_RUST_LOC)/examples/c_linking/target/release $(DELOS_RUST_LOC)/src/*
+LIB_DIRS=./libs/lib/ $(DELOS_LIB)
+LIBPATH=.$(foreach d, $(LIB_DIRS), -L$d)
 INC_DIRS=include libs/include
 INCLUDE=$(foreach d, $(INC_DIRS), -I$d)
 SRC=src

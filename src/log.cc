@@ -1,87 +1,124 @@
 #include <mutex>
 #include <unordered_map>
 #include <deque>
+#include <sstream>
 #include <log.h>
 #include <db.h>
 #include <cassert>
+#include <occ_action.h>
 
-std::mutex mtx_log;
-std::mutex mtx_pom;
-
-void Log::append_log_records(uint32_t tableId, uint64_t key, uint64_t tid, void *value) 
+Log::Log()
 {
-  mtx_log.lock();
-
-  struct big_key k;
-  log_list *log_records;
-
-  k.table_id = tableId;
-  k.key = key; 
-
-  LogRecord log_record;
-  log_record.value = value;
-  log_record.tid = tid;
-  log_record.status = ACTIVE;
-
-  log_storage::iterator found = logRecords.find(k);
-  if (found == logRecords.end()) {
-    log_records = new log_list();
-    log_records->push_back(log_record);
-    logRecords[k] = log_records;
-  } else {
-    log_records = found->second;
-    log_records->push_back(log_record);
-  }
-
-  mtx_log.unlock();
+  logServerIp = "127.0.0.1:9990";
+  logColor.numcolors = 1;
+  logColor.mycolors = new ColorID[1]{100};
 }
 
-void Log::register_to_pom(uint32_t tableId, uint64_t key, uint64_t tid)
+struct DAGHandle* Log::get_fuzzy_log_client() {
+  return new_dag_handle_for_single_server(logServerIp.c_str(), &logColor);
+}
+
+void Log::close_fuzzy_log_client(struct DAGHandle *dag) {
+  close_dag_handle(dag);
+}
+
+Log::~Log()
+{
+  // cleanup callback map
+  callback_list *callbacks;
+  for (callback_map::iterator it = callbackMap.begin();
+        it != callbackMap.end(); ++it) {
+    callbacks = it->second;
+    if (callbacks != NULL)
+      delete callbacks;
+  }
+}
+
+void Log::append_singlekey_log_records(struct DAGHandle *dag, std::stringstream &log_stream) 
+{
+  std::string logstring = log_stream.str();
+  //uint32_t log_size = logstring.size();
+  //std::cout << "log record size: " << log_size << std::endl;
+  append(dag, const_cast<char*>(logstring.data()), logstring.size(), &logColor, NULL);
+}
+
+void Log::append_multikey_log_records() 
+{
+  // TODO: Will be used in two-phase commit protocol
+}
+
+void Log::commit_log()
+{
+  // TODO: Will be used in two-phase commit protocol
+}
+
+void Log::update_tid_status(uint64_t tid, int status)
 {
   mtx_pom.lock();
-
-  struct big_key k;
-  tid_queue *tids;
-
-  k.table_id = tableId;
-  k.key = key; 
-
-  precommit_map::iterator found = precommittedObjects.find(k);
-  if (found == precommittedObjects.end()) {
-    tids = new tid_queue();
-    tids->push_back(tid);
-    precommittedObjects[k] = tids;
-  } else {
-    tids = found->second;
-    tids->push_back(tid);
-  }
-
+  tidStatus[tid] = status;
   mtx_pom.unlock();
 }
 
-uint64_t Log::get_precommitted_tid(uint32_t tableId, uint64_t key)
+int Log::get_tid_status(uint64_t tid)
 {
+  int status;
   mtx_pom.lock();
-
-  struct big_key k;
-  tid_queue *tids;
-  uint64_t latest_tid;
-
-  k.table_id = tableId;
-  k.key = key; 
-
-  precommit_map::iterator found = precommittedObjects.find(k);
-  if (found == precommittedObjects.end()) {
+  tid_status_map::iterator found = tidStatus.find(tid);
+  if (found == tidStatus.end()) {
     mtx_pom.unlock();
     return 0;
   }
-
-  tids = found->second;
-  assert(tids->size() > 0);
-
-  latest_tid = tids->back();
-
+  status = found->second;
   mtx_pom.unlock();
 
-  return latest_tid;
+  return status;
+}
+
+void Log::remove_tid_status(uint64_t tid)
+{
+  mtx_pom.lock();
+
+  tidStatus.erase(tid);
+
+  mtx_pom.unlock(); 
+}
+
+void Log::add_callback(uint64_t tid, std::function<void()> callback)
+{
+  mtx_callback.lock();  
+ 
+  callback_list *callbacks;
+
+  callback_map::iterator found = callbackMap.find(GET_TIMESTAMP(tid));
+  if (found == callbackMap.end()) {
+    callbacks = new callback_list();
+    callbacks->push_back(callback);
+    callbackMap[GET_TIMESTAMP(tid)] = callbacks;
+  } else {
+    callbacks = found->second;
+    callbacks->push_back(callback);
+  }
+
+  mtx_callback.unlock();  
+}
+
+void Log::execute_callbacks(uint64_t tid)
+{
+  mtx_callback.lock();  
+
+  callback_list *callbacks;
+
+  callback_map::iterator found = callbackMap.find(GET_TIMESTAMP(tid));
+  if (found != callbackMap.end()) {
+    callbacks = found->second;
+    assert(callbacks != NULL);
+
+    for (callback_list::iterator it = callbacks->begin();
+          it != callbacks->end(); ++it) {
+      (*it)();
+    }
+    callbacks->clear();
+  }
+
+  mtx_callback.unlock();  
 }

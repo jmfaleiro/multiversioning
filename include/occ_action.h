@@ -5,6 +5,9 @@
 #include <table.h>
 #include <db.h>
 #include <record_buffer.h>
+#include <functional>
+#include <vector>
+#include <mutex>
 
 #define TIMESTAMP_MASK (0xFFFFFFFFFFFFFFF0)
 #define EPOCH_MASK (0xFFFFFFFF00000000)
@@ -104,6 +107,10 @@ class OCCAction : public translator {
         std::vector<occ_composite_key> writeset;
         std::vector<occ_composite_key> shadow_writeset;
 
+        // for logging
+        std::mutex mtx_log_commit;
+        uint32_t dependency_count;
+
         virtual uint64_t stable_copy(uint64_t key, uint32_t table_id,
                                      void *record); 
         virtual void validate_single(occ_composite_key &comp_key);
@@ -133,9 +140,16 @@ class OCCAction : public translator {
         void add_read_key(uint32_t table_id, uint64_t key);
         void add_write_key(uint32_t table_id, uint64_t key, bool is_rmw);
 
-        uint64_t get_precommitted_tid(uint32_t table_id, uint64_t key);
-        void precommit_log();
-        void try_log_commit();
+        // For single-key logging
+        void commit_singlekey_log();
+
+        // For multi-key logging
+        void precommit_multikey_log();
+        void try_multikey_log_commit();
+        void commit_multikey_log();
+
+        void add_callback(uint64_t tid, std::function<void()> callback);
+        void execute_callbacks();
 }; 
 
 #endif // OCC_ACTION_H_
