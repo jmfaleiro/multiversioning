@@ -328,6 +328,7 @@ uint64_t OCCAction::compute_tid(uint32_t epoch, uint64_t last_tid)
         uint64_t max_tid, cur_tid, key;
         uint32_t num_reads, num_writes, i, table_id;
         volatile uint64_t *value;
+        epoch = 0;
         max_tid = CREATE_TID(epoch, 0);
         if (max_tid <  last_tid)
                 max_tid = last_tid;
