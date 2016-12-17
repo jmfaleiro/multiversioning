@@ -46,6 +46,8 @@ struct workload_config
         uint32_t read_pct;
         uint32_t read_txn_size;
         uint32_t hot_position;
+        uint32_t partition_count;
+        uint32_t partition_num;
 };
 
 enum ConcurrencyControl {
@@ -363,6 +365,7 @@ class ExperimentConfig {
     }
     this->w_conf.read_pct = (uint32_t)atoi(argMap[READ_PCT]);
     this->w_conf.read_txn_size = (uint32_t)atoi(argMap[READ_TXN_SIZE]);
+    this->w_conf.partition_count = (uint32_t)atoi(argMap[NUM_LOCK_THREADS]);
     
     /* 
      * If experiment varies hot record location, make sure that location has 

@@ -300,8 +300,12 @@ txn* generate_transaction(workload_config config)
         } else if (config.experiment == 4) {
                 txn = generate_small_bank_action(config.num_records, true);
         } else if (config.experiment < 3) {
-                if (config.distribution == UNIFORM && my_gen == NULL)
-                        my_gen = new UniformGenerator(config.num_records);
+                if (config.distribution == UNIFORM && my_gen == NULL) {
+                        if (PARTITION)
+                                my_gen = new UniformGenerator(config.num_records, config.partition_count, config.partition_num);
+                        else if (my_gen == NULL)
+                                my_gen = new UniformGenerator(config.num_records);
+                }
                 else if (config.distribution == ZIPFIAN && my_gen == NULL)
                         my_gen = new ZipfGenerator((uint64_t)config.num_records,
                                                 config.theta);

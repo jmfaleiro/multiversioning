@@ -123,6 +123,7 @@ OCCActionBatch* setup_occ_single_input(OCCConfig config, workload_config w_conf)
         for (i = 0; i < config.numThreads; ++i) {
                 if (i == config.numThreads-1)
                         txns_per_thread += remainder;
+                w_conf.partition_num = i;
                 actions = create_single_occ_action_batch(txns_per_thread,
                                                          w_conf);
                 ret[i] = {

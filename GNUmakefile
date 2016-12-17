@@ -1,5 +1,5 @@
-CFLAGS=-O2 -g -Wall -Wextra -Werror -std=c++0x -Wno-sign-compare 
-CFLAGS+=-DSNAPSHOT_ISOLATION=0 -DSMALL_RECORDS=0 -DREAD_COMMITTED=0 -DMULTIKEY_LOGGING=0
+CFLAGS=-O2 -g -Wall -Wextra -Werror -std=c++0x -Wno-sign-compare
+CFLAGS+=-DSNAPSHOT_ISOLATION=0 -DSMALL_RECORDS=0 -DREAD_COMMITTED=0 -DPARTITION=0 -DMULTIKEY_LOGGING=0
 LIBS=-lnuma -lpthread -lrt -lcityhash -lc_link -ldl 
 CXX=g++
 
