@@ -10,6 +10,7 @@ static bool try_acquire_single(volatile uint64_t *lock_ptr)
         barrier();
         cmp_tid = *lock_ptr;
         barrier();
+
         if (IS_LOCKED(cmp_tid))
                 return false;        
         locked_tid = (cmp_tid | 1);
@@ -24,6 +25,7 @@ static void acquire_single(volatile uint64_t *lock_ptr)
         while (true) {
                 if (try_acquire_single(lock_ptr)) {
                         assert(IS_LOCKED(*lock_ptr));
+                        
                         break;
                 }
                 if (USE_BACKOFF) {
@@ -49,10 +51,10 @@ static void release_single(volatile uint64_t *lock_word)
         
         old_tid = *lock_word;
         assert(IS_LOCKED(old_tid));
-        old_tid = GET_TIMESTAMP(old_tid);
+        old_tid = UNLOCKED_TID(old_tid);
         xchged_tid = xchgq(lock_word, old_tid);
         assert(IS_LOCKED(xchged_tid));
-        assert(GET_TIMESTAMP(xchged_tid) == old_tid);
+        assert(UNLOCKED_TID(xchged_tid) == old_tid);
 }
 
 occ_composite_key::occ_composite_key(uint32_t table_id, uint64_t key,
@@ -197,7 +199,7 @@ void OCCAction::validate_single(occ_composite_key &comp_key)
         cur_tid = *version_ptr;
         barrier();
 
-        if ((GET_TIMESTAMP(cur_tid) != comp_key.old_tid) ||
+        if ((UNLOCKED_TID(cur_tid) != comp_key.old_tid) ||
             (IS_LOCKED(cur_tid) && !comp_key.is_rmw))
                 throw occ_validation_exception(VALIDATION_ERR);
 }
@@ -329,7 +331,7 @@ uint64_t OCCAction::compute_tid(uint32_t epoch, uint64_t last_tid)
         uint64_t max_tid, cur_tid, key;
         uint32_t num_reads, num_writes, i, table_id;
         volatile uint64_t *value;
-        epoch = 0;
+        //epoch = 0;
         max_tid = CREATE_TID(epoch, 0);
         if (max_tid <  last_tid)
                 max_tid = last_tid;
@@ -354,7 +356,10 @@ uint64_t OCCAction::compute_tid(uint32_t epoch, uint64_t last_tid)
                 if (cur_tid > max_tid)
                         max_tid = cur_tid;
         }
-        max_tid += 0x10;
+        // encode thread id
+        max_tid = ENCODE_THREAD_ID(max_tid, this->worker->config.cpu);
+        max_tid += 0x100;
+
         this->tid = max_tid;
         assert(!IS_LOCKED(max_tid));
         return max_tid;
@@ -438,26 +443,87 @@ void OCCAction::commit_singlekey_log()
 
 void OCCAction::precommit_multikey_log()
 {
-        // TODO
+        // 1) Append log records
+        uint32_t i, num_writes;
+
+        uint32_t tableId;
+        uint64_t key;
+        void *value;
+        std::stringstream log_stream;
+
+        num_writes = this->writeset.size();
+        for (i = 0; i < num_writes; ++i) { 
+                tableId = this->writeset[i].tableId; 
+                key     = this->writeset[i].key; 
+                value   = this->writeset[i].value;
+
+                log_stream << std::to_string(*(int*)value);
+                log_stream << std::to_string(this->tid);
+                log_stream << std::to_string(TID_PRECOMMITTED);
+                // TODO: log value
+                
+                //(void)tableId;
+                //(void)key;
+                // append logs
+                OCCWorker::LOGGER.append_multikey_log_records(tableId, key, log_stream);
+        }
+
+        // 2) Mark as precommit
+        xchgq((volatile uint64_t*)(OCCWorker::precommitted_tids + this->worker->config.cpu), this->tid);
 }
 
-void OCCAction::try_multikey_log_commit()
+void OCCAction::wait_until_commit(uint64_t wait_tid)
 {
-        // TODO
+        uint32_t backoff, temp;
+        uint64_t thr;
+        uint64_t cmp_tid;
+        if (USE_BACKOFF) 
+                 backoff = 1;
+
+        thr = DECODE_THREAD_ID(wait_tid);
+
+        while (true) {
+                barrier();
+                cmp_tid = OCCWorker::precommitted_tids[thr]; 
+                barrier();
+                if (cmp_tid != wait_tid)
+                        break;
+                if (USE_BACKOFF) {
+                        temp = backoff;
+                        while (temp-- > 0)
+                                single_work();
+                        backoff = backoff*2;
+                }
+        }
 }
 
 void OCCAction::commit_multikey_log()
 {
-        // TODO
-}
+        // wait precommitted tids
+        uint32_t i, num_reads, num_writes;
+        uint32_t tableId;
+        uint64_t key, tid;
+
+        num_reads = this->readset.size();
+        for (i = 0; i < num_reads; ++i) {
+                wait_until_commit(this->readset[i].old_tid);
+        }
+        
+        // TODO: commit log records
+        (void)num_writes;
+        (void)tableId;
+        (void)key;
+        (void)tid;
+
+   //   num_writes = this->writeset.size();
+   //   for (i = 0; i < num_writes; ++i) { 
+   //           tableId = this->writeset[i].tableId; 
+   //           key     = this->writeset[i].key; 
+   //           tid     = this->tid;
+   //           OCCWorker::LOGGER.commit_log_records(tableId, key, tid); 
+   //   }
 
 
-void OCCAction::add_callback(uint64_t tid, std::function<void()> callback)
-{
-        OCCWorker::LOGGER.add_callback(tid, callback);
-}
-
-void OCCAction::execute_callbacks()
-{
-        OCCWorker::LOGGER.execute_callbacks(this->tid);
+        // commit
+        xchgq((volatile uint64_t*)(OCCWorker::precommitted_tids + this->worker->config.cpu), 0);
 }

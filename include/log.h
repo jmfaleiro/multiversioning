@@ -24,9 +24,28 @@ enum log_status_t {
 
 class MultiKeyLogRecord {
   private:
+    char* logbuffer;
+  
     void *value;
     uint64_t tid;
     log_status_t status; 
+
+  public:
+    MultiKeyLogRecord() {
+      logbuffer = (char *)malloc(size());
+    }
+    ~MultiKeyLogRecord() {
+      delete logbuffer;
+    }
+
+    void append(void *value, uint64_t tid, log_status_t status);
+    uint32_t size() {
+      return sizeof(value) + sizeof(tid) + sizeof(status);
+    } 
+    char* ptr() {
+      return logbuffer;
+    }
+
 };
 
 class SingleKeyLogRecord {
@@ -66,20 +85,9 @@ class Log {
     // Fuzzylog server
     std::string logServerIp;
 
-    // Only used for multi-key logging
-    // in-memory precommitted objects map
-    typedef std::unordered_map<uint64_t, int> tid_status_map;  
-    tid_status_map tidStatus; 
-    std::mutex mtx_pom;
-
-    typedef std::vector<std::function<void()> > callback_list;
-    typedef std::unordered_map<uint64_t, callback_list*> callback_map;
-    callback_map callbackMap;
-    std::mutex mtx_callback;
-    
   public:
     Log();
-    ~Log();
+    ~Log(){}
     
     struct DAGHandle *get_fuzzy_log_client(struct colors *log_color);
     void close_fuzzy_log_client(struct DAGHandle *dag);
@@ -88,17 +96,8 @@ class Log {
     void append_singlekey_log_records(struct DAGHandle *dag, struct colors *log_color, SingleKeyLogRecord *logs);
 
     // Interface for multi-key logging 
-    void append_multikey_log_records();
-    void commit_log();
-
-    // Only used for multi-key logging
-    // Helpers for precommitted object map
-    void update_tid_status(uint64_t tid, int status);
-    int get_tid_status(uint64_t tid);
-    void remove_tid_status(uint64_t tid);
-
-    void add_callback(uint64_t tid, std::function<void()> callback);
-    void execute_callbacks(uint64_t tid);
+    void append_multikey_log_records(uint32_t tableId, uint64_t key, std::stringstream &log_record);
+    void commit_log_records(uint32_t tableId, uint64_t key, uint64_t tid);
 };
 
 

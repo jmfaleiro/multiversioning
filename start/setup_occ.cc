@@ -201,6 +201,9 @@ OCCWorker** setup_occ_workers(SimpleQueue<OCCActionBatch> **inputQueue,
                 };                
                 workers[i] = new(i) OCCWorker(worker_config, buf_config);
         }
+        // Two-phase logging: alloc memory for precommitted tids
+        OCCWorker::precommitted_tids = (uint64_t*)alloc_mem(sizeof(uint64_t)*numThreads, 0);
+
         std::cerr << "Done setting up occ workers\n";
         return workers;
 }

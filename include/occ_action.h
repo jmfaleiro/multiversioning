@@ -9,18 +9,24 @@
 #include <vector>
 #include <mutex>
 
-#define TIMESTAMP_MASK (0xFFFFFFFFFFFFFFF0)
-#define EPOCH_MASK (0xFFFFFFFF00000000)
+#define TIMESTAMP_MASK (0xFFFFFFFFFFFFFF00)
+#define LOCK_MASK      (0x0000000000000001)
+#define EPOCH_MASK     (0xFFFFFFFF00000000)
 
-#define CREATE_TID(epoch, counter) ((((uint64_t)epoch)<<32) | (((uint64_t)counter)<<4))
+#define CREATE_TID(epoch, counter) ((((uint64_t)epoch)<<32) | (((uint64_t)counter)<<8))
 #define GET_TIMESTAMP(tid) (tid & TIMESTAMP_MASK)
+#define UNLOCKED_TID(tid) (tid & ~(LOCK_MASK))
 #define GET_EPOCH(tid) ((tid & EPOCH_MASK)>>32)
 #define GET_COUNTER(tid) (GET_TIMESTAMP(tid) & ~EPOCH_MASK)
-#define IS_LOCKED(tid) ((tid & ~(TIMESTAMP_MASK)) == 1)
+#define IS_LOCKED(tid) ((tid & LOCK_MASK) == 1)
 #define RECORD_TID_PTR(rec_ptr) ((volatile uint64_t*)rec_ptr)
 #define RECORD_VALUE_PTR(rec_ptr) ((void*)&(((uint64_t*)rec_ptr)[1]))
 #define OCC_RECORD_SIZE(value_sz) (sizeof(uint64_t)+value_sz)
 #define REAL_RECORD_SIZE(value_sz) (value_sz - sizeof(uint64_t))
+
+#define THREAD_ID_MASK (0x000000000000007F)
+#define ENCODE_THREAD_ID(tid, thread_id)  (tid | (THREAD_ID_MASK & (uint64_t)thread_id)<<1)
+#define DECODE_THREAD_ID(tid)  ((tid & ~(TIMESTAMP_MASK))>>1)
 
 enum validation_err_t {
         READ_ERR,
@@ -48,7 +54,6 @@ class occ_composite_key {
         uint32_t tableId;
         uint64_t key;
         uint64_t old_tid;
-        uint64_t precommitted_tid;
         bool is_rmw;
         bool is_locked;
         bool is_initialized;
@@ -145,11 +150,8 @@ class OCCAction : public translator {
 
         // For multi-key logging
         void precommit_multikey_log();
-        void try_multikey_log_commit();
+        void wait_until_commit(uint64_t wait_tid);
         void commit_multikey_log();
-
-        void add_callback(uint64_t tid, std::function<void()> callback);
-        void execute_callbacks();
 }; 
 
 #endif // OCC_ACTION_H_

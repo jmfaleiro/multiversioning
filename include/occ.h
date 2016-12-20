@@ -43,7 +43,6 @@ struct OCCWorkerConfig {
 
 class OCCWorker : public Runnable {
  private:        
-        OCCWorkerConfig config;
         uint64_t incr_timestamp;
         uint64_t last_tid;
         uint32_t last_epoch;
@@ -51,9 +50,13 @@ class OCCWorker : public Runnable {
         RecordBuffers *bufs;
 
  public:
+        OCCWorkerConfig config;
         // Fuzzlog client
         struct DAGHandle *dag;
         struct colors *logColor;
+
+        // Two-phase logging
+        static volatile uint64_t *precommitted_tids;
 
  private:        
         virtual bool RunSingle(OCCAction *action);

@@ -4,6 +4,7 @@
 #include <algorithm>
 
 Log OCCWorker::LOGGER;
+volatile uint64_t *OCCWorker::precommitted_tids;
 
 OCCWorker::OCCWorker(OCCWorkerConfig conf, struct RecordBuffersConfig rb_conf)
         : Runnable(conf.cpu)
@@ -178,6 +179,7 @@ bool OCCWorker::RunSingle(OCCAction *action)
                         this->last_tid = action->compute_tid(epoch,
                                                              this->last_tid);
                 }
+
                 if (MULTIKEY_LOGGING) {
                         // Logging phase 1
                         action->precommit_multikey_log();
@@ -190,7 +192,7 @@ bool OCCWorker::RunSingle(OCCAction *action)
 
                 if (MULTIKEY_LOGGING) {
                         // Logging phase 2
-                        action->try_multikey_log_commit();
+                        action->commit_multikey_log();
                 }
                 // End
 
