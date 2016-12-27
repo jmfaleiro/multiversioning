@@ -14,8 +14,10 @@ OCCWorker::OCCWorker(OCCWorkerConfig conf, struct RecordBuffersConfig rb_conf)
 
 void OCCWorker::Init()
 {
-        dag = LOGGER.get_fuzzy_log_client(); 
-        std::cout << "fuzzy log client at " << &dag << std::endl;
+        logColor = new colors(); 
+        logColor->numcolors = 1;
+        logColor->mycolors = new ColorID[1]{(unsigned int)rand()};
+        dag = LOGGER.get_fuzzy_log_client(logColor); 
 }
 
 OCCWorker::~OCCWorker()
@@ -178,9 +180,6 @@ bool OCCWorker::RunSingle(OCCAction *action)
                 }
                 if (MULTIKEY_LOGGING) {
                         // Logging phase 1
-                        // Begin: precommit log
-                        //        1) append log records
-                        //        2) mark this transaction as "precommitted"
                         action->precommit_multikey_log();
                 } else {
                         action->commit_singlekey_log();
@@ -191,9 +190,6 @@ bool OCCWorker::RunSingle(OCCAction *action)
 
                 if (MULTIKEY_LOGGING) {
                         // Logging phase 2
-                        // Begin: try commit
-                        //        1) find dependency
-                        //        2) register commit callback
                         action->try_multikey_log_commit();
                 }
                 // End

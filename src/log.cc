@@ -6,16 +6,24 @@
 #include <db.h>
 #include <cassert>
 #include <occ_action.h>
+#include <mutex>
+
+std::mutex mtx;
 
 Log::Log()
 {
-  logServerIp = "127.0.0.1:9990";
-  logColor.numcolors = 1;
-  logColor.mycolors = new ColorID[1]{100};
+  // FIXME: remove hardcoded IP 
+  logServerIp = "52.15.156.76:9990";
 }
 
-struct DAGHandle* Log::get_fuzzy_log_client() {
-  return new_dag_handle_for_single_server(logServerIp.c_str(), &logColor);
+struct DAGHandle* Log::get_fuzzy_log_client(struct colors *log_color) {
+  mtx.lock();
+
+  DAGHandle *dagHandle = new_dag_handle_for_single_server(logServerIp.c_str(), log_color);
+  std::cout << "New DAGHandle " << dagHandle << std::endl;
+
+  mtx.unlock();
+  return dagHandle;
 }
 
 void Log::close_fuzzy_log_client(struct DAGHandle *dag) {
@@ -34,12 +42,10 @@ Log::~Log()
   }
 }
 
-void Log::append_singlekey_log_records(struct DAGHandle *dag, std::stringstream &log_stream) 
+void Log::append_singlekey_log_records(struct DAGHandle *dag, struct colors *log_color, SingleKeyLogRecord *logs) 
 {
-  std::string logstring = log_stream.str();
-  //uint32_t log_size = logstring.size();
-  //std::cout << "log record size: " << log_size << std::endl;
-  append(dag, const_cast<char*>(logstring.data()), logstring.size(), &logColor, NULL);
+  std::cout << "log record size: " << logs->size() << std::endl;
+  append(dag, logs->ptr(), logs->size(), log_color, NULL);
 }
 
 void Log::append_multikey_log_records() 
@@ -122,3 +128,14 @@ void Log::execute_callbacks(uint64_t tid)
 
   mtx_callback.unlock();  
 }
+
+void SingleKeyLogRecord::append(uint32_t tableId, uint64_t key, uint64_t value)
+{
+    char* buf = logbuffer + sizeof(LogRecord)*index;
+    memcpy(buf, &tableId, sizeof(tableId));
+    memcpy(buf + sizeof(tableId), &key, sizeof(key));
+    memcpy(buf + sizeof(tableId) + sizeof(key), &value, sizeof(value));
+    
+    this->index++;
+}
+

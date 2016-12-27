@@ -53,6 +53,7 @@ class OCCWorker : public Runnable {
  public:
         // Fuzzlog client
         struct DAGHandle *dag;
+        struct colors *logColor;
 
  private:        
         virtual bool RunSingle(OCCAction *action);

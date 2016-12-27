@@ -223,7 +223,6 @@ void* OCCAction::write_ref(uint64_t key, uint32_t table_id)
         occ_composite_key *comp_key;        
 
         num_writes = this->writeset.size();
-        std::cout << "num_writes: " << num_writes << std::endl;
         comp_key = NULL;
         for (i = 0; i < num_writes; ++i) {
                 if (writeset[i].key == key && writeset[i].tableId == table_id) {
@@ -273,9 +272,6 @@ void* OCCAction::read(uint64_t key, uint32_t table_id)
                 comp_key->value = record;
                 tid = stable_copy(key, table_id, record);
                 comp_key->old_tid = tid;
-      //        if (OCCWorker::LOGGER.get_tid_status(GET_TIMESTAMP(tid)) == TID_PRECOMMITTED) {
-      //          comp_key->precommitted_tid = GET_TIMESTAMP(tid);
-      //        }
         }        
         return RECORD_VALUE_PTR(comp_key->value);
 }
@@ -426,100 +422,33 @@ void OCCAction::commit_singlekey_log()
         uint32_t tableId;
         uint64_t key;
         //void *value;
-        std::stringstream log_stream;
-        // log tid
-        log_stream << std::to_string(this->tid);
-
         num_writes = this->writeset.size();
-        // log num of writes
-        log_stream << std::to_string(num_writes);
+        SingleKeyLogRecord *logs = new SingleKeyLogRecord(num_writes);
 
         for (i = 0; i < num_writes; ++i) { 
                 tableId = this->writeset[i].tableId; 
                 key     = this->writeset[i].key; 
-         //       value = this->tables[tableId]->GetAlways(key);
-
-                log_stream << std::to_string(tableId);
-                log_stream << std::to_string(key);
+              
+                logs->append(tableId, key, 0);
                 // TODO: log value
         }
-        OCCWorker::LOGGER.append_singlekey_log_records(this->worker->dag, log_stream);
+        OCCWorker::LOGGER.append_singlekey_log_records(this->worker->dag, this->worker->logColor, logs);
+        delete logs;
 }
 
 void OCCAction::precommit_multikey_log()
 {
-//      uint32_t i, num_writes;
-
-//      uint32_t tableId;
-//      uint64_t key;
-//      //void *value;
-//      std::stringstream log_stream;
-//      // log tid
-//      log_stream << std::to_string(this->tid);
-
-//      num_writes = this->writeset.size();
-//      // log num of writes
-//      log_stream << std::to_string(num_writes);
-
-//      for (i = 0; i < num_writes; ++i) { 
-//              tableId = this->writeset[i].tableId; 
-//              key     = this->writeset[i].key; 
-//       //       value = this->tables[tableId]->GetAlways(key);
-
-//              log_stream << std::to_string(tableId);
-//              log_stream << std::to_string(key);
-//              // TODO: log value
-//      }
-//      OCCWorker::LOGGER.append_multikey_log_records(log_stream);
-//        OCCWorker::LOGGER.update_tid_status(this->tid, TID_PRECOMMITTED);
+        // TODO
 }
 
 void OCCAction::try_multikey_log_commit()
 {
-//        mtx_log_commit.lock();
-//        // check dependency
-//        uint32_t i, num_reads;
-//        num_reads = this->readset.size();
-//        for (i = 0; i < num_reads; ++i) {
-//                if (this->readset[i].precommitted_tid != 0) {
-//                        this->dependency_count++;
-//                        std::function<void()> callback = std::bind(&OCCAction::commit_multikey_log, this);
-//                        add_callback(this->readset[i].precommitted_tid, callback);
-//                }
-//        }
-
-//        mtx_log_commit.unlock(); 
+        // TODO
 }
 
 void OCCAction::commit_multikey_log()
 {
-//        mtx_log_commit.lock();
-//        this->dependency_count--;
-//        if (this->dependency_count > 0) {
-//                mtx_log_commit.unlock();
-//                return;
-//        }
-//        
-//        // commit log record
-//        uint32_t i, num_writes;
-//        uint32_t tableId;
-//        uint64_t key, tid;
-
-//        num_writes = this->writeset.size();
-//        for (i = 0; i < num_writes; ++i) { 
-//                tableId = this->writeset[i].tableId; 
-//                key     = this->writeset[i].key; 
-//                tid     = this->tid;
-//                OCCWorker::LOGGER.commit_log(tableId, key, tid); 
-//        }
-
-//        // remove tid status
-//        OCCWorker::LOGGER.remove_tid_status(this->tid);
-
-//        // cleanup callbacks 
-//        execute_callbacks();
-
-//        mtx_log_commit.unlock();
+        // TODO
 }
 
 
