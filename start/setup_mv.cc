@@ -317,9 +317,12 @@ static Executor** SetupExecutors(uint32_t cpuStart,
           &configs[j].recycleQueues[k*queuesPerTable+(i%queuesPerTable)];
       }
       assert(configs[i].garbageConfig.workerChannels[j] != NULL);
-      execs[i] = new ((int)(cpuStart+i)) Executor(configs[i]);
     }
   }
+
+  /* Run executor threads */
+  for (uint32_t i = 0; i < numWorkers; ++i) 
+      execs[i] = new ((int)(cpuStart + i)) Executor(configs[i]);
   return execs;
 }
 
