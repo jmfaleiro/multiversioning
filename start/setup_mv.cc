@@ -7,6 +7,7 @@
 #include <iostream>
 #include <fstream>
 #include <setup_workload.h>
+#include <hybrid_worker.h>
 
 #define INPUT_SIZE 2048
 #define OFFSET 0
@@ -66,6 +67,21 @@ static void CreateQueues(int cpuNumber, uint32_t subCount,
         *OUT_SUB_QUEUES = subQueues;
 }
 
+static hybrid_worker** setup_threads(MVConfig mv_config, 
+                                     MVSchedulerConfig *sched_configs,
+                                     ExecutorConfig *exec_configs)
+{
+    uint32_t num_threads, i;
+    hybrid_worker **thread_ptrs;
+
+    num_threads = (uint32_t)(mv_config.numCCThreads + mv_config.numWorkerThreads);
+    thread_ptrs = (hybrid_worker**)malloc(sizeof(hybrid_worker*)*num_threads);
+    
+    for (i = 0; i < num_threads; ++i) 
+        thread_ptrs[i] = new(i) hybrid_worker(i, sched_configs[i], exec_configs[i]);
+    
+    return thread_ptrs;
+}
 
 static MVSchedulerConfig SetupSched(int cpuNumber, 
                                     uint32_t threadId, 
@@ -76,9 +92,8 @@ static MVSchedulerConfig SetupSched(int cpuNumber,
                                     uint32_t numRecycles,
                                     SimpleQueue<ActionBatch> *inputQueue,
                                     uint32_t numOutputs,
-                                    SimpleQueue<ActionBatch> *outputQueues,
-                                    int worker_start,
-                                    int worker_end) {
+                                    SimpleQueue<ActionBatch> *outputQueues)
+{
         assert(inputQueue != NULL && outputQueues != NULL);
         uint32_t subCount;
         SimpleQueue<ActionBatch> **pubQueues, **subQueues;
@@ -145,8 +160,6 @@ static MVSchedulerConfig SetupSched(int cpuNumber,
                 pubQueues,
                 subQueues,
                 queueArray,
-                worker_start,
-                worker_end,
         };
         return cfg;
 }
@@ -259,71 +272,66 @@ static ExecutorConfig SetupExec(uint32_t cpuNumber, uint32_t threadId,
   return config;
 }
 
-static Executor** SetupExecutors(uint32_t cpuStart,
-                                 uint32_t numWorkers, 
-                                 uint32_t numCCThreads,
-                                 uint32_t queuesPerTable,
-                                 SimpleQueue<ActionBatch> *inputQueue,
-                                 SimpleQueue<ActionBatch> *outputQueue,
-                                 uint32_t queuesPerCCThread,
-                                 SimpleQueue<MVRecordList> ***ccQueues) {  
-  assert(queuesPerCCThread == numWorkers);
-  assert(queuesPerTable == numWorkers);
+static ExecutorConfig* SetupExecutors(uint32_t numWorkers, 
+                                      uint32_t queuesPerTable,
+                                      SimpleQueue<ActionBatch> *inputQueue,
+                                      SimpleQueue<ActionBatch> *outputQueue,
+                                      uint32_t queuesPerCCThread,
+                                      SimpleQueue<MVRecordList> ***ccQueues) 
+{ 
+    assert(queuesPerCCThread == numWorkers);
+    assert(queuesPerTable == numWorkers);
 
-  uint64_t threadDbSz = dbSize / numWorkers;
-  Executor **execs = (Executor**)malloc(sizeof(Executor*)*numWorkers);
-  volatile uint32_t *epochArray = 
-    (volatile uint32_t*)malloc(sizeof(uint32_t)*(numWorkers+1));  
-  memset((void*)epochArray, 0x0, sizeof(uint32_t)*(numWorkers+1));
+    uint64_t threadDbSz = dbSize / numWorkers;
+    ExecutorConfig *configs = (ExecutorConfig*)malloc(sizeof(ExecutorConfig)*numWorkers);
+    volatile uint32_t *epochArray = 
+        (volatile uint32_t*)malloc(sizeof(uint32_t)*(numWorkers+1));  
+    memset((void*)epochArray, 0x0, sizeof(uint32_t)*(numWorkers+1));
 
-  uint32_t numTables = 1;
+    uint32_t numTables = 1;
 
-  uint64_t *sizeData = (uint64_t*)malloc(sizeof(uint32_t)*2);
-  sizeData[0] = GLOBAL_RECORD_SIZE;
-  sizeData[1] = threadDbSz/recordSize;
+    uint64_t *sizeData = (uint64_t*)malloc(sizeof(uint32_t)*2);
+    sizeData[0] = GLOBAL_RECORD_SIZE;
+    sizeData[1] = threadDbSz/recordSize;
 
-  // First pass, create configs. Each config contains a reference to each 
-  // worker's local GC queue.
-  ExecutorConfig configs[numWorkers];  
-  for (uint32_t i = 0; i < numWorkers; ++i) {
-          SimpleQueue<ActionBatch> *curOutput = &outputQueue[i];
-          //    if (i == 0) {
-          //            curOutput = &outputQueue[i];
-          //    }
-    configs[i] = SetupExec(cpuStart+i, i, numWorkers, &epochArray[i], 
-                           &epochArray[numWorkers],
-                           &sizeData[0],
-                           &sizeData[1],
-                           &inputQueue[i],
-                           curOutput,
-                           numCCThreads,
-                           1,
-                           queuesPerTable);
-  }
+    // First pass, create configs. Each config contains a reference to each 
+    // worker's local GC queue.
+    for (uint32_t i = 0; i < numWorkers; ++i) {
+        SimpleQueue<ActionBatch> *curOutput = &outputQueue[i];
+        //    if (i == 0) {
+        //            curOutput = &outputQueue[i];
+        //    }
+        configs[i] = SetupExec(i, i, numWorkers, &epochArray[i], 
+                               &epochArray[numWorkers],
+                               &sizeData[0],
+                               &sizeData[1],
+                               &inputQueue[i],
+                               curOutput,
+                               numWorkers,
+                               1,
+                               queuesPerTable);
+    }
   
-  // Second pass, connect recycled data producers with consumers
-  for (uint32_t i = 0; i < numWorkers; ++i) {
+    // Second pass, connect recycled data producers with consumers
+    for (uint32_t i = 0; i < numWorkers; ++i) {
     
-    // Connect to cc threads
-    for (uint32_t j = 0; j < numCCThreads; ++j) {
-      configs[i].garbageConfig.ccChannels[j] = ccQueues[j][i%queuesPerCCThread];
-      assert(configs[i].garbageConfig.ccChannels[j] != NULL);
+        // Connect to cc threads
+        for (uint32_t j = 0; j < numWorkers; ++j) {
+            configs[i].garbageConfig.ccChannels[j] = ccQueues[j][i%queuesPerCCThread];
+            assert(configs[i].garbageConfig.ccChannels[j] != NULL);
+        }
+
+        // Connect to every workers gc queue
+        for (uint32_t j = 0; j < numWorkers; ++j) {
+            for (uint32_t k = 0; k < numTables; ++k) {
+                configs[i].garbageConfig.workerChannels[j] = 
+                    &configs[j].recycleQueues[k*queuesPerTable+(i%queuesPerTable)];
+            }
+            assert(configs[i].garbageConfig.workerChannels[j] != NULL);
+        }
     }
 
-    // Connect to every workers gc queue
-    for (uint32_t j = 0; j < numWorkers; ++j) {
-      for (uint32_t k = 0; k < numTables; ++k) {
-        configs[i].garbageConfig.workerChannels[j] = 
-          &configs[j].recycleQueues[k*queuesPerTable+(i%queuesPerTable)];
-      }
-      assert(configs[i].garbageConfig.workerChannels[j] != NULL);
-    }
-  }
-
-  /* Run executor threads */
-  for (uint32_t i = 0; i < numWorkers; ++i) 
-      execs[i] = new ((int)(cpuStart + i)) Executor(configs[i]);
-  return execs;
+    return configs;
 }
 
 // Setup an array of queues.
@@ -347,86 +355,80 @@ static SimpleQueue<T>* SetupQueuesMany(uint32_t numEntries, uint32_t numQueues, 
   return queues;
 }
 
-static MVScheduler** SetupSchedulers(int numProcs, 
-                                     SimpleQueue<ActionBatch> **inputQueueRef_OUT, 
-                                     SimpleQueue<ActionBatch> **outputQueueRefs_OUT, 
-                                     uint32_t numOutputs,
-                                     size_t allocatorSize, 
-                                     uint32_t numTables,
-                                     size_t tableSize, 
-                                     SimpleQueue<MVRecordList> ***gcRefs_OUT,
-                                     int worker_start, int worker_end) {  
-        
-  size_t partitionChunk = tableSize/numProcs;
-  size_t *tblPartitionSizes = (size_t*)malloc(numTables*sizeof(size_t));
-  for (uint32_t i = 0; i < numTables; ++i) {
-    tblPartitionSizes[i] = partitionChunk;
-  }
-
-  // Set up queues for leader thread
-  char *inputArray = (char*)alloc_mem(CACHE_LINE*INPUT_SIZE, 0);            
-  SimpleQueue<ActionBatch> *leaderInputQueue = 
-    new SimpleQueue<ActionBatch>(inputArray, INPUT_SIZE);
-
-  SimpleQueue<ActionBatch> *leaderOutputQueues = 
-    SetupQueuesMany<ActionBatch>(INPUT_SIZE, (uint32_t)numOutputs, 0);
-  
-  MVScheduler **schedArray = 
-    (MVScheduler**)alloc_mem(sizeof(MVScheduler*)*numProcs, 79);
-  
-  MVSchedulerConfig globalLeaderConfig = SetupSched(0, 0, numProcs, 
-                                                    allocatorSize,
-                                                    numTables,
-                                                    tblPartitionSizes, 
-                                                    numOutputs,
-                                                    leaderInputQueue,
-                                                    numOutputs,
-                                                    leaderOutputQueues,
-                                                    worker_start, worker_end);
-
-  schedArray[0] = 
-    new (globalLeaderConfig.cpuNumber) MVScheduler(globalLeaderConfig);
-  gcRefs_OUT[0] = globalLeaderConfig.recycleQueues;
-
-  MVSchedulerConfig localLeaderConfig = globalLeaderConfig;
-  
-  for (uint32_t i = 1; i < numProcs; ++i) {
-    if (i % 10 == 0) {
-      int leaderNum = i/10;
-      auto inputQueue = globalLeaderConfig.pubQueues[9+leaderNum-1];
-      auto outputQueue = globalLeaderConfig.subQueues[9+leaderNum-1];
-      MVSchedulerConfig config = SetupSched(i, i, numProcs, allocatorSize, 
-                                            numTables,
-                                            tblPartitionSizes, 
-                                            numOutputs,
-                                            inputQueue, 
-                                            1,
-                                            outputQueue, worker_start,
-                                            worker_end);
-      schedArray[i] = new (config.cpuNumber) MVScheduler(config);
-      gcRefs_OUT[i] = config.recycleQueues;
-      localLeaderConfig = config;
+static MVSchedulerConfig* SetupSchedulers(int numProcs, 
+                                          SimpleQueue<ActionBatch> **inputQueueRef_OUT, 
+                                          SimpleQueue<ActionBatch> **outputQueueRefs_OUT, 
+                                          uint32_t numOutputs,
+                                          size_t allocatorSize, 
+                                          uint32_t numTables,
+                                          size_t tableSize, 
+                                          SimpleQueue<MVRecordList> ***gcRefs_OUT)
+{  
+    size_t partitionChunk = tableSize/numProcs;
+    size_t *tblPartitionSizes = (size_t*)malloc(numTables*sizeof(size_t));
+    for (uint32_t i = 0; i < numTables; ++i) {
+        tblPartitionSizes[i] = partitionChunk;
     }
-    else {
-      int index = i%10;      
-      auto inputQueue = localLeaderConfig.pubQueues[index-1];
-      auto outputQueue = localLeaderConfig.subQueues[index-1];
-      MVSchedulerConfig subConfig = SetupSched(i, i, numProcs, allocatorSize, 
-                                               numTables,
-                                               tblPartitionSizes, 
-                                               numOutputs,
-                                               inputQueue, 
-                                               1,
-                                               outputQueue, worker_start,
-                                               worker_end);
-      schedArray[i] = new (subConfig.cpuNumber) MVScheduler(subConfig);
-      gcRefs_OUT[i] = subConfig.recycleQueues;
-    }
-  }
+
+    // Set up queues for leader thread
+    char *inputArray = (char*)alloc_mem(CACHE_LINE*INPUT_SIZE, 0);            
+    SimpleQueue<ActionBatch> *leaderInputQueue = 
+        new SimpleQueue<ActionBatch>(inputArray, INPUT_SIZE);
+
+    SimpleQueue<ActionBatch> *leaderOutputQueues = 
+        SetupQueuesMany<ActionBatch>(INPUT_SIZE, (uint32_t)numOutputs, 0);
+    
+    MVSchedulerConfig *schedArray = (MVSchedulerConfig*)malloc(sizeof(MVSchedulerConfig)*numProcs);
   
-  *inputQueueRef_OUT = leaderInputQueue;
-  *outputQueueRefs_OUT = leaderOutputQueues;
-  return schedArray;
+    MVSchedulerConfig globalLeaderConfig = SetupSched(0, 0, numProcs, 
+                                                      allocatorSize,
+                                                      numTables,
+                                                      tblPartitionSizes, 
+                                                      numOutputs,
+                                                      leaderInputQueue,
+                                                      numOutputs,
+                                                      leaderOutputQueues);
+
+    schedArray[0] = globalLeaderConfig;
+    gcRefs_OUT[0] = globalLeaderConfig.recycleQueues;
+
+    MVSchedulerConfig localLeaderConfig = globalLeaderConfig;
+  
+    for (uint32_t i = 1; i < numProcs; ++i) {
+        if (i % 10 == 0) {
+            int leaderNum = i/10;
+            auto inputQueue = globalLeaderConfig.pubQueues[9+leaderNum-1];
+            auto outputQueue = globalLeaderConfig.subQueues[9+leaderNum-1];
+            MVSchedulerConfig config = SetupSched(i, i, numProcs, allocatorSize, 
+                                                  numTables,
+                                                  tblPartitionSizes, 
+                                                  numOutputs,
+                                                  inputQueue, 
+                                                  1,
+                                                  outputQueue);
+            schedArray[i] = config; 
+            gcRefs_OUT[i] = config.recycleQueues;
+            localLeaderConfig = config;
+        }
+        else {
+            int index = i%10;      
+            auto inputQueue = localLeaderConfig.pubQueues[index-1];
+            auto outputQueue = localLeaderConfig.subQueues[index-1];
+            MVSchedulerConfig subConfig = SetupSched(i, i, numProcs, allocatorSize, 
+                                                     numTables,
+                                                     tblPartitionSizes, 
+                                                     numOutputs,
+                                                     inputQueue, 
+                                                     1,
+                                                     outputQueue); 
+            schedArray[i] = subConfig;
+            gcRefs_OUT[i] = subConfig.recycleQueues;
+        }
+    }
+  
+    *inputQueueRef_OUT = leaderInputQueue;
+    *outputQueueRefs_OUT = leaderOutputQueues;
+    return schedArray;
 }
 
 static uint32_t get_num_epochs(MVConfig config)
@@ -658,47 +660,42 @@ static void init_database(MVConfig config,
                           workload_config w_conf,
                           SimpleQueue<ActionBatch> *input_queue,
                           SimpleQueue<ActionBatch> *output_queue,
-                          MVScheduler **sched_threads,
-                          Executor **exec_threads)
+                          hybrid_worker **db_threads)
                           
 {
         uint32_t i;
         ActionBatch init_batch;
-        int pin_success;
+        int pin_success, num_threads;
+        
+        num_threads = config.numCCThreads + config.numWorkerThreads;
         pin_success = pin_thread(79);
         assert(pin_success == 0);
         init_batch = generate_db(w_conf);
-        for (i = 0; i < config.numCCThreads; ++i) {
-                sched_threads[i]->Run();        
-                sched_threads[i]->WaitInit();
-        }
-        for (i = 0; i < config.numWorkerThreads; ++i) {
-                exec_threads[i]->Run();
-                exec_threads[i]->WaitInit();                
+        for (i = 0; i < num_threads; ++i) {
+            db_threads[i]->Run();
+            db_threads[i]->WaitInit();
         }
 
         input_queue->EnqueueBlocking(init_batch);
-        for (i = 0; i < config.numWorkerThreads; ++i) 
+        for (i = 0; i < num_threads; ++i) 
                 (&output_queue[i])->DequeueBlocking();
         barrier();
         std::cerr << "Done loading the database!\n";
         return;
 }
 
-static MVScheduler** setup_scheduler_threads(MVConfig config,
-                                             SimpleQueue<ActionBatch> **sched_input,
-                                             SimpleQueue<ActionBatch> **sched_output,
-                                             SimpleQueue<MVRecordList> ***gc_queues)
+static MVSchedulerConfig* setup_scheduler_threads(MVConfig config,
+                                                  SimpleQueue<ActionBatch> **sched_input,
+                                                  SimpleQueue<ActionBatch> **sched_output,
+                                                  SimpleQueue<MVRecordList> ***gc_queues)
 {
         uint64_t stickies_per_thread;
         uint32_t num_tables;
-        MVScheduler **schedulers;
-        int worker_start, worker_end;
-        
-        worker_start = (int)config.numCCThreads;
-        worker_end = worker_start + config.numWorkerThreads - 1;
+        MVSchedulerConfig *sched_configs;
+        int num_procs = config.numCCThreads + config.numWorkerThreads;
+
         if (config.experiment < 3) {
-                stickies_per_thread = (((uint64_t)1)<<27);
+                stickies_per_thread = (((uint64_t)1)<<24);
                 num_tables = 1;
         } else if (config.experiment < 5) {
                 stickies_per_thread = (((uint64_t)1)<<24);
@@ -706,33 +703,37 @@ static MVScheduler** setup_scheduler_threads(MVConfig config,
         } else {
                 assert(false);
         }
-        schedulers = SetupSchedulers(config.numCCThreads, sched_input,
-                                     sched_output, config.numWorkerThreads+1,
-                                     stickies_per_thread, num_tables,
-                                     config.numRecords, gc_queues,
-                                     worker_start,
-                                     worker_end);
-        assert(schedulers != NULL);
+        sched_configs = SetupSchedulers(num_procs, 
+                                        sched_input,
+                                        sched_output, 
+                                        num_procs + 1,
+                                        stickies_per_thread, 
+                                        num_tables,
+                                        config.numRecords, 
+                                        gc_queues);
+                                        
+        assert(sched_configs != NULL);
         assert(*sched_input != NULL);
         assert(*sched_output != NULL);
         std::cerr << "Done setting up scheduler threads!\n";
         std::cerr << "Num scheduler threads:";
         std::cerr << MVScheduler::NUM_CC_THREADS << "\n";
-        return schedulers;
+        return sched_configs;
 }
 
-static Executor** setup_executors(MVConfig config,
+static ExecutorConfig* setup_executors(MVConfig config,
                                   SimpleQueue<ActionBatch> *sched_outputs,
                                   SimpleQueue<ActionBatch> *output_queue,
                                   SimpleQueue<MVRecordList> ***gc_queues)
 {
-        uint32_t start_cpu, queues_per_table, queues_per_cc_thread;
-        Executor **execs;
-        start_cpu = config.numCCThreads;
-        queues_per_table = config.numWorkerThreads;
-        queues_per_cc_thread = config.numWorkerThreads;
-        execs = SetupExecutors(start_cpu, config.numWorkerThreads,
-                               config.numCCThreads, queues_per_table,
+        uint32_t queues_per_table, queues_per_cc_thread;
+        ExecutorConfig *execs;
+        int num_procs = config.numWorkerThreads + config.numCCThreads; 
+
+        queues_per_table = num_procs;
+        queues_per_cc_thread = num_procs; 
+        execs = SetupExecutors(num_procs,
+                               queues_per_table,
                                sched_outputs, output_queue,
                                queues_per_cc_thread, gc_queues);
         std::cerr << "Done setting up executors!\n";
@@ -741,14 +742,17 @@ static Executor** setup_executors(MVConfig config,
 
 void do_mv_experiment(MVConfig mv_config, workload_config w_config)
 {
-        MVScheduler **schedThreads;
-        Executor **execThreads;
+        MVSchedulerConfig *sched_configs;
+        ExecutorConfig *exec_configs;
+        hybrid_worker **db_workers;
+
         SimpleQueue<ActionBatch> *schedInputQueue;
         SimpleQueue<ActionBatch> *schedOutputQueues;
         SimpleQueue<MVRecordList> **schedGCQueues[mv_config.numCCThreads];
         SimpleQueue<ActionBatch> *outputQueue;
         std::vector<ActionBatch> input_placeholder;
         timespec elapsed_time;
+        uint32_t num_threads;
 
         /* 
          * XXX Need this for copying old versions of records if a txn performs 
@@ -760,20 +764,23 @@ void do_mv_experiment(MVConfig mv_config, workload_config w_config)
                 GLOBAL_RECORD_SIZE = 1000;
         else
                 GLOBAL_RECORD_SIZE = 8;
-        MVScheduler::NUM_CC_THREADS = (uint32_t)mv_config.numCCThreads;
-        NUM_CC_THREADS = (uint32_t)mv_config.numCCThreads;
+        
+        num_threads = (uint32_t)(mv_config.numCCThreads + mv_config.numWorkerThreads);
+        MVScheduler::NUM_CC_THREADS = num_threads;
+        NUM_CC_THREADS = num_threads;
         assert(mv_config.distribution < 2);
         outputQueue = SetupQueuesMany<ActionBatch>(INPUT_SIZE,
-                                                   mv_config.numWorkerThreads,
+                                                   num_threads,
                                                    71);
-        schedThreads = setup_scheduler_threads(mv_config, &schedInputQueue,
-                                               &schedOutputQueues,
-                                               schedGCQueues);
+        sched_configs = setup_scheduler_threads(mv_config, &schedInputQueue,
+                                                &schedOutputQueues,
+                                                schedGCQueues);
         mv_setup_input_array(&input_placeholder, mv_config, w_config);
-        execThreads = setup_executors(mv_config, schedOutputQueues, outputQueue,
+        exec_configs = setup_executors(mv_config, schedOutputQueues, outputQueue,
                                       schedGCQueues);
+        db_workers = setup_threads(mv_config, sched_configs, exec_configs);
         init_database(mv_config, w_config, schedInputQueue, outputQueue,
-                      schedThreads, execThreads);
+                      db_workers); 
         pin_memory();
         elapsed_time = run_experiment(schedInputQueue,  //&schedOutputQueues[config.numWorkerThreads],
                                       outputQueue,

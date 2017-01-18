@@ -67,37 +67,22 @@ class MVActionHasher : public Runnable {
 };
 
 struct MVSchedulerConfig {
-  int cpuNumber;
-  uint32_t threadId;
-  size_t allocatorSize;         // Scheduler thread's local sticky allocator
-  uint32_t numTables;           // Number of tables in the system
-  size_t *tblPartitionSizes;    // Size of each table's partition
+    int cpuNumber;
+    uint32_t threadId;
+    size_t allocatorSize;         // Scheduler thread's local sticky allocator
+    uint32_t numTables;           // Number of tables in the system
+    size_t *tblPartitionSizes;    // Size of each table's partition
   
-  uint32_t numOutputs;
+    uint32_t numOutputs;
         
-  uint32_t numSubords;
-  uint32_t numRecycleQueues;
+    uint32_t numSubords;
+    uint32_t numRecycleQueues;
 
-  SimpleQueue<ActionBatch> *inputQueue;
-  SimpleQueue<ActionBatch> *outputQueues;
-  SimpleQueue<ActionBatch> **pubQueues;
-  SimpleQueue<ActionBatch> **subQueues;
-  SimpleQueue<MVRecordList> **recycleQueues;
-
-        int worker_start;
-        int worker_end;
-        
-  /*
-  // Coordination queues required by the leader thread.
-  SimpleQueue<ActionBatch> *leaderInputQueue;
-  SimpleQueue<ActionBatch> *leaderOutputQueue;
-  SimpleQueue<ActionBatch> **leaderEpochStartQueues;
-  SimpleQueue<ActionBatch> **leaderEpochStopQueues;
-    
-  // Coordination queues required by the subordinate threads.
-  SimpleQueue<ActionBatch> *subordInputQueue;
-  SimpleQueue<ActionBatch> *subordOutputQueue;
-  */
+    SimpleQueue<ActionBatch> *inputQueue;
+    SimpleQueue<ActionBatch> *outputQueues;
+    SimpleQueue<ActionBatch> **pubQueues;
+    SimpleQueue<ActionBatch> **subQueues;
+    SimpleQueue<MVRecordList> **recycleQueues;
 };
 
 /*
@@ -109,17 +94,18 @@ class MVScheduler : public Runnable {
         
  private:
         static inline uint32_t GetCCThread(CompositeKey key);
+        static volatile uint64_t _batch_complete;
 
-    MVSchedulerConfig config;
-    MVRecordAllocator *alloc;
+        bool _is_leader;
+        MVSchedulerConfig config;
+        MVRecordAllocator *alloc;
 
-    MVTablePartition **partitions;
+        MVTablePartition **partitions;
 
-    uint32_t epoch;
-    uint32_t txnCounter;
-    uint64_t txnMask;
-
-    uint32_t threadId;
+        uint32_t epoch;
+        uint32_t txnCounter;
+        uint64_t txnMask;
+        uint32_t threadId;
 
  protected:
         virtual void StartWorking();
@@ -151,8 +137,10 @@ class MVScheduler : public Runnable {
             */
     }
 
-        static uint32_t NUM_CC_THREADS;
-        MVScheduler(MVSchedulerConfig config);
+    static uint32_t NUM_CC_THREADS;
+    MVScheduler(MVSchedulerConfig config);
+    void single_iteration();
+    void wait_batch();
 };
 
 

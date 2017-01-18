@@ -112,10 +112,49 @@ Executor::Executor(ExecutorConfig cfg) : Runnable (cfg.cpu)
         this->counter = 0;
         this->pendingList = new (config.cpu) PendingActionList(1000);
         this->garbageBin = new (config.cpu) GarbageBin(config.garbageConfig);
+        this->_epoch = 1;
 }
 
 void Executor::Init() 
 {
+}
+
+void Executor::wait_lowwatermark(uint32_t e)
+{
+    uint32_t i, min_epoch, temp;
+    
+    /* Not the leader */
+    if (config.threadId != 0) {
+        while (true) {
+            barrier();
+            temp = *config.lowWaterMarkPtr;
+            barrier();
+            
+            if (temp == e)
+                return;
+        }
+    } 
+
+    /* Only the leader executes this piece of code */
+    assert(config.threadId == 0);
+    while (true) {        
+        min_epoch = *config.epochPtr;
+        for (i = 0; i < config.numExecutors; ++i) {
+            barrier();
+            temp = config.epochPtr[i];
+            barrier();
+
+            if (temp < min_epoch)  
+                min_epoch = temp;
+        }
+        
+        if (min_epoch == e) {
+            barrier();
+            *config.lowWaterMarkPtr = min_epoch;
+            barrier();
+            return;
+        }
+    }
 }
 
 /* Adjusts the low watermark of completed epoch#s across execution threads */
@@ -140,6 +179,35 @@ void Executor::adjust_lowwatermark()
         barrier();
         *config.lowWaterMarkPtr = min_epoch;
         barrier();
+}
+
+void Executor::single_iteration()
+{
+    ActionBatch batch;
+
+    garbageBin->FinishEpoch(_epoch - 1);
+
+    if (config.threadId == 0) {
+        while (!config.inputQueue->Dequeue(&batch)) 
+            adjust_lowwatermark();        
+    } else {
+        batch = config.inputQueue->DequeueBlocking();
+    }
+
+    ProcessBatch(batch);
+    _epoch += 1;
+
+    barrier();
+    *config.epochPtr = _epoch;
+    barrier();
+    
+    if (config.threadId == 0)
+        adjust_lowwatermark();
+}
+
+void Executor::wait_batch()
+{
+    wait_lowwatermark(_epoch);
 }
 
 void Executor::StartWorking() 

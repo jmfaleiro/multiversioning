@@ -133,7 +133,7 @@ class Executor : public Runnable {
         ExecutorConfig config;
         GarbageBin *garbageBin;
         PendingActionList *pendingList;
-        uint32_t epoch;
+        uint32_t _epoch;
 
         RecordAllocator **allocators;
         void **bufs;
@@ -157,6 +157,9 @@ class Executor : public Runnable {
         bool run_readonly(mv_action *action);
         void RecycleData();
 
+
+        void wait_lowwatermark(uint32_t e);
+
         void adjust_lowwatermark();
 
         uint32_t DoPendingGC();
@@ -169,6 +172,9 @@ class Executor : public Runnable {
         }
 
         Executor(ExecutorConfig config);
+
+        void single_iteration();
+        void wait_batch();
 };
 
 #endif          // EXECUTOR_H_

@@ -15,14 +15,17 @@
 using namespace std;
 
 uint32_t MVScheduler::NUM_CC_THREADS = 1;
+volatile uint64_t MVScheduler::_batch_complete = 0x1;
 
-void* MVActionHasher::operator new(std::size_t sz, int cpu) {
+void* MVActionHasher::operator new(std::size_t sz, int cpu) 
+{
   void *ret = alloc_mem(sz, cpu);
   assert(ret != NULL);
   return ret;
 }
 
-void MVActionHasher::Init() {
+void MVActionHasher::Init() 
+{
 }
 
 MVActionHasher:: MVActionHasher(int cpuNumber,
@@ -94,9 +97,7 @@ MVScheduler::MVScheduler(MVSchedulerConfig config) :
 
         /* Initialize the allocator and the partitions. */
         this->alloc = new (config.cpuNumber) MVRecordAllocator(config.allocatorSize, 
-                                                               config.cpuNumber,
-                                                               config.worker_start,
-                                                               config.worker_end);
+                                                               config.cpuNumber);
         for (uint32_t i = 0; i < this->config.numTables; ++i) {
 
                 /* Track the partition locally and add it to the database's catalog. */
@@ -114,19 +115,46 @@ static inline uint64_t compute_version(uint32_t epoch, uint32_t txnCounter) {
 
 void MVScheduler::StartWorking() 
 {
-        //  std::cout << config.numRecycleQueues << "\n";
-        while (true) {
-                ActionBatch curBatch = config.inputQueue->DequeueBlocking();
-                for (uint32_t i = 0; i < config.numSubords; ++i) 
-                        config.pubQueues[i]->EnqueueBlocking(curBatch);
-                for (uint32_t i = 0; i < curBatch.numActions; ++i) 
-                        ScheduleTransaction(curBatch.actionBuf[i]);
-                for (uint32_t i = 0; i < config.numSubords; ++i) 
-                        config.subQueues[i]->DequeueBlocking();
-                for (uint32_t i = 0; i < config.numOutputs; ++i) 
-                        config.outputQueues[i].EnqueueBlocking(curBatch);
-                Recycle();
-        }
+    while (true) 
+        single_iteration();
+}
+
+void MVScheduler::single_iteration()
+{
+    uint32_t i;
+    ActionBatch curBatch;
+
+    Recycle();
+
+    if (_is_leader == true) 
+        xchgq(&MVScheduler::_batch_complete, 0x0);
+
+    curBatch = config.inputQueue->DequeueBlocking();
+    for (i = 0; i < config.numSubords; ++i) 
+        config.pubQueues[i]->EnqueueBlocking(curBatch);
+    
+    for (i = 0; i < curBatch.numActions; ++i) 
+        ScheduleTransaction(curBatch.actionBuf[i]);
+    
+    for (i = 0; i < config.numSubords; ++i) 
+        config.subQueues[i]->DequeueBlocking();
+    
+    for (i = 0; i < config.numOutputs; ++i)
+        config.outputQueues[i].EnqueueBlocking(curBatch);
+    
+    if (_is_leader == true) 
+        xchgq(&MVScheduler::_batch_complete, 0x1);
+}
+
+void MVScheduler::wait_batch()
+{
+    uint64_t complete;
+    
+    do {
+        barrier();
+        complete = MVScheduler::_batch_complete;
+        barrier();
+    } while (complete == 0x0);    
 }
 
 void MVScheduler::Recycle() 
