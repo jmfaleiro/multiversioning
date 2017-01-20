@@ -46,6 +46,8 @@ class SimpleQueue {
     volatile uint64_t __attribute__((__packed__, __aligned__(CACHE_LINE))) m_tail;    
 
     SimpleQueue(char* values, uint64_t size) {
+        assert(values != NULL);
+
         m_values = values;
         m_size = (uint64_t)size;
         assert(!(m_size & (m_size-1)));

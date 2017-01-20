@@ -9,7 +9,7 @@
 #include <setup_workload.h>
 #include <hybrid_worker.h>
 
-#define INPUT_SIZE 2048
+#define INPUT_SIZE 256
 #define OFFSET 0
 #define OFFSET_CORE(x) (x+OFFSET)
 
@@ -369,6 +369,8 @@ static MVSchedulerConfig* SetupSchedulers(int numProcs,
     for (uint32_t i = 0; i < numTables; ++i) {
         tblPartitionSizes[i] = partitionChunk;
     }
+
+    std::cout << "Num scheduler threads: " << numProcs << "\n";
 
     // Set up queues for leader thread
     char *inputArray = (char*)alloc_mem(CACHE_LINE*INPUT_SIZE, 0);            
@@ -748,7 +750,7 @@ void do_mv_experiment(MVConfig mv_config, workload_config w_config)
 
         SimpleQueue<ActionBatch> *schedInputQueue;
         SimpleQueue<ActionBatch> *schedOutputQueues;
-        SimpleQueue<MVRecordList> **schedGCQueues[mv_config.numCCThreads];
+        SimpleQueue<MVRecordList> **schedGCQueues[mv_config.numCCThreads + mv_config.numWorkerThreads];
         SimpleQueue<ActionBatch> *outputQueue;
         std::vector<ActionBatch> input_placeholder;
         timespec elapsed_time;
@@ -772,9 +774,12 @@ void do_mv_experiment(MVConfig mv_config, workload_config w_config)
         outputQueue = SetupQueuesMany<ActionBatch>(INPUT_SIZE,
                                                    num_threads,
                                                    71);
+
         sched_configs = setup_scheduler_threads(mv_config, &schedInputQueue,
                                                 &schedOutputQueues,
                                                 schedGCQueues);
+
+
         mv_setup_input_array(&input_placeholder, mv_config, w_config);
         exec_configs = setup_executors(mv_config, schedOutputQueues, outputQueue,
                                       schedGCQueues);
