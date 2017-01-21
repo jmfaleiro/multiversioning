@@ -111,6 +111,7 @@ class MVScheduler : public Runnable {
         virtual void StartWorking();
         void ProcessWriteset(mv_action *action);
         void ScheduleTransaction(mv_action *action);
+	void ProcessBatch(ActionBatch batch);
         //    void Leader(uint32_t epoch);
         //    void Subordinate(uint32_t epoch);
     virtual void Init();

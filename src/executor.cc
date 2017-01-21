@@ -290,7 +290,7 @@ void Executor::ProcessBatch(const ActionBatch &batch)
                 ExecPending();
         }
 
-        ActionBatch dummy = {NULL, 0};
+        ActionBatch dummy = {NULL, NULL, 0};
         config.outputQueue->EnqueueBlocking(dummy);  
 }
 

@@ -20,7 +20,10 @@ struct key_index {
 class mv_action;
 class Executor;
 
+struct CompositeKey;
+
 struct ActionBatch {
+    CompositeKey **start_keys;
     mv_action **actionBuf;
     uint32_t numActions;
 };
@@ -47,10 +50,13 @@ class CompositeKey {
         uint32_t tableId;
         uint64_t key;
         uint32_t threadId;
+	bool is_read;
+	mv_action *action;
         bool is_rmw;
         MVRecord *value;
         int next;
         bool initialized;
+	CompositeKey *next_key;
         
         CompositeKey() {
                 this->value = NULL;

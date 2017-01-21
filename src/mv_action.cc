@@ -434,6 +434,8 @@ void mv_action::add_read_key(uint32_t tableId, uint64_t key)
         CompositeKey to_add;
         assert(tableId == 0 || tableId == 1);
         to_add = GenerateKey(false, tableId, key);
+	to_add.is_read = true;
+	to_add.action = this;
         __readset.push_back(to_add);
 }
 
@@ -442,6 +444,8 @@ void mv_action::add_write_key(uint32_t tableId, uint64_t key, bool is_rmw)
         CompositeKey to_add;
         assert(tableId == 0 || tableId == 1);
         to_add = GenerateKey(is_rmw, tableId, key);
+	to_add.is_read = false;
+	to_add.action = this;
         __writeset.push_back(to_add);
         __readonly = false;
 }

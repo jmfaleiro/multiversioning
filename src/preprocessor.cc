@@ -132,10 +132,9 @@ void MVScheduler::single_iteration()
     curBatch = config.inputQueue->DequeueBlocking();
     for (i = 0; i < config.numSubords; ++i) 
         config.pubQueues[i]->EnqueueBlocking(curBatch);
-    
-    for (i = 0; i < curBatch.numActions; ++i) 
-        ScheduleTransaction(curBatch.actionBuf[i]);
-    
+   
+    ProcessBatch(curBatch); 
+   
     for (i = 0; i < config.numSubords; ++i) 
         config.subQueues[i]->DequeueBlocking();
     
@@ -181,6 +180,28 @@ uint32_t MVScheduler::GetCCThread(CompositeKey key)
         return (uint32_t)(hash % NUM_CC_THREADS);
 }
 
+void MVScheduler::ProcessBatch(ActionBatch batch)
+{
+	while (alloc->Warning()) {
+		Recycle();
+	}
+	
+	CompositeKey *start = batch.start_keys[threadId];
+	mv_action *action;
+
+	while (start != NULL) {
+		action = start->action;
+		if (start->is_read) {
+	                MVRecord *ref = this->partitions[start->tableId]->
+        	                GetMVRecord(start, action->__version);
+			start->value = ref;
+		} else {
+	                this->partitions[start->tableId]->
+       		                 WriteNewVersion(start, action, action->__version);
+		}
+		start = start->next_key;
+	}		
+}
 
 /*
  * For each record in the writeset, write out a placeholder indicating that
@@ -202,7 +223,7 @@ void MVScheduler::ProcessWriteset(mv_action *action)
         while (r_index != -1) {
                 i = r_index;
                 MVRecord *ref = this->partitions[action->__readset[i].tableId]->
-                        GetMVRecord(action->__readset[i], action->__version);
+                        GetMVRecord(&action->__readset[i], action->__version);
                 action->__readset[i].value = ref;
                 r_index = action->__readset[i].next;
         }
@@ -210,13 +231,13 @@ void MVScheduler::ProcessWriteset(mv_action *action)
         while (w_index != -1) {
                 i = w_index;
                 this->partitions[action->__writeset[i].tableId]->
-                        WriteNewVersion(action->__writeset[i], action, action->__version);
+                        WriteNewVersion(&action->__writeset[i], action, action->__version);
                 w_index = action->__writeset[i].next;
         }
 }
 
 
-inline void MVScheduler::ScheduleTransaction(mv_action *action) 
+void MVScheduler::ScheduleTransaction(mv_action *action) 
 {
         if ((action->__combinedHash & txnMask) != 0) {
                 ProcessWriteset(action);

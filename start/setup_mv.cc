@@ -526,6 +526,55 @@ static mv_action* generate_mv_action(txn *txn)
         return action;        
 }
 
+static void postprocess_key(CompositeKey *key, CompositeKey ***prev, 
+			    uint32_t partition_id)
+{
+	if (key->threadId == partition_id) {
+		key->next_key = NULL;
+		**prev = key;
+		*prev = &(key->next_key);
+	}
+}
+
+static void postprocess_partition(ActionBatch batch, uint32_t partition_id, 
+				  CompositeKey **start_key)
+{
+	uint32_t i, j;
+	CompositeKey *cur_key, **prev_key;
+	mv_action *action;
+
+	prev_key = start_key;
+	for (i = 0; i < batch.numActions; ++i) {
+		action = batch.actionBuf[i];
+		for (j = 0; j < action->__readset.size(); ++j) {
+			cur_key = &action->__readset[i];
+			postprocess_key(cur_key, &prev_key, partition_id);
+		}
+		for (j = 0; j < action->__writeset.size(); ++j) {
+			cur_key = &action->__writeset[i];
+			postprocess_key(cur_key, &prev_key, partition_id);
+		}
+	}
+}
+
+/* Go through every action in the batch, and link read- and
+   write-set entries according to partition
+*/ 
+static ActionBatch postprocess_batch(ActionBatch batch)
+{
+	uint32_t i;
+
+	CompositeKey **start_keys;
+	ActionBatch ret = batch;
+
+	start_keys = (CompositeKey**)malloc(sizeof(CompositeKey*)*NUM_CC_THREADS);
+	memset(start_keys, 0x0, sizeof(CompositeKey*)*NUM_CC_THREADS);
+	for (i = 0; i < NUM_CC_THREADS; ++i) 
+		postprocess_partition(batch, i, &start_keys[i]);	
+	ret.start_keys = start_keys;
+	return ret;
+}
+
 static ActionBatch mv_create_action_batch(MVConfig config,
                                           workload_config w_config,
                                           uint32_t epoch)
@@ -546,6 +595,8 @@ static ActionBatch mv_create_action_batch(MVConfig config,
                 action->__version = timestamp;
                 batch.actionBuf[i] = action;
         }
+
+	postprocess_batch(batch);
         return batch;
 }
 

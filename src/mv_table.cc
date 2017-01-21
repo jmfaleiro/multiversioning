@@ -13,7 +13,7 @@ void MVTable::AddPartition(uint32_t partitionId, MVTablePartition *partition) {
   this->tablePartitions[partitionId] = partition;
 }
 
-MVRecord* MVTable::GetMVRecord(uint32_t partition, const CompositeKey &pkey, 
+MVRecord* MVTable::GetMVRecord(uint32_t partition, const CompositeKey *pkey, 
                                uint64_t version) {
   assert(partition < numPartitions);
   return tablePartitions[partition]->GetMVRecord(pkey, version);
@@ -28,7 +28,7 @@ bool MVTable::GetLatestVersion(uint32_t partition, const CompositeKey &pkey,
 }
 */
 
-bool MVTable::WriteNewVersion(uint32_t partition, CompositeKey &pkey, 
+bool MVTable::WriteNewVersion(uint32_t partition, CompositeKey *pkey, 
                               mv_action *action, uint64_t version) {
   assert(partition < numPartitions);      // Validate that partition is valid.
   return tablePartitions[partition]->WriteNewVersion(pkey, action, version);
@@ -51,17 +51,17 @@ MVTablePartition::MVTablePartition(uint64_t size,
   //  std::cout << "asldkjfasdf\n";
 }
 
-MVRecord* MVTablePartition::GetMVRecord(const CompositeKey &pkey, 
+MVRecord* MVTablePartition::GetMVRecord(const CompositeKey *pkey, 
                                         uint64_t version) {
   // Get the slot number the record hashes to, and try to find if a previous
   // version of the record already exists.
-  uint64_t slotNumber = CompositeKey::Hash(&pkey) % numSlots;
+  uint64_t slotNumber = CompositeKey::Hash(pkey) % numSlots;
   MVRecord *cur = tableSlots[slotNumber];
 
   while (cur != NULL) {
                 
     // We found the record. Link to the old record.
-    if (cur->key == pkey.key) {
+    if (cur->key == pkey->key) {
       while (cur != NULL && cur->deleteTimestamp > version) {
         // Found a valid version
         if (cur->createTimestamp <= version && cur->deleteTimestamp > version) {
@@ -154,7 +154,7 @@ bool MVTablePartition::GetLatestVersion(const CompositeKey &pkey,
 /*
  * Write out a new version for record pkey.
  */
-bool MVTablePartition::WriteNewVersion(CompositeKey &pkey, mv_action *action, 
+bool MVTablePartition::WriteNewVersion(CompositeKey *pkey, mv_action *action, 
                                        uint64_t version) {
 
   // Allocate an MVRecord to hold the new record.
@@ -166,18 +166,18 @@ bool MVTablePartition::WriteNewVersion(CompositeKey &pkey, mv_action *action,
   toAdd->createTimestamp = version;
   toAdd->deleteTimestamp = MVRecord::INFINITY;
   toAdd->writer = action;
-  toAdd->key = pkey.key;  
+  toAdd->key = pkey->key;  
 
   // Get the slot number the record hashes to, and try to find if a mvprevious
   // version of the record already exists.
-  uint64_t slotNumber = CompositeKey::Hash(&pkey) % numSlots;
+  uint64_t slotNumber = CompositeKey::Hash(pkey) % numSlots;
   MVRecord *cur = tableSlots[slotNumber];
   MVRecord **prev = &tableSlots[slotNumber];
   uint64_t epoch = GET_MV_EPOCH(version);
   
   while (cur != NULL) {                
     // We found the record. Link to the old record.
-    if (cur->key == pkey.key) {
+    if (cur->key == pkey->key) {
       toAdd->link = cur->link;
       toAdd->recordLink = cur;
       if (GET_MV_EPOCH(cur->createTimestamp) == epoch)
@@ -191,6 +191,6 @@ bool MVTablePartition::WriteNewVersion(CompositeKey &pkey, mv_action *action,
     cur = cur->link;
   }
   *prev = toAdd;
-  pkey.value = toAdd;
+  pkey->value = toAdd;
   return true;
 }
