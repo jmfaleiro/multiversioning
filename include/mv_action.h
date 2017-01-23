@@ -26,6 +26,11 @@ struct ActionBatch {
     CompositeKey **start_keys;
     mv_action **actionBuf;
     uint32_t numActions;
+	ActionBatch() {
+		start_keys = NULL;
+		actionBuf = NULL;
+		numActions = 0;
+	}
 };
 
 enum ActionState {

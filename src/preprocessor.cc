@@ -107,6 +107,10 @@ MVScheduler::MVScheduler(MVSchedulerConfig config) :
                 assert(this->partitions[i] != NULL);
         }
         this->threadId = config.threadId;
+	if (this->threadId == 0)
+		_is_leader = true;
+	else 
+		_is_leader = false;
 }
 
 static inline uint64_t compute_version(uint32_t epoch, uint32_t txnCounter) {
@@ -115,6 +119,7 @@ static inline uint64_t compute_version(uint32_t epoch, uint32_t txnCounter) {
 
 void MVScheduler::StartWorking() 
 {
+	assert(false);
     while (true) 
         single_iteration();
 }
@@ -124,10 +129,16 @@ void MVScheduler::single_iteration()
     uint32_t i;
     ActionBatch curBatch;
 
+    assert((threadId != 0 || _is_leader == true) &&
+	  (threadId == 0 || _is_leader == false));
     Recycle();
 
-    if (_is_leader == true) 
-        xchgq(&MVScheduler::_batch_complete, 0x0);
+    if (_is_leader == true) {
+	
+        if (xchgq(&MVScheduler::_batch_complete, 0x0) != 0x1)
+		assert(false);
+
+    }
 
     curBatch = config.inputQueue->DequeueBlocking();
     for (i = 0; i < config.numSubords; ++i) 
@@ -190,6 +201,7 @@ void MVScheduler::ProcessBatch(ActionBatch batch)
 	mv_action *action;
 
 	while (start != NULL) {
+		assert(start->threadId == threadId);
 		action = start->action;
 		if (start->is_read) {
 	                MVRecord *ref = this->partitions[start->tableId]->

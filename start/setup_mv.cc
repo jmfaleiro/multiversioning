@@ -19,6 +19,7 @@ static uint64_t dbSize = ((uint64_t)1<<36);
 extern uint32_t GLOBAL_RECORD_SIZE;
 
 Table** mv_tables;
+uint64_t preproc_stats[160];
 
 static void CreateQueues(int cpuNumber, uint32_t subCount, 
                          SimpleQueue<ActionBatch>*** OUT_PUB_QUEUES,
@@ -97,6 +98,17 @@ static MVSchedulerConfig SetupSched(int cpuNumber,
         assert(inputQueue != NULL && outputQueues != NULL);
         uint32_t subCount;
         SimpleQueue<ActionBatch> **pubQueues, **subQueues;
+	
+	if (cpuNumber == 0) {
+		subCount = numThreads - 1;
+		CreateQueues(cpuNumber, subCount, &pubQueues, &subQueues);
+	} else {
+		subCount = 0;
+		pubQueues = NULL;
+                subQueues = NULL;
+	}
+
+	/* 
         if (cpuNumber % 10 == 0) {
                 if (cpuNumber == 0) {
       
@@ -125,6 +137,7 @@ static MVSchedulerConfig SetupSched(int cpuNumber,
                 pubQueues = NULL;
                 subQueues = NULL;
         }
+	*/
 
         // Create recycle queue
         uint32_t recycleQueueSize = CACHE_LINE*64*numRecycles;
@@ -394,8 +407,20 @@ static MVSchedulerConfig* SetupSchedulers(int numProcs,
     schedArray[0] = globalLeaderConfig;
     gcRefs_OUT[0] = globalLeaderConfig.recycleQueues;
 
-    MVSchedulerConfig localLeaderConfig = globalLeaderConfig;
-  
+    for (uint32_t i = 1; i < numProcs; ++i) {
+	auto inputQueue = globalLeaderConfig.pubQueues[i-1];
+	auto outputQueue = globalLeaderConfig.subQueues[i-1];
+	MVSchedulerConfig config = SetupSched(i, i, numProcs, allocatorSize, 
+						 numTables,
+						 tblPartitionSizes,
+						 numOutputs, 
+						 inputQueue,
+	  					 1,
+						 outputQueue);
+	schedArray[i] = config;
+	gcRefs_OUT[i] = config.recycleQueues;
+    }
+    /*
     for (uint32_t i = 1; i < numProcs; ++i) {
         if (i % 10 == 0) {
             int leaderNum = i/10;
@@ -427,7 +452,8 @@ static MVSchedulerConfig* SetupSchedulers(int numProcs,
             gcRefs_OUT[i] = subConfig.recycleQueues;
         }
     }
-  
+    */
+
     *inputQueueRef_OUT = leaderInputQueue;
     *outputQueueRefs_OUT = leaderOutputQueues;
     return schedArray;
@@ -529,10 +555,12 @@ static mv_action* generate_mv_action(txn *txn)
 static void postprocess_key(CompositeKey *key, CompositeKey ***prev, 
 			    uint32_t partition_id)
 {
+	assert(partition_id < NUM_CC_THREADS && key->threadId < NUM_CC_THREADS);
 	if (key->threadId == partition_id) {
 		key->next_key = NULL;
 		**prev = key;
 		*prev = &(key->next_key);
+		preproc_stats[partition_id] += 1;
 	}
 }
 
@@ -547,11 +575,13 @@ static void postprocess_partition(ActionBatch batch, uint32_t partition_id,
 	for (i = 0; i < batch.numActions; ++i) {
 		action = batch.actionBuf[i];
 		for (j = 0; j < action->__readset.size(); ++j) {
-			cur_key = &action->__readset[i];
+			cur_key = &action->__readset[j];
+			assert(cur_key->action == action);
 			postprocess_key(cur_key, &prev_key, partition_id);
 		}
 		for (j = 0; j < action->__writeset.size(); ++j) {
-			cur_key = &action->__writeset[i];
+			cur_key = &action->__writeset[j];
+			assert(cur_key->action == action);
 			postprocess_key(cur_key, &prev_key, partition_id);
 		}
 	}
@@ -596,7 +626,8 @@ static ActionBatch mv_create_action_batch(MVConfig config,
                 batch.actionBuf[i] = action;
         }
 
-	postprocess_batch(batch);
+	batch = postprocess_batch(batch);
+	assert(batch.start_keys != NULL);
         return batch;
 }
 
@@ -633,6 +664,7 @@ static ActionBatch generate_db(workload_config conf)
                 timestamp = CREATE_MV_TIMESTAMP(1, i);
                 ret.actionBuf[i]->__version = timestamp;
         }
+	ret = postprocess_batch(ret);
         return ret;
 }
  
@@ -805,7 +837,7 @@ void do_mv_experiment(MVConfig mv_config, workload_config w_config)
         SimpleQueue<ActionBatch> *outputQueue;
         std::vector<ActionBatch> input_placeholder;
         timespec elapsed_time;
-        uint32_t num_threads;
+        uint32_t num_threads, i;
 
         /* 
          * XXX Need this for copying old versions of records if a txn performs 
@@ -817,7 +849,8 @@ void do_mv_experiment(MVConfig mv_config, workload_config w_config)
                 GLOBAL_RECORD_SIZE = 1000;
         else
                 GLOBAL_RECORD_SIZE = 8;
-        
+	
+	memset(preproc_stats, 0x0, sizeof(uint64_t)*160);        
         num_threads = (uint32_t)(mv_config.numCCThreads + mv_config.numWorkerThreads);
         MVScheduler::NUM_CC_THREADS = num_threads;
         NUM_CC_THREADS = num_threads;
@@ -832,6 +865,10 @@ void do_mv_experiment(MVConfig mv_config, workload_config w_config)
 
 
         mv_setup_input_array(&input_placeholder, mv_config, w_config);
+	
+	for (i = 0; i < NUM_CC_THREADS; ++i) {
+		std::cout << "Thread: " << i << ", " << preproc_stats[i] << "\n";
+	}
         exec_configs = setup_executors(mv_config, schedOutputQueues, outputQueue,
                                       schedGCQueues);
         db_workers = setup_threads(mv_config, sched_configs, exec_configs);
