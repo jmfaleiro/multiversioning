@@ -8,6 +8,7 @@
 #include <config.h>
 #include <fstream>
 #include <sys/time.h>
+#include <common_constants.h>
 
 #define EXTRA_BATCHES 1
 

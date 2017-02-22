@@ -5,6 +5,7 @@
 
 uint64_t _MVRecord_::INFINITY = 0xFFFFFFFFFFFFFFFF;
 
+
 MVRecordAllocator::MVRecordAllocator(uint64_t size, int cpu, int worker_start, int worker_end) {
         //  std::cout << "NUMA node: " << numa_node_of_cpu(cpu) << "\n";
         worker_start += 1;

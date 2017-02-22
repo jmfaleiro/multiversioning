@@ -24,10 +24,10 @@ DEPSDIR:=.deps
 DEPCFLAGS=-MD -MF $(DEPSDIR)/$*.d -MP
 
 all:CFLAGS+=-DTESTING=0 -DUSE_BACKOFF=1 -fno-omit-frame-pointer
-all:env build/db
+all: build/db
 
 test:CFLAGS+=-DTESTING=1 -DUSE_BACKOFF=1 
-test:env build/tests
+test:build/tests
 
 -include $(wildcard $(DEPSDIR)/*.d)
 
@@ -56,7 +56,7 @@ $(DEPSDIR)/stamp:
 	@mkdir -p $(DEPSDIR)
 	@touch $@
 
-.PHONY: clean env
+.PHONY: clean 
 
 clean:
 	rm -rf build $(DEPSDIR) $(TESTOBJECTS) start/*.o

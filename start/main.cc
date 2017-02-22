@@ -15,13 +15,15 @@
 #include <iostream>
 #include <common.h>
 #include <sys/mman.h>
+#include <common_constants.h>
 
 #define RECYCLE_QUEUE_SIZE 64
 #define INPUT_SIZE 1024
 #define OFFSET 0
 #define OFFSET_CORE(x) (x+OFFSET)
 
-uint32_t GLOBAL_RECORD_SIZE;
+extern uint32_t GLOBAL_RECORD_SIZE;
+extern uint64_t recordSize;
 
 Database DB(2);
 
