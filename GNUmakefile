@@ -40,7 +40,7 @@ $(TESTOBJECTS):$(OBJECTS)
 
 test/%.o: test/%.cc $(DEPSDIR)/stamp GNUmakefile
 	@echo + cc $<
-	@$(CXX) $(CFLAGS) -Wno-missing-field-initializers -Wno-conversion-null $(DEPCFLAGS) -Istart -I$(SRC) -I$(INCLUDE) -c -o $@ $<
+	@$(CXX) $(CFLAGS) -Wno-missing-field-initializers -Wno-conversion-null $(DEPCFLAGS) -Istart $(INCLUDE) -c -o $@ $<
 
 start/%.o: start/%.cc $(DEPSDIR)/stamp GNUmakefile
 	@echo + cc $<
