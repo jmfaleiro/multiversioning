@@ -12,7 +12,6 @@
 
 #define EXTRA_BATCHES 1
 
-extern uint32_t GLOBAL_RECORD_SIZE;
 uint32_t record_sizes[2];
 
 struct locking_result {

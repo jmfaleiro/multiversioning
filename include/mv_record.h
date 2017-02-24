@@ -6,14 +6,12 @@
 #include <cstddef>
 #include <cpuinfo.h>
 #include <iostream>
+#include <common_constants.h>
 
 class mv_action;
 class Record;
 
-extern uint64_t recordSize;
-
 typedef struct _MVRecord_ MVRecord;
-
 
 struct _MVRecord_ {
   

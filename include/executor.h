@@ -5,8 +5,7 @@
 #include <mv_record.h>
 #include <database.h>
 #include <set>
-
-extern uint32_t GLOBAL_RECORD_SIZE;
+#include <common_constants.h>
 
 struct ActionListNode {
   mv_action *action;

@@ -22,18 +22,12 @@
 #define OFFSET 0
 #define OFFSET_CORE(x) (x+OFFSET)
 
-extern uint32_t GLOBAL_RECORD_SIZE;
-extern uint64_t recordSize;
-
 Database DB(2);
 
 uint64_t dbSize = ((uint64_t)1<<36);
 
-uint32_t NUM_CC_THREADS;
-
 int NumProcs;
 uint32_t numLockingRecords;
-uint64_t recordSize;
 
 int main(int argc, char **argv) {
 
@@ -41,8 +35,6 @@ int main(int argc, char **argv) {
   ExperimentConfig cfg(argc, argv);
   std::cout << cfg.ccType << "\n";
 
-  
-  
   if (cfg.ccType == MULTIVERSION) {
           if (cfg.mvConfig.experiment < 3) 
                   recordSize = cfg.mvConfig.recordSize;

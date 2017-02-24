@@ -1,6 +1,7 @@
 CFLAGS=-O2 -g -Wall -Wextra -Werror -std=c++0x -Wno-sign-compare 
 CFLAGS+=-DSNAPSHOT_ISOLATION=0 -DSMALL_RECORDS=0 -DREAD_COMMITTED=1
 LIBS=-lnuma -lpthread -lrt -lcityhash 
+TEST_LIBS=-lgtest
 CXX=g++
 
 LIBPATH=./libs/lib/
@@ -50,7 +51,7 @@ build/db:$(START_OBJECTS) $(OBJECTS)
 	@$(CXX) $(CFLAGS) -o $@ $^ -L$(LIBPATH) $(LIBS)
 
 build/tests:$(OBJECTS) $(TESTOBJECTS) $(NON_MAIN_STARTS)
-	@$(CXX) $(CFLAGS) -o $@ $^ $(LIBS)
+	@$(CXX) $(CFLAGS) -o $@ $^ $(LIBS) $(TEST_LIBS)
 
 $(DEPSDIR)/stamp:
 	@mkdir -p $(DEPSDIR)
