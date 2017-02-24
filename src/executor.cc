@@ -1,7 +1,6 @@
 #include <executor.h>
+#include <common_constants.h>
 #include <algorithm>
-
-extern uint32_t GLOBAL_RECORD_SIZE;
 
 PendingActionList::PendingActionList(uint32_t freeListSize) 
 {

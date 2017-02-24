@@ -6,6 +6,7 @@
 #include <concurrent_queue.h>
 #include <numa.h>
 #include <mv_table.h>
+#include <common_constants.h>
 
 extern uint64_t recordSize;
 

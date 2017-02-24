@@ -8,10 +8,10 @@
 #include <config.h>
 #include <fstream>
 #include <sys/time.h>
+#include <common_constants.h>
 
 #define EXTRA_BATCHES 1
 
-extern uint32_t GLOBAL_RECORD_SIZE;
 uint32_t record_sizes[2];
 
 struct locking_result {
