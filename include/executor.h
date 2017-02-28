@@ -5,6 +5,7 @@
 #include <mv_record.h>
 #include <database.h>
 #include <set>
+#include <common_constants.h>
 
 struct ActionListNode {
   mv_action *action;

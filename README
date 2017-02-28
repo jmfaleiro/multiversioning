@@ -7,6 +7,7 @@ for each dependency can be respectively found at:
 
 https://github.com/google/cityhash.git
 https://github.com/numactl/numactl.git
+https://github.com/google/googletest
 
 The resulting libraries and header files must be installed in the
 libs/ directory. Pass --prefix=$(MV_DIR)/libs/ while configuring the
