@@ -7,6 +7,7 @@
 #include <iostream>
 #include <fstream>
 #include <setup_workload.h>
+#include <common_constants.h>
 
 #define INPUT_SIZE 2048
 #define OFFSET 0

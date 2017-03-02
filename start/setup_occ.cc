@@ -6,6 +6,7 @@
 #include <fstream>
 #include <setup_workload.h>
 #include <unistd.h>
+#include <common_constants.h>
 
 extern uint32_t GLOBAL_RECORD_SIZE;
 

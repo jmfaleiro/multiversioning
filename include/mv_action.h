@@ -3,6 +3,7 @@
 
 #include <action.h>
 #include <db.h>
+#include <common_constants.h>
 
 #define RECYCLE_QUEUE_SIZE 64 
 #define MV_EPOCH_MASK 0xFFFFFFFF00000000

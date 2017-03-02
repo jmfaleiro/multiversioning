@@ -1,6 +1,7 @@
 CFLAGS=-O2 -g -Wall -Wextra -Werror -std=c++0x -Wno-sign-compare 
 CFLAGS+=-DSNAPSHOT_ISOLATION=0 -DSMALL_RECORDS=0 -DREAD_COMMITTED=1
 LIBS=-lnuma -lpthread -lrt -lcityhash 
+TEST_LIBS=-lgtest
 CXX=g++
 
 LIBPATH=./libs/lib/
@@ -24,10 +25,10 @@ DEPSDIR:=.deps
 DEPCFLAGS=-MD -MF $(DEPSDIR)/$*.d -MP
 
 all:CFLAGS+=-DTESTING=0 -DUSE_BACKOFF=1 -fno-omit-frame-pointer
-all:env build/db
+all: build/db
 
 test:CFLAGS+=-DTESTING=1 -DUSE_BACKOFF=1 
-test:env build/tests
+test:build/tests
 
 -include $(wildcard $(DEPSDIR)/*.d)
 
@@ -40,7 +41,7 @@ $(TESTOBJECTS):$(OBJECTS)
 
 test/%.o: test/%.cc $(DEPSDIR)/stamp GNUmakefile
 	@echo + cc $<
-	@$(CXX) $(CFLAGS) -Wno-missing-field-initializers -Wno-conversion-null $(DEPCFLAGS) -Istart -I$(SRC) -I$(INCLUDE) -c -o $@ $<
+	@$(CXX) $(CFLAGS) -Wno-missing-field-initializers -Wno-conversion-null $(DEPCFLAGS) -Istart $(INCLUDE) -c -o $@ $<
 
 start/%.o: start/%.cc $(DEPSDIR)/stamp GNUmakefile
 	@echo + cc $<
@@ -50,13 +51,13 @@ build/db:$(START_OBJECTS) $(OBJECTS)
 	@$(CXX) $(CFLAGS) -o $@ $^ -L$(LIBPATH) $(LIBS)
 
 build/tests:$(OBJECTS) $(TESTOBJECTS) $(NON_MAIN_STARTS)
-	@$(CXX) $(CFLAGS) -o $@ $^ $(LIBS)
+	@$(CXX) $(CFLAGS) -o $@ $^ $(LIBS) $(TEST_LIBS)
 
 $(DEPSDIR)/stamp:
 	@mkdir -p $(DEPSDIR)
 	@touch $@
 
-.PHONY: clean env
+.PHONY: clean 
 
 clean:
 	rm -rf build $(DEPSDIR) $(TESTOBJECTS) start/*.o
